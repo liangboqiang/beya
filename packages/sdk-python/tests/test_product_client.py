@@ -1,7 +1,10 @@
 import asyncio
+import json
 import os
 import sys
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
@@ -100,6 +103,81 @@ class ProductClientTest(unittest.TestCase):
         events = list(client.tasks.stream("task-1"))
         self.assertEqual(events[0].type, "LLM_PARTIAL")
         self.assertEqual(client.calls[0][1], "/api/stream/sse?task_id=task-1")
+
+    def test_client_preserves_gateway_route_cookie_between_task_calls(self):
+        seen = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                if self.path != "/api/tasks":
+                    self.send_error(404)
+                    return
+                seen.append(("POST", self.path, self.headers.get("Cookie") or ""))
+                body = {
+                    "task_id": "task-1",
+                    "workflow_id": "task-1",
+                    "session_id": None,
+                    "status": "RUNNING",
+                }
+                raw = json.dumps(body).encode("utf-8")
+                self.send_response(201)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Set-Cookie", "AlteonP=pod-a; Path=/")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def do_GET(self):
+                cookie = self.headers.get("Cookie") or ""
+                seen.append(("GET", self.path, cookie))
+                if "AlteonP=pod-a" not in cookie:
+                    self.send_error(404)
+                    return
+                if self.path == "/api/tasks/task-1":
+                    body = {
+                        "task_id": "task-1",
+                        "workflow_id": "task-1",
+                        "query": "hello",
+                        "status": "COMPLETED",
+                        "result": "done",
+                    }
+                    raw = json.dumps(body).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(raw)))
+                    self.end_headers()
+                    self.wfile.write(raw)
+                    return
+                if self.path == "/api/stream/sse?task_id=task-1":
+                    raw = (
+                        'data: {"type":"LLM_PARTIAL","task_id":"task-1","message":"hello","timestamp":"now","seq":1}\n\n'
+                        "data: [DONE]\n\n"
+                    ).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Content-Length", str(len(raw)))
+                    self.end_headers()
+                    self.wfile.write(raw)
+                    return
+                self.send_error(404)
+
+            def log_message(self, _format, *args):
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            client = BeyaClient(base_url="http://127.0.0.1:%s" % server.server_port)
+            handle = client.tasks.submit("hello")
+            status = client.tasks.status(handle.task_id)
+            events = list(client.tasks.stream(handle.task_id))
+            self.assertEqual(status.result, "done")
+            self.assertEqual(events[0].message, "hello")
+            self.assertTrue(any(row[0] == "GET" and "AlteonP=pod-a" in row[2] for row in seen))
+        finally:
+            server.shutdown()
+            server.server_close()
 
     def test_async_client_exposes_product_resources(self):
         async def run():

@@ -1,10 +1,11 @@
 import asyncio
+from http.cookiejar import CookieJar
 import json
 import time
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
-from urllib.request import Request, urlopen
+from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 from . import errors
 from .models import Event, OpenAIChatCompletion, OpenAIChatCompletionChunk, TaskHandle, TaskStatus
@@ -31,6 +32,8 @@ class BeyaClient:
         self.api_key = api_key
         self.bearer_token = bearer_token
         self.default_timeout = default_timeout
+        self.cookie_jar = CookieJar()
+        self._opener = build_opener(HTTPCookieProcessor(self.cookie_jar))
 
         self.tasks = TasksResource(self)
         self.chat = ChatResource(self)
@@ -201,7 +204,7 @@ class BeyaClient:
             headers=self._headers(),
         )
         try:
-            with urlopen(req, timeout=timeout or self.default_timeout) as response:
+            with self._opener.open(req, timeout=timeout or self.default_timeout) as response:
                 raw = response.read()
                 if not raw:
                     return None
@@ -228,7 +231,7 @@ class BeyaClient:
             headers=self._headers(),
         )
         try:
-            with urlopen(req, timeout=timeout or self.default_timeout) as response:
+            with self._opener.open(req, timeout=timeout or self.default_timeout) as response:
                 buffer = ""
                 while True:
                     chunk = response.read(1)
