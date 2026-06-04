@@ -1,0 +1,10 @@
+<svg width="2200" height="640" viewBox="0 0 2200 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="2200" height="640" rx="64" fill="#FFFFFF"/>
+  <image x="104" y="80" width="480" height="480" href="app-icon.png" preserveAspectRatio="xMidYMid meet"/>
+  <text x="680" y="300" fill="#102A43" font-family="Manrope, Inter, SF Pro Display, Avenir Next, Helvetica Neue, Arial, sans-serif" font-size="188" font-weight="800">beya</text>
+  <text x="690" y="420" fill="#0F4C81" font-family="Inter, SF Pro Display, Helvetica Neue, Arial, sans-serif" font-size="54" font-weight="700" letter-spacing="2">Advanced Power &amp; Vehicle Intelligence</text>
+  <text x="690" y="496" fill="#5E7387" font-family="Inter, SF Pro Display, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="600">Tianjin University Research Workspace</text>
+  <path d="M680 544H1176" stroke="#00A8A8" stroke-width="16" stroke-linecap="round"/>
+  <path d="M1216 544H1416" stroke="#46C2FF" stroke-width="16" stroke-linecap="round"/>
+  <path d="M1456 544H1548" stroke="#FFB020" stroke-width="16" stroke-linecap="round"/>
+</svg>

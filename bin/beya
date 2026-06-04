@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export CALLER_DIR="${CALLER_DIR:-$(pwd -W 2>/dev/null || pwd)}"
+
+cd "$ROOT_DIR"
+
+if [[ -z "${BEYA_CONFIG_DIR:-}" && -n "${CLAUDE_CONFIG_DIR:-}" ]]; then
+  echo "Warning: CLAUDE_CONFIG_DIR is deprecated; use BEYA_CONFIG_DIR instead." >&2
+  export BEYA_CONFIG_DIR="$CLAUDE_CONFIG_DIR"
+fi
+
+if [[ -z "${BEYA_CONFIG_DIR:-}" ]]; then
+  export BEYA_CONFIG_DIR="${HOME:-$ROOT_DIR}/.beya"
+fi
+
+if [[ "${BEYA_SKIP_DOTENV:-0}" == "1" ]]; then
+  ENV_FILE_FLAG="--env-file=/dev/null"
+elif [[ -f .env ]]; then
+  ENV_FILE_FLAG="--env-file=.env"
+else
+  ENV_FILE_FLAG=""
+fi
+
+if [[ "${BEYA_FORCE_RECOVERY_CLI:-${CLAUDE_CODE_FORCE_RECOVERY_CLI:-0}}" == "1" ]]; then
+  exec bun $ENV_FILE_FLAG ./src/localRecoveryCli.ts "$@"
+fi
+
+exec bun $ENV_FILE_FLAG ./src/entrypoints/cli.tsx "$@"

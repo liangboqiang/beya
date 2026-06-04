@@ -1,0 +1,67 @@
+import { OPENAI_CODEX_API_ENDPOINT } from '../../services/openaiAuth/client.js'
+import {
+  OPENAI_CODEX_MODEL_CATALOG,
+  OPENAI_DEFAULT_HAIKU_MODEL,
+  OPENAI_DEFAULT_MAIN_MODEL,
+  OPENAI_DEFAULT_SONNET_MODEL,
+  getOpenAICodexContextWindowForModel,
+} from '../../services/openaiAuth/models.js'
+import { MODEL_CONTEXT_WINDOWS_ENV_KEY } from '../../utils/model/modelContextWindows.js'
+import { getBeyaOpenAIOAuthFilePath } from './beyaOpenAIOAuthService.js'
+import type { SavedProvider } from '../types/provider.js'
+
+export const OPENAI_OFFICIAL_PROVIDER_ID = 'openai-official'
+export const OPENAI_OFFICIAL_PROVIDER_NAME = 'ChatGPT Official'
+export const OPENAI_OAUTH_PROVIDER_ENV_KEY = 'BEYA_OPENAI_OAUTH_PROVIDER'
+export const OPENAI_CODEX_OAUTH_FILE_ENV_KEY = 'OPENAI_CODEX_OAUTH_FILE'
+
+export function isOpenAIOfficialProviderId(
+  id: string | null | undefined,
+): boolean {
+  return id === OPENAI_OFFICIAL_PROVIDER_ID
+}
+
+const openAIModelRoles: SavedProvider['modelRoles'] = {
+  primary: OPENAI_DEFAULT_MAIN_MODEL,
+  fast: OPENAI_DEFAULT_HAIKU_MODEL,
+  balanced: OPENAI_DEFAULT_SONNET_MODEL,
+  powerful: OPENAI_DEFAULT_MAIN_MODEL,
+}
+
+const modelContextWindows = Object.fromEntries(
+  OPENAI_CODEX_MODEL_CATALOG.map(
+    ({ value }) =>
+      [value, getOpenAICodexContextWindowForModel(value)] as const,
+  )
+    .filter((entry): entry is readonly [string, number] => entry[1] !== null),
+)
+
+export const OPENAI_OFFICIAL_PROVIDER: SavedProvider = {
+  providerId: OPENAI_OFFICIAL_PROVIDER_ID,
+  displayName: OPENAI_OFFICIAL_PROVIDER_NAME,
+  apiKey: '',
+  authStrategy: 'dual_dummy',
+  baseUrl: new URL('/backend-api/codex', OPENAI_CODEX_API_ENDPOINT)
+    .toString()
+    .replace(/\/+$/, ''),
+  apiFormat: 'openai_responses',
+  runtimeKind: 'openai_oauth',
+  modelRoles: openAIModelRoles,
+  enabledModels: Object.values(openAIModelRoles),
+  modelContextWindows,
+}
+
+export function buildOpenAIOfficialRuntimeEnv(): Record<string, string> {
+  const modelContextWindows = OPENAI_OFFICIAL_PROVIDER.modelContextWindows ?? {}
+  return {
+    [OPENAI_OAUTH_PROVIDER_ENV_KEY]: '1',
+    [OPENAI_CODEX_OAUTH_FILE_ENV_KEY]: getBeyaOpenAIOAuthFilePath(),
+    ...(Object.keys(modelContextWindows).length > 0 && {
+      [MODEL_CONTEXT_WINDOWS_ENV_KEY]: JSON.stringify(modelContextWindows),
+    }),
+    ANTHROPIC_MODEL: OPENAI_OFFICIAL_PROVIDER.modelRoles.primary,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: OPENAI_OFFICIAL_PROVIDER.modelRoles.fast,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: OPENAI_OFFICIAL_PROVIDER.modelRoles.balanced,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: OPENAI_OFFICIAL_PROVIDER.modelRoles.powerful,
+  }
+}
