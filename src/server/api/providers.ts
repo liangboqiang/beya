@@ -22,6 +22,7 @@ import {
   CreateProviderSchema,
   UpdateProviderSchema,
   TestProviderSchema,
+  type SavedProvider,
 } from '../types/provider.js'
 import { ApiError, errorResponse } from '../middleware/errorHandler.js'
 import { diagnosticsService } from '../services/diagnosticsService.js'
@@ -56,7 +57,7 @@ export async function handleProvidersApi(
     // /api/providers/settings
     if (id === 'settings') {
       if (req.method === 'GET') {
-        return Response.json(await providerService.getManagedSettings())
+        return Response.json(redactSecretFields(await providerService.getManagedSettings()))
       }
       if (req.method === 'PUT') {
         const body = await parseJsonBody(req)
@@ -70,7 +71,7 @@ export async function handleProvidersApi(
     if (!id) {
       if (req.method === 'GET') {
         const { providers, activeId } = await providerService.listProviders()
-        return Response.json({ providers, activeId })
+        return Response.json({ providers: providers.map(providerForApi), activeId })
       }
       if (req.method === 'POST') {
         return await handleCreate(req)
@@ -115,7 +116,7 @@ export async function handleProvidersApi(
     // /api/providers/:id
     if (req.method === 'GET') {
       const provider = await providerService.getProvider(id)
-      return Response.json({ provider })
+      return Response.json({ provider: providerForApi(provider) })
     }
     if (req.method === 'PUT' || req.method === 'PATCH') {
       return await handleUpdate(req, id)
@@ -136,7 +137,7 @@ async function handleCreate(req: Request): Promise<Response> {
   try {
     const input = CreateProviderSchema.parse(body)
     const provider = await providerService.addProvider(input)
-    return Response.json({ provider }, { status: 201 })
+    return Response.json({ provider: providerForApi(provider) }, { status: 201 })
   } catch (err) {
     if (err instanceof z.ZodError) throw ApiError.badRequest(err.issues.map((i) => i.message).join('; '))
     throw err
@@ -148,7 +149,7 @@ async function handleUpdate(req: Request, id: string): Promise<Response> {
   try {
     const input = UpdateProviderSchema.parse(body)
     const provider = await providerService.updateProvider(id, input)
-    return Response.json({ provider })
+    return Response.json({ provider: providerForApi(provider) })
   } catch (err) {
     if (err instanceof z.ZodError) throw ApiError.badRequest(err.issues.map((i) => i.message).join('; '))
     throw err
@@ -200,4 +201,39 @@ async function parseJsonBody(req: Request): Promise<Record<string, unknown>> {
 
 function methodNotAllowed(method: string): ApiError {
   return new ApiError(405, `Method ${method} not allowed`, 'METHOD_NOT_ALLOWED')
+}
+
+function providerForApi(provider: SavedProvider): SavedProvider & { hasApiKey: boolean } {
+  return {
+    ...provider,
+    apiKey: provider.apiKey ? '***REDACTED***' : '',
+    hasApiKey: Boolean(provider.apiKey),
+  }
+}
+
+function redactSecretFields(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactSecretFields)
+  if (!value || typeof value !== 'object') return value
+
+  const out: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (isSecretField(key)) {
+      out[key] = typeof item === 'string' && item ? '***REDACTED***' : item
+    } else {
+      out[key] = redactSecretFields(item)
+    }
+  }
+  return out
+}
+
+function isSecretField(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return normalized.includes('apikey') ||
+    normalized.includes('authtoken') ||
+    normalized.includes('accesstoken') ||
+    normalized.includes('refreshtoken') ||
+    normalized.includes('clientsecret') ||
+    normalized === 'token' ||
+    normalized === 'secret' ||
+    normalized === 'password'
 }

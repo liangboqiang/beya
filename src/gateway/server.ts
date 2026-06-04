@@ -1,4 +1,5 @@
 import { handleGatewayRequest } from './handler.js'
+import { enableConfigs } from '../utils/config.js'
 
 function readArgValue(flag: string): string | undefined {
   const args = process.argv.slice(2)
@@ -56,6 +57,7 @@ function isGatewayPath(pathname: string): boolean {
 }
 
 const options = resolveOptions()
+enableConfigs()
 
 Bun.serve({
   hostname: options.host,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { handleGatewayRequest } from '../src/gateway/handler.js'
@@ -196,6 +196,65 @@ describe('Beya unified Gateway contract', () => {
       }
       await rm(configDir, { recursive: true, force: true })
       await rm(workDir, { recursive: true, force: true })
+    }
+  })
+
+  it('redacts provider secrets from Gateway provider responses', async () => {
+    const originalConfigDir = process.env.BEYA_CONFIG_DIR
+    const configDir = await mkdtemp(join(tmpdir(), 'beya-gateway-provider-'))
+    process.env.BEYA_CONFIG_DIR = configDir
+    try {
+      const providerDir = join(configDir, 'beya')
+      await mkdir(providerDir, { recursive: true })
+      await writeFile(
+        join(providerDir, 'providers.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          activeId: 'secret-provider',
+          providers: [{
+            providerId: 'secret-provider',
+            displayName: 'Secret Provider',
+            apiKey: 'super-secret-provider-key',
+            authStrategy: 'api_key',
+            baseUrl: 'https://example.invalid/v1',
+            apiFormat: 'openai_chat',
+            runtimeKind: 'anthropic_compatible',
+            modelRoles: {
+              primary: 'test-model',
+              fast: 'test-model',
+              balanced: 'test-model',
+              powerful: 'test-model',
+            },
+            enabledModels: ['test-model'],
+          }],
+        }, null, 2),
+        'utf-8',
+      )
+
+      const listResponse = await handleGatewayRequest(
+        new Request('http://127.0.0.1/api/providers'),
+        new URL('http://127.0.0.1/api/providers'),
+      )
+      expect(listResponse.status).toBe(200)
+      const listText = await listResponse.text()
+      expect(listText).not.toContain('super-secret-provider-key')
+      expect(listText).toContain('***REDACTED***')
+
+      const detailResponse = await handleGatewayRequest(
+        new Request('http://127.0.0.1/api/providers/secret-provider'),
+        new URL('http://127.0.0.1/api/providers/secret-provider'),
+      )
+      expect(detailResponse.status).toBe(200)
+      const detailText = await detailResponse.text()
+      expect(detailText).not.toContain('super-secret-provider-key')
+      expect(detailText).toContain('***REDACTED***')
+    } finally {
+      if (originalConfigDir === undefined) {
+        delete process.env.BEYA_CONFIG_DIR
+      } else {
+        process.env.BEYA_CONFIG_DIR = originalConfigDir
+      }
+      await rm(configDir, { recursive: true, force: true })
     }
   })
 
