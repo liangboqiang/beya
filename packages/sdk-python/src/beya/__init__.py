@@ -1,8 +1,18 @@
-"""Beya SDK - Python client for the Beya Gateway API."""
+"""Beya SDK - Python client for the Beya Server API."""
 
 __version__ = "0.1.0"
 
 from .client import AsyncBeyaClient, BeyaClient
+from .plugins import (
+    ConnectorToolExecutor,
+    RemoteToolExecutor,
+    SdkPluginDefinition,
+    SdkSkillDefinition,
+    SdkToolDefinition,
+    define_plugin,
+    define_skill,
+    define_tool,
+)
 from .models import (
     AgentInfo,
     ApprovalRequest,
@@ -32,7 +42,7 @@ from .models import (
 from .errors import (
     AuthenticationError,
     BeyaError,
-    GatewayUnavailableError,
+    BeyaServerUnavailableError,
     LocalExecutionError,
     PermissionDeniedError,
     ProviderError,
@@ -46,6 +56,14 @@ from .errors import (
 __all__ = [
     "BeyaClient",
     "AsyncBeyaClient",
+    "ConnectorToolExecutor",
+    "RemoteToolExecutor",
+    "SdkPluginDefinition",
+    "SdkSkillDefinition",
+    "SdkToolDefinition",
+    "define_plugin",
+    "define_skill",
+    "define_tool",
     "AgentInfo",
     "ApprovalRequest",
     "DiagnosticEvent",
@@ -72,7 +90,7 @@ __all__ = [
     "WorkspaceFile",
     "AuthenticationError",
     "BeyaError",
-    "GatewayUnavailableError",
+    "BeyaServerUnavailableError",
     "LocalExecutionError",
     "PermissionDeniedError",
     "ProviderError",

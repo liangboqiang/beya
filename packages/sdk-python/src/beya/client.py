@@ -15,10 +15,10 @@ JsonObject = Dict[str, Any]
 
 
 class BeyaClient:
-    """Product client for the Beya Gateway API.
+    """Product client for the Beya Server API.
 
     The SDK exposes Beya product resources. It is not a route table dump, but
-    every resource method is backed by canonical /api/* Gateway endpoints.
+    every resource method is backed by canonical /api/* Beya Server endpoints.
     """
 
     def __init__(
@@ -145,6 +145,9 @@ class BeyaClient:
     def create_provider(self, payload, timeout=None):
         return self.providers.create(payload, timeout=timeout)
 
+    def upsert_provider(self, payload, timeout=None):
+        return self.providers.upsert(payload, timeout=timeout)
+
     def activate_provider(self, provider_id, timeout=None):
         return self.providers.activate(provider_id, timeout=timeout)
 
@@ -167,10 +170,10 @@ class BeyaClient:
         return self.openai.stream_chat_completion(messages, model, timeout=timeout, **kwargs)
 
     def health(self, timeout=None):
-        return self._request("GET", "/health", timeout=timeout)
+        return self._request("GET", "/api/health", timeout=timeout)
 
     def readiness(self, timeout=None):
-        return self._request("GET", "/readiness", timeout=timeout)
+        return self._request("GET", "/api/readiness", timeout=timeout)
 
     def export_diagnostics(self, timeout=None):
         return self.diagnostics.export(timeout=timeout)
@@ -220,7 +223,7 @@ class BeyaClient:
                 payload = raw
             raise errors.error_from_response(exc.code, payload)
         except URLError as exc:
-            raise errors.GatewayUnavailableError(str(exc.reason), code="GATEWAY_UNAVAILABLE")
+            raise errors.BeyaServerUnavailableError(str(exc.reason), code="BEYA_SERVER_UNAVAILABLE")
 
     def _stream_sse(self, path, payload=None, timeout=None):
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
@@ -259,7 +262,7 @@ class BeyaClient:
                 payload = raw
             raise errors.error_from_response(exc.code, payload)
         except URLError as exc:
-            raise errors.GatewayUnavailableError(str(exc.reason), code="GATEWAY_UNAVAILABLE")
+            raise errors.BeyaServerUnavailableError(str(exc.reason), code="BEYA_SERVER_UNAVAILABLE")
 
 
 class TasksResource:
@@ -323,6 +326,7 @@ class TasksResource:
 
     def list(self, limit=50, offset=0, status=None, session_id=None, timeout=None):
         params = _drop_none({
+            "kind": "agent",
             "limit": limit,
             "offset": offset,
             "status": status,
@@ -464,6 +468,21 @@ class ProvidersResource:
     def create(self, payload, timeout=None):
         return self._client._request("POST", "/api/providers", payload, timeout=timeout)
 
+    def upsert(self, payload, timeout=None):
+        provider_id = str(payload.get("providerId") or payload.get("id") or "").strip() if isinstance(payload, dict) else ""
+        if not provider_id:
+            raise ValueError("providerId is required")
+        existing = self.list(timeout=timeout)
+        rows = existing.get("providers") if isinstance(existing, dict) else existing
+        ids = {
+            str(item.get("providerId") or item.get("id") or "")
+            for item in (rows if isinstance(rows, list) else [])
+            if isinstance(item, dict)
+        }
+        if provider_id in ids:
+            return self.update(provider_id, payload, timeout=timeout)
+        return self.create(payload, timeout=timeout)
+
     def update(self, provider_id, payload, timeout=None):
         return self._client._request("PATCH", "/api/providers/%s" % _path(provider_id), payload, timeout=timeout)
 
@@ -538,8 +557,19 @@ class PluginsResource:
             timeout=timeout,
         )
 
-    def install(self, plugin_id, scope=None, cwd=None, timeout=None):
-        return self.enable(plugin_id, scope=scope, cwd=cwd, timeout=timeout)
+    def install(self, plugin, scope=None, cwd=None, timeout=None):
+        if hasattr(plugin, "to_server_inline_ref"):
+            payload = plugin.to_server_inline_ref()
+            payload["id"] = getattr(plugin, "name", None)
+            return self._client._request("POST", "/api/plugins", _drop_none(payload), timeout=timeout)
+        if isinstance(plugin, dict):
+            return self._client._request("POST", "/api/plugins", plugin, timeout=timeout)
+        if isinstance(plugin, str) and ("/" in plugin or "\\" in plugin or plugin.startswith(".")):
+            return self._client._request("POST", "/api/plugins", {"path": plugin}, timeout=timeout)
+        return self.enable(plugin, scope=scope, cwd=cwd, timeout=timeout)
+
+    def install_or_update(self, plugin, scope=None, cwd=None, timeout=None):
+        return self.install(plugin, scope=scope, cwd=cwd, timeout=timeout)
 
     def enable(self, plugin_id, scope=None, cwd=None, timeout=None):
         return self._plugin_action("enable", plugin_id, scope=scope, cwd=cwd, timeout=timeout)
@@ -803,12 +833,12 @@ class OpenAIResource:
         self._client = client
 
     def models(self, timeout=None):
-        return self._client._request("GET", "/v1/models", timeout=timeout)
+        return self._client._request("GET", "/api/openai/models", timeout=timeout)
 
     def create_chat_completion(self, messages, model, timeout=None, **kwargs):
         payload = dict(kwargs)
         payload.update({"messages": [_serialize_message(m) for m in messages], "model": model})
-        data = self._client._request("POST", "/v1/chat/completions", payload, timeout=timeout)
+        data = self._client._request("POST", "/api/openai/chat/completions", payload, timeout=timeout)
         return OpenAIChatCompletion(**data)
 
     def stream_chat_completion(self, messages, model, timeout=None, **kwargs):
@@ -818,7 +848,7 @@ class OpenAIResource:
             "model": model,
             "stream": True,
         })
-        for item in self._client._stream_sse("/v1/chat/completions", payload=payload, timeout=timeout):
+        for item in self._client._stream_sse("/api/openai/chat/completions", payload=payload, timeout=timeout):
             yield OpenAIChatCompletionChunk(**item)
 
 
