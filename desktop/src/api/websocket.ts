@@ -181,7 +181,7 @@ export function buildSessionWebSocketUrl(sessionId: string) {
   const url = new URL(getBaseUrl())
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   const basePath = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '')
-  url.pathname = `${basePath}/ws/${encodeURIComponent(sessionId)}`
+  url.pathname = `${basePath}/api/sessions/${encodeURIComponent(sessionId)}/ws`
 
   const token = getAuthToken()
   if (token) {

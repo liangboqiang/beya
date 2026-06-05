@@ -12,32 +12,21 @@ def main(argv=None):
     parser.add_argument("--bearer-token")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    submit = sub.add_parser("submit", help="Submit a Beya task")
-    submit.add_argument("query")
-    submit.add_argument("--session-id")
-    submit.add_argument("--skill")
-    submit.add_argument("--skills", help="JSON array of skill names or inline skill definitions")
-    submit.add_argument("--plugins", help="JSON array of plugin refs")
-    submit.add_argument("--provider")
-    submit.add_argument("--model")
-    submit.add_argument("--permission-mode")
-    submit.add_argument("--wait", action="store_true")
-
-    chat = sub.add_parser("chat", help="Run a chat task and wait for the final result")
+    chat = sub.add_parser("chat", help="Run a Beya chat turn")
     chat.add_argument("message")
     chat.add_argument("--session-id")
-    chat.add_argument("--skill")
+    chat.add_argument("--work-dir")
+    chat.add_argument("--provider")
+    chat.add_argument("--model")
+    chat.add_argument("--permission-mode")
+    chat.add_argument("--stream", action="store_true")
 
-    stream = sub.add_parser("stream", help="Stream task events")
-    stream.add_argument("task_id")
-    stream.add_argument("--types")
-
-    status = sub.add_parser("status", help="Get task status")
-    status.add_argument("task_id")
-
-    cancel = sub.add_parser("cancel", help="Cancel a task")
-    cancel.add_argument("task_id")
-    cancel.add_argument("--reason")
+    sub.add_parser("tasks-list")
+    sub.add_parser("task-lists")
+    task_list = sub.add_parser("task-list")
+    task_list.add_argument("id")
+    task_reset = sub.add_parser("task-reset")
+    task_reset.add_argument("id")
 
     sub.add_parser("sessions-list")
     session_get = sub.add_parser("session-get")
@@ -110,11 +99,6 @@ def main(argv=None):
     local_browse.add_argument("--include-files", action="store_true")
     sub.add_parser("local-open-targets")
 
-    openai_chat = sub.add_parser("chat-completions")
-    openai_chat.add_argument("message")
-    openai_chat.add_argument("--model", default="beya")
-    openai_chat.add_argument("--stream", action="store_true")
-
     args = parser.parse_args(argv)
     client = BeyaClient(
         base_url=args.base_url,
@@ -122,29 +106,27 @@ def main(argv=None):
         bearer_token=args.bearer_token,
     )
 
-    if args.command == "submit":
-        handle = client.tasks.submit(
-            args.query,
-            session_id=args.session_id,
-            skill=args.skill,
-            skills=json.loads(args.skills) if args.skills else None,
-            plugins=json.loads(args.plugins) if args.plugins else None,
-            provider_override=args.provider,
-            model_override=args.model,
-            permission_mode=args.permission_mode,
-        )
-        return _print(client.tasks.wait(handle.task_id) if args.wait else handle)
     if args.command == "chat":
-        return _print(client.chat.run(args.message, session_id=args.session_id, skill=args.skill))
-    if args.command == "status":
-        return _print(client.tasks.status(args.task_id))
-    if args.command == "stream":
-        types = args.types.split(",") if args.types else None
-        for event in client.tasks.stream(args.task_id, types=types):
-            print(json.dumps(_json(event), ensure_ascii=False))
-        return 0
-    if args.command == "cancel":
-        return _print({"ok": client.tasks.cancel(args.task_id, reason=args.reason)})
+        kwargs = {
+            "session_id": args.session_id,
+            "work_dir": args.work_dir,
+            "provider_override": args.provider,
+            "model_override": args.model,
+            "permission_mode": args.permission_mode,
+        }
+        if args.stream:
+            for event in client.chat.stream(args.message, **kwargs):
+                print(json.dumps(_json(event), ensure_ascii=False))
+            return 0
+        return _print(client.chat.run(args.message, **kwargs))
+    if args.command == "tasks-list":
+        return _print(client.tasks.list())
+    if args.command == "task-lists":
+        return _print(client.tasks.lists())
+    if args.command == "task-list":
+        return _print(client.tasks.get_list(args.id))
+    if args.command == "task-reset":
+        return _print(client.tasks.reset_list(args.id))
     if args.command == "sessions-list":
         return _print(client.sessions.list())
     if args.command == "session-get":
@@ -213,13 +195,6 @@ def main(argv=None):
         return _print(client.local.browse(path=args.path, search=args.search, include_files=args.include_files))
     if args.command == "local-open-targets":
         return _print(client.local.open_targets())
-    if args.command == "chat-completions":
-        messages = [{"role": "user", "content": args.message}]
-        if args.stream:
-            for chunk in client.openai.stream_chat_completion(messages, args.model):
-                print(json.dumps(_json(chunk), ensure_ascii=False))
-            return 0
-        return _print(client.openai.create_chat_completion(messages, args.model))
     return 2
 
 

@@ -1,7 +1,7 @@
 /**
- * ConversationService — CLI subprocess manager
+ * ConversationService — agent runtime process manager
  *
- * Each desktop session owns one CLI subprocess. The subprocess talks back to
+ * Each desktop session owns one agent runtime process. The process talks back to
  * the desktop server over the SDK WebSocket bridge, while the desktop UI talks
  * to the server over its own client WebSocket.
  */
@@ -247,7 +247,7 @@ export class ConversationService {
     )
 
     console.log(
-      `[ConversationService] Starting CLI for ${sessionId}, cwd: ${launchWorkDir} (process.cwd()=${process.cwd()}, CALLER_DIR will be pinned to workDir)`,
+      `[ConversationService] Starting agent runtime for ${sessionId}, cwd: ${launchWorkDir} (process.cwd()=${process.cwd()}, CALLER_DIR will be pinned to workDir)`,
     )
 
     // IMPORTANT (Bug#5): 必须覆盖子进程继承的 CALLER_DIR / PWD。
@@ -286,7 +286,7 @@ export class ConversationService {
         },
       })
       throw new ConversationStartupError(
-        `Failed to spawn CLI in ${launchWorkDir}: ${
+        `Failed to spawn agent runtime in ${launchWorkDir}: ${
           spawnErr instanceof Error ? spawnErr.message : String(spawnErr)
         }`,
         'CLI_SPAWN_FAILED',
@@ -343,7 +343,7 @@ export class ConversationService {
       }
 
       console.error(
-        `[ConversationService] CLI exited with code ${startupExitCode} for ${sessionId}: ${startupError.message}`,
+        `[ConversationService] Agent runtime exited with code ${startupExitCode} for ${sessionId}: ${startupError.message}`,
       )
       void diagnosticsService.recordEvent({
         type: 'cli_start_failed',
@@ -376,7 +376,7 @@ export class ConversationService {
       })
     }
 
-    console.log(`[ConversationService] CLI started successfully for ${sessionId}`)
+    console.log(`[ConversationService] Agent runtime started successfully for ${sessionId}`)
   }
 
   onOutput(sessionId: string, callback: (msg: any) => void): void {
@@ -801,7 +801,7 @@ export class ConversationService {
       session.proc.kill(signal)
     } catch (error) {
       console.warn(
-        `[ConversationService] Failed to kill CLI subprocess for ${sessionId}: ${
+        `[ConversationService] Failed to kill agent runtime process for ${sessionId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       )
@@ -868,9 +868,9 @@ export class ConversationService {
 
         const logLine = this.redactProcessOutput(text.trim())
         if (streamName === 'stderr') {
-          console.error(`[CLI:${sessionId}:stderr] ${logLine}`)
+          console.error(`[AgentRuntime:${sessionId}:stderr] ${logLine}`)
         } else {
-          console.log(`[CLI:${sessionId}:stdout] ${logLine}`)
+          console.log(`[AgentRuntime:${sessionId}:stdout] ${logLine}`)
         }
       }
     } catch {
@@ -911,7 +911,7 @@ export class ConversationService {
     code: number,
   ): Promise<void> {
     console.log(
-      `[ConversationService] CLI process for ${sessionId} exited with code ${code}`,
+      `[ConversationService] Agent runtime process for ${sessionId} exited with code ${code}`,
     )
 
     const activeSession = this.sessions.get(sessionId)
@@ -1186,14 +1186,14 @@ export class ConversationService {
       )
     ) {
       return new ConversationStartupError(
-        'Desktop chat could not start because Beya CLI is not authenticated. Run `./bin/beya /login` or provide valid API credentials, then retry.',
+        'Desktop chat could not start because Beya is not authenticated. Run `./bin/beya /login` or provide valid API credentials, then retry.',
         'CLI_AUTH_REQUIRED',
       )
     }
 
     if (/session id .*already in use/i.test(detail)) {
       return new ConversationStartupError(
-        `Session ${sessionId} is already in use by another CLI process or transcript.`,
+        `Session ${sessionId} is already in use by another agent runtime process or transcript.`,
         'CLI_SESSION_CONFLICT',
         true,
       )
@@ -1202,8 +1202,8 @@ export class ConversationService {
     const normalizedDetail = detail.trim()
     return new ConversationStartupError(
       normalizedDetail
-        ? `CLI exited during startup (code ${exitCode}): ${normalizedDetail}`
-        : `CLI exited during startup with code ${exitCode}; no CLI stderr/stdout or SDK error payload was captured before exit.`,
+        ? `Agent runtime exited during startup (code ${exitCode}): ${normalizedDetail}`
+        : `Agent runtime exited during startup with code ${exitCode}; no runtime stderr/stdout or SDK error payload was captured before exit.`,
       'CLI_START_FAILED',
       true,
     )
@@ -1229,8 +1229,8 @@ export class ConversationService {
       capturedOutput
 
     return detail
-      ? `CLI process exited unexpectedly (code ${exitCode}): ${detail}`
-      : `CLI process exited unexpectedly with code ${exitCode}; no CLI stderr/stdout or SDK error payload was captured before exit.`
+      ? `Agent runtime exited unexpectedly (code ${exitCode}): ${detail}`
+      : `Agent runtime exited unexpectedly with code ${exitCode}; no runtime stderr/stdout or SDK error payload was captured before exit.`
   }
 
   private buildCapturedProcessOutputDetail(

@@ -76,7 +76,7 @@ describe('wsManager reconnect buffering', () => {
     wsManager.connect('session-reconnect')
 
     const firstSocket = FakeWebSocket.instances[0]
-    expect(firstSocket?.url).toContain('/ws/session-reconnect')
+    expect(firstSocket?.url).toContain('/api/sessions/session-reconnect/ws')
 
     firstSocket!.open()
     wsManager.send('session-reconnect', { type: 'user_message', content: 'first' })
@@ -103,7 +103,7 @@ describe('wsManager reconnect buffering', () => {
     clientMocks.authToken = 'h5 token/with?chars'
 
     expect(buildSessionWebSocketUrl('session-reconnect')).toBe(
-      'ws://10.0.0.2:3456/ws/session-reconnect?token=h5+token%2Fwith%3Fchars',
+      'ws://10.0.0.2:3456/api/sessions/session-reconnect/ws?token=h5+token%2Fwith%3Fchars',
     )
   })
 
@@ -111,7 +111,7 @@ describe('wsManager reconnect buffering', () => {
     clientMocks.baseUrl = 'https://remote.example.com'
 
     expect(buildSessionWebSocketUrl('secure-session')).toBe(
-      'wss://remote.example.com/ws/secure-session',
+      'wss://remote.example.com/api/sessions/secure-session/ws',
     )
   })
 
@@ -119,7 +119,7 @@ describe('wsManager reconnect buffering', () => {
     clientMocks.baseUrl = 'https://public.example.com/app'
 
     expect(buildSessionWebSocketUrl('s1')).toBe(
-      'wss://public.example.com/app/ws/s1',
+      'wss://public.example.com/app/api/sessions/s1/ws',
     )
   })
 })

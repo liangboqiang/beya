@@ -4,7 +4,7 @@ import { spawnSync } from 'child_process'
 const python = resolvePython()
 const pythonSrc = join(process.cwd(), 'packages', 'sdk-python', 'src')
 
-run('bun', ['test', 'tests/gatewaySdkContract.test.ts'])
+run('bun', ['test', 'tests/beyaServerSdkContract.test.ts'])
 run(python, [
   '-m',
   'unittest',
@@ -24,7 +24,7 @@ run(python, [
     'from beya.cli import main',
     'client = BeyaClient(base_url="http://127.0.0.1:3456")',
     'assert client.base_url == "http://127.0.0.1:3456"',
-    'assert hasattr(client, "tasks") and hasattr(client, "workspace")',
+    'assert hasattr(client, "chat") and hasattr(client, "tasks") and hasattr(client, "workspace")',
     'assert hasattr(client, "providers") and hasattr(client, "plugins")',
     'assert AsyncBeyaClient is not None and LocalExecutionError is not None and RunEvent is not None',
     'assert callable(main)',

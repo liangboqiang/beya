@@ -251,7 +251,7 @@ export const handleWebSocket = {
     const cleanupTimer = setTimeout(() => {
       sessionCleanupTimers.delete(sessionId)
       if (!hasActiveClients(sessionId)) {
-        console.log(`[WS] Session ${sessionId} not reconnected after ${cleanupDelayMs}ms, stopping CLI subprocess`)
+        console.log(`[WS] Session ${sessionId} not reconnected after ${cleanupDelayMs}ms, stopping agent runtime process`)
         conversationService.stopSession(sessionId)
         cleanupSessionRuntimeState(sessionId)
       }
@@ -303,7 +303,7 @@ async function handleUserMessage(
     sendMessage(ws, { type: 'status', state: 'thinking', verb: 'Thinking' })
   }
 
-  // Track and emit the first placeholder title before CLI startup/streaming.
+  // Track and emit the first placeholder title before runtime startup/streaming.
   let titleState = sessionTitleState.get(sessionId)
   if (!titleState) {
     titleState = {
@@ -332,7 +332,7 @@ async function handleUserMessage(
     const errMsg = err instanceof Error ? err.message : String(err)
     const code =
       err instanceof ConversationStartupError ? err.code : 'CLI_START_FAILED'
-    console.error(`[WS] CLI start failed for ${sessionId}: ${errMsg}`)
+    console.error(`[WS] Agent runtime start failed for ${sessionId}: ${errMsg}`)
     sendMessage(ws, {
       type: 'error',
       message: await buildSessionStartupDiagnosticMessage(sessionId, errMsg),
@@ -377,7 +377,7 @@ async function handleUserMessage(
   if (!sent) {
     sendMessage(ws, {
       type: 'error',
-      message: 'CLI process is not running. The session may have ended or the process crashed.',
+      message: 'Agent runtime is not running. The session may have ended or the process crashed.',
       code: 'CLI_NOT_RUNNING',
     })
     sendMessage(ws, { type: 'status', state: 'idle' })
@@ -516,10 +516,10 @@ async function applyPermissionModeToActiveSession(
   const currentMode = conversationService.getSessionPermissionMode(sessionId)
   if (currentMode === mode) return
 
-  // Switching to/from bypassPermissions requires the CLI to be (re)started with
-  // --dangerously-skip-permissions. The CLI rejects a runtime set_permission_mode
+  // Switching to/from bypassPermissions requires the runtime to be (re)started with
+  // --dangerously-skip-permissions. The runtime rejects a runtime set_permission_mode
   // to bypassPermissions if it wasn't launched with that flag.  Rather than just
-  // sending the SDK message (which would silently fail), restart the CLI subprocess
+  // sending the SDK message (which would silently fail), restart the runtime process
   // with the correct arguments so the new permission mode takes effect.
   const needsRestart =
     mode === 'bypassPermissions' || currentMode === 'bypassPermissions'
@@ -640,7 +640,7 @@ async function restartSessionWithPermissionMode(
     await conversationService.startSession(sessionId, workDir, sdkUrl, runtimeSettings)
 
     sendMessage(ws, { type: 'status', state: 'idle' })
-    console.log(`[WS] Restarted CLI for ${sessionId} with permission mode: ${mode}`)
+    console.log(`[WS] Restarted agent runtime for ${sessionId} with permission mode: ${mode}`)
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     void diagnosticsService.recordEvent({
@@ -650,7 +650,7 @@ async function restartSessionWithPermissionMode(
       summary: errMsg,
       details: { mode, error: err },
     })
-    console.error(`[WS] Failed to restart CLI for ${sessionId}: ${errMsg}`)
+    console.error(`[WS] Failed to restart agent runtime for ${sessionId}: ${errMsg}`)
     sendMessage(ws, {
       type: 'error',
       message: await buildSessionStartupDiagnosticMessage(
@@ -714,7 +714,7 @@ async function restartSessionWithRuntimeConfig(
     await conversationService.startSession(sessionId, workDir, sdkUrl, runtimeSettings)
 
     sendMessage(ws, { type: 'status', state: 'idle' })
-    console.log(`[WS] Restarted CLI for ${sessionId} with runtime override`)
+    console.log(`[WS] Restarted agent runtime for ${sessionId} with runtime override`)
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     void diagnosticsService.recordEvent({
@@ -724,7 +724,7 @@ async function restartSessionWithRuntimeConfig(
       summary: errMsg,
       details: { runtimeOverride: runtimeOverrides.get(sessionId), error: err },
     })
-    console.error(`[WS] Failed to restart CLI for ${sessionId} after runtime override: ${errMsg}`)
+    console.error(`[WS] Failed to restart agent runtime for ${sessionId} after runtime override: ${errMsg}`)
     sendMessage(ws, {
       type: 'error',
       message: await buildSessionStartupDiagnosticMessage(
@@ -750,7 +750,7 @@ function handleStopGeneration(ws: ServerWebSocket<WebSocketData>) {
     // Force-kill if still running after 3 seconds
     setTimeout(() => {
       if (conversationService.hasSession(sessionId)) {
-        console.log(`[WS] Force-killing CLI subprocess for session: ${sessionId}`)
+        console.log(`[WS] Force-killing agent runtime process for session: ${sessionId}`)
         conversationService.stopSession(sessionId)
       }
     }, 3_000)
@@ -924,7 +924,7 @@ function markPrewarmed(sessionId: string) {
   const timer = setTimeout(() => {
     prewarmIdleTimers.delete(sessionId)
     if (!prewarmedSessions.has(sessionId)) return
-    console.log(`[WS] Prewarmed session ${sessionId} idle for ${timeoutMs}ms, stopping CLI subprocess`)
+    console.log(`[WS] Prewarmed session ${sessionId} idle for ${timeoutMs}ms, stopping agent runtime process`)
     conversationService.stopSession(sessionId)
     prewarmedSessions.delete(sessionId)
   }, timeoutMs)
@@ -983,7 +983,7 @@ function isDuplicateOfLastApiError(
   if (resultMessage === lastApiError.message) return true
   return (
     resultMessage.includes(lastApiError.message) &&
-    /CLI (?:process exited unexpectedly|exited during startup)/i.test(resultMessage)
+    /(CLI|Agent runtime) (?:process exited unexpectedly|exited during startup)/i.test(resultMessage)
   )
 }
 
@@ -1007,7 +1007,7 @@ async function resolveSessionWorkDir(sessionId: string, fallback = os.homedir())
     console.log(
       `[WS] resolveSessionWorkDir: sessionId=${sessionId}, resolved workDir=${JSON.stringify(
         resolved,
-      )}, will spawn CLI with workDir=${workDir}`,
+      )}, will spawn agent runtime with workDir=${workDir}`,
     )
   } catch (resolveErr) {
     console.warn(
@@ -1043,7 +1043,7 @@ async function ensureCliSessionStarted(
       `ws://${ws.data.serverHost}:${ws.data.serverPort}/sdk/${sessionId}` +
       `?token=${encodeURIComponent(crypto.randomUUID())}`
     await sendRepositoryStartupStatus(ws, sessionId, reason)
-    console.log(`[WS] Starting CLI for ${sessionId} due to ${reason}`)
+    console.log(`[WS] Starting agent runtime for ${sessionId} due to ${reason}`)
     await conversationService.startSession(sessionId, workDir, sdkUrl, runtimeSettings)
   })()
 

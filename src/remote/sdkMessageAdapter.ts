@@ -95,7 +95,7 @@ function convertStatusMessage(msg: SDKStatusMessage): SystemMessage | null {
     subtype: 'informational',
     content:
       msg.status === 'compacting'
-        ? 'Compacting conversationâ€?
+        ? 'Compacting conversation...'
         : `Status: ${msg.status}`,
     level: 'info',
     uuid: msg.uuid,
@@ -114,7 +114,7 @@ function convertToolProgressMessage(
   return {
     type: 'system',
     subtype: 'informational',
-    content: `Tool ${msg.tool_name} running for ${msg.elapsed_time_seconds}sâ€¦`,
+    content: `Tool ${msg.tool_name} running for ${msg.elapsed_time_seconds}s...`,
     level: 'info',
     uuid: msg.uuid,
     timestamp: new Date().toISOString(),

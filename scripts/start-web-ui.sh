@@ -165,7 +165,7 @@ echo "Starting server: ${SERVER_URL}"
 ) >"${SERVER_LOG}" 2>&1 &
 SERVER_PID=$!
 
-wait_for_http "${SERVER_URL}/health" "${SERVER_LOG}"
+wait_for_http "${SERVER_URL}/api/health" "${SERVER_LOG}"
 
 echo "Starting Web UI: http://${HOST}:${WEB_PORT_RESOLVED}"
 (

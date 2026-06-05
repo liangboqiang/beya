@@ -3,22 +3,22 @@ import {
   type Tool,
   type ToolPermissionContext,
   type ToolUseContext,
-} from '../Tool.js'
+} from '../../Tool.js'
 import type {
   MCPServerConnection,
   ServerResource,
-} from '../services/mcp/types.js'
-import type { Command } from '../types/command.js'
-import type { AssistantMessage, Message } from '../types/message.js'
-import type { PermissionDecision as InternalPermissionDecision } from '../types/permissions.js'
+} from '../../services/mcp/types.js'
+import type { Command } from '../../types/command.js'
+import type { AssistantMessage, Message } from '../../types/message.js'
+import type { PermissionDecision as InternalPermissionDecision } from '../../types/permissions.js'
 import {
   createFileStateCacheWithSizeLimit,
   READ_FILE_STATE_CACHE_SIZE,
-} from '../utils/fileStateCache.js'
-import { hasPermissionsToUseTool } from '../utils/permissions/permissions.js'
-import { shouldEnableThinkingByDefault } from '../utils/thinking.js'
-import { getGatewayBuiltInTools } from './headlessTools.js'
-import type { GatewayTaskEvent, PermissionHandler, PermissionMode } from './types.js'
+} from '../../utils/fileStateCache.js'
+import { hasPermissionsToUseTool } from '../../utils/permissions/permissions.js'
+import { shouldEnableThinkingByDefault } from '../../utils/thinking.js'
+import { getHeadlessBuiltInTools } from './headlessBuiltInTools.js'
+import type { PermissionHandler, PermissionMode, ServerToolRuntimeEvent } from '../types/serverRuntime.js'
 
 type CanUseToolFn = (
   tool: Tool,
@@ -58,20 +58,20 @@ export type HeadlessContextOptions = {
   sessionId: string
   model: string
   messages: Message[]
-  gatewayTools: Tool[]
+  serverTools: Tool[]
   pluginCommands: Command[]
   mcpClients?: MCPServerConnection[]
   mcpResources?: Record<string, ServerResource[]>
   permissionMode: PermissionMode
   permissionHandler?: PermissionHandler
   abortController: AbortController
-  emit: (event: Omit<GatewayTaskEvent, 'seq' | 'stream_id' | 'timestamp'>) => void
+  emit: (event: ServerToolRuntimeEvent) => void
 }
 
-export function createGatewayToolUseContext({
+export function createHeadlessToolUseContext({
   model,
   messages,
-  gatewayTools,
+  serverTools,
   pluginCommands,
   mcpClients = [],
   mcpResources = {},
@@ -85,8 +85,8 @@ export function createGatewayToolUseContext({
     Boolean(permissionHandler),
     pluginCommands,
   )
-  const beyaTools = getGatewayBuiltInTools(appState.toolPermissionContext)
-  const tools = dedupeTools([...gatewayTools, ...beyaTools])
+  const beyaTools = getHeadlessBuiltInTools(appState.toolPermissionContext)
+  const tools = dedupeTools([...serverTools, ...beyaTools])
   appState = {
     ...appState,
     mcp: {
@@ -113,7 +113,7 @@ export function createGatewayToolUseContext({
       mcpResources,
       isNonInteractiveSession: true,
       agentDefinitions: { activeAgents: [], allAgents: [] },
-      querySource: 'gateway' as never,
+      querySource: 'beya_server' as never,
     },
     abortController,
     readFileState: createFileStateCacheWithSizeLimit(READ_FILE_STATE_CACHE_SIZE),
@@ -134,7 +134,7 @@ export function createGatewayToolUseContext({
   } as ToolUseContext
 }
 
-export function createGatewayCanUseTool({
+export function createHeadlessCanUseTool({
   taskId,
   sessionId,
   permissionHandler,
@@ -204,7 +204,7 @@ export function createGatewayCanUseTool({
         updatedInput: decision.updatedInput ?? input,
         decisionReason: {
           type: 'permissionPromptTool',
-          permissionPromptToolName: 'gateway',
+          permissionPromptToolName: 'beya-server',
           toolResult: decision,
         },
         toolUseID,
@@ -213,10 +213,10 @@ export function createGatewayCanUseTool({
 
     return {
       behavior: 'deny',
-      message: decision.reason ?? 'Tool use denied by Gateway permission handler.',
+      message: decision.reason ?? 'Tool use denied by Beya server permission handler.',
       decisionReason: {
         type: 'permissionPromptTool',
-        permissionPromptToolName: 'gateway',
+        permissionPromptToolName: 'beya-server',
         toolResult: decision,
       },
       toolUseID,

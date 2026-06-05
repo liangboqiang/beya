@@ -5,39 +5,39 @@ import {
   type Tool,
   type ToolResult,
   type ToolUseContext,
-} from '../Tool.js'
-import type { JsonObject, ToolCallExtra, ToolDefinition } from './types.js'
+} from '../../Tool.js'
+import type { JsonObject, ToolCallExtra, ToolDefinition } from '../types/serverRuntime.js'
 
-export function gatewayToolToBeyaTool(
-  gatewayTool: ToolDefinition,
+export function toolDefinitionToBeyaTool(
+  toolDefinition: ToolDefinition,
   runContext: Pick<ToolCallExtra, 'taskId' | 'sessionId' | 'signal'> & {
     metadata?: Record<string, unknown>
   },
 ): Tool {
   const inputSchema = z.object({}).passthrough()
-  const readOnly = annotationBool(gatewayTool.annotations, 'readOnlyHint', 'readOnly')
+  const readOnly = annotationBool(toolDefinition.annotations, 'readOnlyHint', 'readOnly')
   const destructive = annotationBool(
-    gatewayTool.annotations,
+    toolDefinition.annotations,
     'destructiveHint',
     'destructive',
   )
   const openWorld = annotationBool(
-    gatewayTool.annotations,
+    toolDefinition.annotations,
     'openWorldHint',
     'openWorld',
   )
 
   return buildTool({
-    name: gatewayTool.name,
-    description: async () => gatewayTool.description,
+    name: toolDefinition.name,
+    description: async () => toolDefinition.description,
     inputSchema,
-    inputJSONSchema: normalizeJsonSchema(gatewayTool.inputSchema),
+    inputJSONSchema: normalizeJsonSchema(toolDefinition.inputSchema),
     isReadOnly: () => readOnly,
     isDestructive: () => destructive,
     isOpenWorld: () => openWorld,
     isConcurrencySafe: () => readOnly,
-    searchHint: gatewayTool.searchHint,
-    alwaysLoad: gatewayTool.alwaysLoad,
+    searchHint: toolDefinition.searchHint,
+    alwaysLoad: toolDefinition.alwaysLoad,
     maxResultSizeChars: 100_000,
     checkPermissions: async input => {
       if (readOnly) {
@@ -45,7 +45,7 @@ export function gatewayToolToBeyaTool(
       }
       return {
         behavior: 'ask',
-        message: `Tool ${gatewayTool.name} requires permission.`,
+        message: `Tool ${toolDefinition.name} requires permission.`,
         updatedInput: input,
         decisionReason: { type: 'mode', mode: 'default' },
       }
@@ -54,21 +54,21 @@ export function gatewayToolToBeyaTool(
       args,
       context: ToolUseContext,
     ): Promise<ToolResult<CallToolResult>> => {
-      if (!gatewayTool.execute && !gatewayTool.executor) {
-        throw new Error(`Gateway tool ${gatewayTool.name} has no executor`)
+      if (!toolDefinition.execute && !toolDefinition.executor) {
+        throw new Error(`Beya tool ${toolDefinition.name} has no executor`)
       }
       const extra = {
         ...runContext,
         toolCallId: context.toolUseId ?? '',
         signal: context.abortController.signal,
       }
-      const result = gatewayTool.execute
-        ? await gatewayTool.execute(args, extra)
-        : await executeRemoteGatewayTool(gatewayTool, args, extra)
+      const result = toolDefinition.execute
+        ? await toolDefinition.execute(args, extra)
+        : await executeRemoteToolDefinition(toolDefinition, args, extra)
       return { data: result }
     },
-    prompt: async () => gatewayTool.description,
-    userFacingName: () => gatewayTool.name,
+    prompt: async () => toolDefinition.description,
+    userFacingName: () => toolDefinition.name,
     mapToolResultToToolResultBlockParam: (content, toolUseID) => ({
       type: 'tool_result',
       tool_use_id: toolUseID,
@@ -78,7 +78,7 @@ export function gatewayToolToBeyaTool(
   })
 }
 
-export function isExecutableGatewayTool(tool: ToolDefinition): boolean {
+export function isExecutableToolDefinition(tool: ToolDefinition): boolean {
   return typeof tool.execute === 'function' ||
     (
       tool.executor?.type === 'http' &&
@@ -87,14 +87,14 @@ export function isExecutableGatewayTool(tool: ToolDefinition): boolean {
     )
 }
 
-async function executeRemoteGatewayTool(
-  gatewayTool: ToolDefinition,
+async function executeRemoteToolDefinition(
+  toolDefinition: ToolDefinition,
   args: Record<string, unknown>,
   extra: ToolCallExtra,
 ): Promise<CallToolResult> {
-  const executor = gatewayTool.executor
+  const executor = toolDefinition.executor
   if (!executor || executor.type !== 'http') {
-    throw new Error(`Gateway tool ${gatewayTool.name} has no remote executor`)
+    throw new Error(`Beya tool ${toolDefinition.name} has no remote executor`)
   }
   const response = await fetch(executor.url, {
     method: executor.method ?? 'POST',
@@ -103,7 +103,7 @@ async function executeRemoteGatewayTool(
       ...(executor.headers ?? {}),
     },
     body: JSON.stringify({
-      tool: executor.toolName || gatewayTool.name,
+      tool: executor.toolName || toolDefinition.name,
       namespace: executor.namespace,
       arguments: args,
       task_id: extra.taskId,

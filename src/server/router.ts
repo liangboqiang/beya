@@ -1,5 +1,5 @@
 /**
- * API Router — 将请求路由到对应的 API handler
+ * Canonical Beya Server API router.
  */
 
 import { handleSessionsApi } from './api/sessions.js'
@@ -26,15 +26,57 @@ import { handleActivityStatsApi } from './api/activityStats.js'
 import { handleOpenTargetsApi } from './api/open-targets.js'
 import { handleMemoryApi } from './api/memory.js'
 import { handleDesktopUiApi } from './api/desktop-ui.js'
+import { errorResponse } from './middleware/errorHandler.js'
+import { handleServerTools } from './api/tools.js'
 
 export async function handleApiRequest(req: Request, url: URL): Promise<Response> {
+  try {
+    return await routeApiRequest(req, url)
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+async function routeApiRequest(req: Request, url: URL): Promise<Response> {
   const path = url.pathname
   const segments = path.split('/').filter(Boolean) // ['api', 'sessions', ...]
+  if (segments[0] !== 'api') {
+    return Response.json(
+      { error: 'Not Found', message: `Unknown API path: ${path}` },
+      { status: 404 },
+    )
+  }
 
   // Route to appropriate handler based on the second segment
   const resource = segments[1]
 
   switch (resource) {
+    case 'health':
+      if (req.method !== 'GET') {
+        return Response.json(
+          { error: 'Method Not Allowed', message: `Method ${req.method} not allowed on /api/health` },
+          { status: 405 },
+        )
+      }
+      return Response.json({
+        status: 'ok',
+        service: 'beya-server',
+        timestamp: new Date().toISOString(),
+      })
+
+    case 'readiness':
+      if (req.method !== 'GET') {
+        return Response.json(
+          { error: 'Method Not Allowed', message: `Method ${req.method} not allowed on /api/readiness` },
+          { status: 405 },
+        )
+      }
+      return Response.json({
+        status: 'ready',
+        service: 'beya-server',
+        timestamp: new Date().toISOString(),
+      })
+
     case 'sessions': {
       // Route /api/sessions/:id/chat/* to conversations handler
       const subResource = segments[3]
@@ -64,6 +106,8 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
       return handleSearchApi(req, url, segments)
 
     case 'agents':
+      return handleAgentsApi(req, url, segments)
+
     case 'tasks':
       return handleAgentsApi(req, url, segments)
 
@@ -90,6 +134,9 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
 
     case 'plugins':
       return handlePluginsApi(req, url, segments)
+
+    case 'tools':
+      return handleServerTools(req, url, segments)
 
     case 'computer-use':
       return handleComputerUseApi(req, url, segments)

@@ -212,22 +212,23 @@ async function initializeBrowserServerUrl(fallbackUrl: string) {
 
 async function waitForHealth(serverUrl: string) {
   let lastError: unknown
+  const healthUrl = `${serverUrl}/api/health`
 
   for (let attempt = 0; attempt < 30; attempt++) {
     try {
-      const response = await fetch(`${serverUrl}/health`, {
+      const response = await fetch(healthUrl, {
         cache: 'no-store',
       })
       if (response.ok) {
         const contentType = response.headers.get('content-type') ?? ''
         if (!contentType.toLowerCase().includes('application/json')) {
-          lastError = new Error(`healthcheck returned non-JSON response from ${serverUrl}/health`)
+          lastError = new Error(`healthcheck returned non-JSON response from ${healthUrl}`)
         } else {
           const body = await response.json().catch(() => null)
           if (body && typeof body === 'object' && 'status' in body && body.status === 'ok') {
             return
           }
-          lastError = new Error(`healthcheck returned invalid response from ${serverUrl}/health`)
+          lastError = new Error(`healthcheck returned invalid response from ${healthUrl}`)
         }
       } else {
         lastError = new Error(`healthcheck returned ${response.status}`)

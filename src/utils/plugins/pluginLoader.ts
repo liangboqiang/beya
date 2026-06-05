@@ -2038,7 +2038,23 @@ async function loadPluginsFromMarketplaces({
         result = await getPluginByIdCacheOnly(pluginId)
       }
 
+      // installed_plugins.json records what's actually cached on disk
+      // (version for the full loader's first-pass probe, installPath for
+      // the cache-only loader's direct read).
+      const installEntry = installedPluginsData.plugins[pluginId]?.[0]
+      const enabled = isEnabledPluginSettingValue(enabledValue)
+
       if (!result) {
+        if (installEntry?.installPath) {
+          return loadPluginFromRecordedInstallPath(
+            pluginId,
+            pluginName!,
+            enabled,
+            errors,
+            installEntry.installPath,
+          )
+        }
+
         errors.push({
           type: 'plugin-not-found',
           source: pluginId,
@@ -2048,11 +2064,6 @@ async function loadPluginsFromMarketplaces({
         return null
       }
 
-      // installed_plugins.json records what's actually cached on disk
-      // (version for the full loader's first-pass probe, installPath for
-      // the cache-only loader's direct read).
-      const installEntry = installedPluginsData.plugins[pluginId]?.[0]
-      const enabled = isEnabledPluginSettingValue(enabledValue)
       return cacheOnly
         ? loadPluginFromMarketplaceEntryCacheOnly(
             result.entry,
@@ -2090,6 +2101,36 @@ async function loadPluginsFromMarketplaces({
   }
 
   return { plugins, errors }
+}
+
+async function loadPluginFromRecordedInstallPath(
+  pluginId: string,
+  pluginName: string,
+  enabled: boolean,
+  errorsOut: PluginError[],
+  installPath: string,
+): Promise<LoadedPlugin | null> {
+  if (!(await pathExists(installPath))) {
+    errorsOut.push({
+      type: 'plugin-cache-miss',
+      source: pluginId,
+      plugin: pluginName,
+      installPath,
+    })
+    return null
+  }
+
+  return finishLoadingPluginFromPath(
+    {
+      name: pluginName,
+      source: installPath,
+      strict: true,
+    } as PluginMarketplaceEntry,
+    pluginId,
+    enabled,
+    errorsOut,
+    installPath,
+  )
 }
 
 /**

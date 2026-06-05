@@ -34,7 +34,7 @@ class ProviderError(BeyaError):
     pass
 
 
-class GatewayUnavailableError(BeyaError):
+class BeyaServerUnavailableError(BeyaError):
     pass
 
 
@@ -72,5 +72,5 @@ def error_from_response(status, payload):
     if "local" in lowered or "terminal" in lowered or "computer" in lowered:
         return LocalExecutionError(message, **kwargs)
     if status >= 500:
-        return GatewayUnavailableError(message, **kwargs)
+        return BeyaServerUnavailableError(message, **kwargs)
     return BeyaError(message, **kwargs)

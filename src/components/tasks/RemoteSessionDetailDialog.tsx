@@ -468,7 +468,7 @@ function StagePipeline(t0) {
   }
   let t5;
   if ($[9] !== completed) {
-    t5 = completed && <Text color="success"> âœ?/Text>;
+    t5 = completed && <Text color="success"> done</Text>;
     $[9] = completed;
     $[10] = t5;
   } else {
@@ -847,7 +847,7 @@ export function RemoteSessionDetailDialog({
   const displayStatus = session.status === 'pending' ? 'starting' : session.status;
   return <Box flexDirection="column" tabIndex={0} autoFocus onKeyDown={handleKeyDown}>
       <Dialog title="Remote session details" onCancel={handleClose} color="background" inputGuide={exitState => exitState.pending ? <Text>Press {exitState.keyName} again to exit</Text> : <Byline>
-              {onBack && <KeyboardShortcutHint shortcut="â†? action="go back" />}
+              {onBack && <KeyboardShortcutHint shortcut="Back" action="go back" />}
               <KeyboardShortcutHint shortcut="Esc/Enter/Space" action="close" />
               {!isTeleporting && <KeyboardShortcutHint shortcut="t" action="teleport" />}
             </Byline>}>
@@ -897,7 +897,7 @@ export function RemoteSessionDetailDialog({
           </Box>}
 
         {/* Teleporting status */}
-        {isTeleporting && <Text color="background">Teleporting to sessionâ€?/Text>}
+        {isTeleporting && <Text color="background">Teleporting to session...</Text>}
       </Dialog>
     </Box>;
 }

@@ -185,75 +185,155 @@ async function assertServerExecutableProduced() {
 async function writeContracts() {
   const schemasDir = join(contractsDir, 'schemas')
   await mkdir(schemasDir, { recursive: true })
+  const yaml = [
+    'openapi: 3.1.0',
+    'info:',
+    '  title: Beya SDK API',
+    '  version: 0.1.0',
+    'servers:',
+    '  - url: http://127.0.0.1:3456',
+    'paths:',
+    ...openApiPath('  /api/health:', { get: 'Beya Server health check' }),
+    ...openApiPath('  /api/readiness:', { get: 'Beya Server readiness check' }),
+    ...openApiPath('  /api/sessions:', {
+      get: 'List sessions',
+      post: 'Create a session',
+    }),
+    ...openApiPath('  /api/sessions/{session_id}:', {
+      get: 'Get session detail',
+      patch: 'Rename or update a session',
+      delete: 'Delete a session',
+    }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/messages:', { get: 'List session messages' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/history:', { get: 'List session history' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/events:', { get: 'List session events' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/chat:', { post: 'Queue a Desktop chat turn' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/chat/status:', { get: 'Get Desktop chat status' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/chat/stop:', { post: 'Stop active Desktop chat turn' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/ws:', { get: 'Session WebSocket used by Desktop and Python SDK chat' }, ['session_id'], { get: '101' }),
+    ...openApiPath('  /api/sessions/{session_id}/workspace/status:', { get: 'Get workspace status' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/workspace/tree:', { get: 'List workspace tree' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/workspace/file:', { get: 'Read workspace file' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/workspace/diff:', { get: 'Read workspace diff' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/branch:', { post: 'Fork a session' }, ['session_id']),
+    ...openApiPath('  /api/sessions/{session_id}/rewind:', { post: 'Preview or execute session rewind' }, ['session_id']),
+    ...openApiPath('  /api/tasks:', { get: 'List Desktop/CLI task items' }),
+    ...openApiPath('  /api/tasks/lists:', { get: 'List Desktop/CLI task lists' }),
+    ...openApiPath('  /api/tasks/lists/{task_list_id}:', { get: 'List tasks in a task list' }, ['task_list_id']),
+    ...openApiPath('  /api/tasks/lists/{task_list_id}/{task_id}:', { get: 'Get a task-list item' }, ['task_list_id', 'task_id']),
+    ...openApiPath('  /api/tasks/lists/{task_list_id}/reset:', { post: 'Reset a completed task list' }, ['task_list_id']),
+    ...openApiPath('  /api/providers:', {
+      get: 'List model providers',
+      post: 'Create a model provider',
+    }),
+    ...openApiPath('  /api/providers/catalog:', { get: 'List provider catalog' }),
+    ...openApiPath('  /api/providers/auth-status:', { get: 'Get provider authentication status' }),
+    ...openApiPath('  /api/providers/settings:', {
+      get: 'Get provider settings',
+      put: 'Update provider settings',
+    }),
+    ...openApiPath('  /api/providers/{provider_id}:', {
+      patch: 'Update a provider',
+      delete: 'Delete a provider',
+    }, ['provider_id']),
+    ...openApiPath('  /api/providers/{provider_id}/activate:', { post: 'Activate a provider' }, ['provider_id']),
+    ...openApiPath('  /api/providers/{provider_id}/test:', { post: 'Test a provider' }, ['provider_id']),
+    ...openApiPath('  /api/providers/test:', { post: 'Test provider configuration' }),
+    ...openApiPath('  /api/models:', { get: 'List available models' }),
+    ...openApiPath('  /api/models/current:', {
+      get: 'Get current model',
+      put: 'Set current model',
+    }),
+    ...openApiPath('  /api/effort:', {
+      get: 'Get model effort setting',
+      put: 'Set model effort setting',
+    }),
+    ...openApiPath('  /api/plugins:', {
+      get: 'List installed plugins',
+      post: 'Install or register a plugin',
+    }),
+    ...openApiPath('  /api/plugins/{plugin_id}:', { get: 'Get plugin detail' }, ['plugin_id']),
+    ...openApiPath('  /api/plugins/reload:', { post: 'Reload plugins' }),
+    ...openApiPath('  /api/plugins/enable:', { post: 'Enable plugin' }),
+    ...openApiPath('  /api/plugins/disable:', { post: 'Disable plugin' }),
+    ...openApiPath('  /api/plugins/update:', { post: 'Update plugin' }),
+    ...openApiPath('  /api/plugins/uninstall:', { post: 'Uninstall plugin' }),
+    ...openApiPath('  /api/skills:', { get: 'List skills' }),
+    ...openApiPath('  /api/skills/{name}:', { get: 'Get skill detail' }, ['name']),
+    ...openApiPath('  /api/mcp:', {
+      get: 'List MCP servers',
+      post: 'Create MCP server config',
+    }),
+    ...openApiPath('  /api/mcp/{name}:', {
+      put: 'Update MCP server config',
+      delete: 'Delete MCP server config',
+    }, ['name']),
+    ...openApiPath('  /api/mcp/{name}/status:', { get: 'Get MCP server status' }, ['name']),
+    ...openApiPath('  /api/mcp/{name}/toggle:', { post: 'Toggle MCP server' }, ['name']),
+    ...openApiPath('  /api/mcp/{name}/reconnect:', { post: 'Reconnect MCP server' }, ['name']),
+    ...openApiPath('  /api/tools:', { get: 'List tools' }),
+    ...openApiPath('  /api/tools/{name}:', { get: 'Get tool detail' }, ['name']),
+    ...openApiPath('  /api/tools/{name}/execute:', { post: 'Execute tool through Beya tool runtime' }, ['name']),
+    ...openApiPath('  /api/settings/user:', {
+      get: 'Get user settings',
+      put: 'Update user settings',
+    }),
+    ...openApiPath('  /api/permissions/mode:', {
+      get: 'Get permission mode',
+      put: 'Set permission mode',
+    }),
+    ...openApiPath('  /api/memory/files:', { get: 'List memory files' }),
+    ...openApiPath('  /api/memory/file:', {
+      get: 'Read memory file',
+      put: 'Update memory file',
+    }),
+    ...openApiPath('  /api/diagnostics/status:', { get: 'Get diagnostics status' }),
+    ...openApiPath('  /api/diagnostics/events:', { get: 'List diagnostics events' }),
+    ...openApiPath('  /api/diagnostics/export:', { post: 'Export diagnostics bundle' }),
+    ...openApiPath('  /api/filesystem/browse:', { get: 'Browse local filesystem' }),
+    ...openApiPath('  /api/open-targets:', { get: 'List open targets' }),
+    ...openApiPath('  /api/open-targets/open:', { post: 'Open file in a target' }),
+    ...openApiPath('  /api/computer-use/status:', { get: 'Get computer-use status' }),
+    ...openApiPath('  /api/computer-use/setup:', { post: 'Setup computer-use runtime' }),
+    ...openApiPath('  /api/agents:', { get: 'List agents' }),
+    ...openApiPath('  /api/agents/{agent_id}:', {
+      get: 'Get agent detail',
+      post: 'Execute existing agent action',
+    }, ['agent_id']),
+    ...openApiPath('  /api/teams:', { get: 'List teams' }),
+    ...openApiPath('  /api/teams/{team_id}:', { get: 'Get team detail' }, ['team_id']),
+    ...openApiPath('  /api/scheduled-tasks:', {
+      get: 'List scheduled tasks',
+      post: 'Create scheduled task',
+    }),
+    ...openApiPath('  /api/scheduled-tasks/{schedule_id}:', {
+      get: 'Get scheduled task',
+      put: 'Update scheduled task',
+      delete: 'Delete scheduled task',
+    }, ['schedule_id']),
+    ...openApiPath('  /api/scheduled-tasks/{schedule_id}/run:', { post: 'Run scheduled task' }, ['schedule_id']),
+    ...openApiPath('  /api/scheduled-tasks/{schedule_id}/runs:', { get: 'List scheduled task runs' }, ['schedule_id']),
+    ...openApiPath('  /api/scheduled-tasks/runs:', { get: 'List scheduled task runs' }),
+    '',
+  ].join('\n')
+
   await writeFile(
     join(contractsDir, 'openapi.yaml'),
-    [
-      'openapi: 3.1.0',
-      'info:',
-      '  title: Beya SDK API',
-      '  version: 0.1.0',
-      'servers:',
-      '  - url: http://127.0.0.1:3456',
-      'paths:',
-      '  /api/health:',
-      '    get:',
-      '      summary: Beya Server health check',
-      '      responses:',
-      '        "200": { description: OK }',
-      '  /api/readiness:',
-      '    get:',
-      '      summary: Beya Server readiness check',
-      '      responses:',
-      '        "200": { description: Ready }',
-      '  /api/tasks:',
-      '    get:',
-      '      summary: List tasks',
-      '      responses:',
-      '        "200": { description: Task list }',
-      '    post:',
-      '      summary: Submit a task',
-      '      responses:',
-      '        "201": { description: Task handle }',
-      '  /api/tasks/{task_id}/stream:',
-      '    get:',
-      '      summary: Stream task events as SSE',
-      '      parameters:',
-      '        - { name: task_id, in: path, required: true, schema: { type: string } }',
-      '      responses:',
-      '        "200": { description: Event stream }',
-      '  /api/plugins:',
-      '    get:',
-      '      summary: List installed plugins',
-      '      responses:',
-      '        "200": { description: Plugin list }',
-      '    post:',
-      '      summary: Install or register a plugin',
-      '      responses:',
-      '        "200": { description: Plugin detail }',
-      '  /api/models:',
-      '    get:',
-      '      summary: List available models',
-      '      responses:',
-      '        "200": { description: Model list }',
-      '  /api/providers:',
-      '    get:',
-      '      summary: List model providers',
-      '      responses:',
-      '        "200": { description: Provider list }',
-      '  /api/openai/chat/completions:',
-      '    post:',
-      '      summary: OpenAI-shaped SDK helper backed by Beya tasks',
-      '      responses:',
-      '        "200": { description: Chat completion }',
-      '',
-    ].join('\n'),
+    yaml,
     'utf-8',
   )
   const schemas: Record<string, unknown> = {
-    'task-event.schema.json': taskEventSchema(),
+    'run-event.schema.json': runEventSchema(),
+    'session.schema.json': sessionContractSchema(),
+    'message.schema.json': messageContractSchema(),
+    'task-list.schema.json': taskListContractSchema(),
+    'model.schema.json': modelContractSchema(),
     'plugin.schema.json': pluginContractSchema(),
     'tool.schema.json': toolContractSchema(),
     'skill.schema.json': skillContractSchema(),
+    'mcp.schema.json': mcpContractSchema(),
+    'settings.schema.json': settingsContractSchema(),
+    'memory.schema.json': memoryContractSchema(),
     'provider.schema.json': providerContractSchema(),
     'diagnostics.schema.json': diagnosticsContractSchema(),
   }
@@ -273,20 +353,19 @@ async function writeExamples() {
       'from beya import BeyaClient',
       '',
       'client = BeyaClient(base_url="http://127.0.0.1:3456")',
-      'result = client.chat.run("hello")',
+      'result = client.chat.run("hello", work_dir=".")',
       'print(result.result)',
       '',
     ].join('\n'),
     'utf-8',
   )
   await writeFile(
-    join(pythonExamples, 'stream_task.py'),
+    join(pythonExamples, 'stream_chat.py'),
     [
       'from beya import BeyaClient',
       '',
       'client = BeyaClient(base_url="http://127.0.0.1:3456")',
-      'handle = client.tasks.submit("hello")',
-      'for event in client.tasks.stream(handle.task_id):',
+      'for event in client.chat.stream("hello", work_dir="."):',
       '    print(event.type, event.message)',
       '',
     ].join('\n'),
@@ -343,7 +422,19 @@ async function writePackageScripts() {
       '    root / "server" / "healthcheck.py",',
       '    root / "python" / "wheelhouse",',
       '    root / "contracts" / "openapi.yaml",',
+      '    root / "contracts" / "schemas" / "run-event.schema.json",',
+      '    root / "contracts" / "schemas" / "session.schema.json",',
+      '    root / "contracts" / "schemas" / "message.schema.json",',
+      '    root / "contracts" / "schemas" / "task-list.schema.json",',
+      '    root / "contracts" / "schemas" / "model.schema.json",',
       '    root / "contracts" / "schemas" / "plugin.schema.json",',
+      '    root / "contracts" / "schemas" / "tool.schema.json",',
+      '    root / "contracts" / "schemas" / "skill.schema.json",',
+      '    root / "contracts" / "schemas" / "mcp.schema.json",',
+      '    root / "contracts" / "schemas" / "provider.schema.json",',
+      '    root / "contracts" / "schemas" / "settings.schema.json",',
+      '    root / "contracts" / "schemas" / "memory.schema.json",',
+      '    root / "contracts" / "schemas" / "diagnostics.schema.json",',
       ']',
       'missing = [str(path.relative_to(root)) for path in required if not path.exists()]',
       'if missing:',
@@ -356,6 +447,31 @@ async function writePackageScripts() {
       'if bad:',
       '    print("unexpected source files: " + ", ".join(bad[:20]))',
       '    sys.exit(1)',
+      'openapi = (root / "contracts" / "openapi.yaml").read_text(encoding="utf-8")',
+      'required_paths = [',
+      '    "/api/health",',
+      '    "/api/readiness",',
+      '    "/api/sessions",',
+      '    "/api/sessions/{session_id}/ws",',
+      '    "/api/tasks/lists",',
+      '    "/api/providers/catalog",',
+      '    "/api/models/current",',
+      '    "/api/plugins/reload",',
+      '    "/api/skills/{name}",',
+      '    "/api/mcp/{name}/status",',
+      '    "/api/tools/{name}/execute",',
+      '    "/api/settings/user",',
+      '    "/api/memory/file",',
+      '    "/api/diagnostics/export",',
+      ']',
+      'missing_paths = [path for path in required_paths if path not in openapi]',
+      'if missing_paths:',
+      '    print("missing contract paths: " + ", ".join(missing_paths))',
+      '    sys.exit(1)',
+      'for forbidden in ["/api/" + "openai", "/api/" + "stream", "/v" + "1/", "task" + "-event", "Submit a " + "task", "Stream task " + "events"]:',
+      '    if forbidden in openapi:',
+      '        print("forbidden contract content: " + forbidden)',
+      '        sys.exit(1)',
       'print("beya-sdk package verified")',
       '',
     ].join('\n'),
@@ -481,6 +597,109 @@ async function copyIfExists(source: string, target: string) {
   }
 }
 
+function openApiPath(
+  pathLine: string,
+  methods: Record<string, string>,
+  pathParameters: string[] = [],
+  statusOverrides: Record<string, string> = {},
+) {
+  const lines = [pathLine]
+  for (const [method, summary] of Object.entries(methods)) {
+    lines.push(`    ${method}:`)
+    lines.push(`      summary: ${summary}`)
+    if (pathParameters.length > 0) {
+      lines.push('      parameters:')
+      for (const name of pathParameters) {
+        lines.push(`        - { name: ${name}, in: path, required: true, schema: { type: string } }`)
+      }
+    }
+    const status = statusOverrides[method] || (method === 'post' ? '200' : '200')
+    const description = status === '101' ? 'WebSocket upgrade' : 'OK'
+    lines.push('      responses:')
+    lines.push(`        "${status}": { description: ${description} }`)
+  }
+  return lines
+}
+
+function sessionContractSchema() {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'Beya session',
+    type: 'object',
+    required: ['id'],
+    properties: {
+      id: { type: 'string' },
+      session_id: { type: 'string' },
+      title: { type: 'string' },
+      workDir: { type: 'string' },
+      createdAt: { type: 'string' },
+      updatedAt: { type: 'string' },
+      permissionMode: { type: 'string' },
+      repository: { type: 'object', additionalProperties: true },
+    },
+    additionalProperties: true,
+  }
+}
+
+function messageContractSchema() {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'Beya session message',
+    type: 'object',
+    required: ['role'],
+    properties: {
+      id: { type: 'string' },
+      role: { enum: ['user', 'assistant', 'system', 'tool'] },
+      content: {},
+      timestamp: { type: 'string' },
+      parentUuid: { type: 'string' },
+      uuid: { type: 'string' },
+      sessionId: { type: 'string' },
+    },
+    additionalProperties: true,
+  }
+}
+
+function taskListContractSchema() {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'Beya Desktop/CLI task-list item',
+    type: 'object',
+    required: ['id', 'subject', 'status', 'taskListId'],
+    properties: {
+      id: { type: 'string' },
+      subject: { type: 'string' },
+      description: { type: 'string' },
+      status: { enum: ['pending', 'in_progress', 'completed'] },
+      owner: { type: 'string' },
+      activeForm: { type: 'string' },
+      blocks: { type: 'array', items: { type: 'string' } },
+      blockedBy: { type: 'array', items: { type: 'string' } },
+      metadata: { type: 'object', additionalProperties: true },
+      taskListId: { type: 'string' },
+    },
+    additionalProperties: true,
+  }
+}
+
+function modelContractSchema() {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'Beya model',
+    type: 'object',
+    required: ['id'],
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      providerId: { type: 'string' },
+      tier: { type: 'string' },
+      contextWindow: { type: 'integer' },
+      capabilities: { type: 'array', items: { type: 'string' } },
+    },
+    additionalProperties: true,
+  }
+}
+
 function pluginContractSchema() {
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -572,33 +791,84 @@ function skillContractSchema() {
   }
 }
 
-function taskEventSchema() {
+function mcpContractSchema() {
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    title: 'Beya task event',
+    title: 'Beya MCP server',
     type: 'object',
-    required: ['type', 'task_id', 'workflow_id', 'session_id', 'timestamp', 'seq', 'message'],
+    required: ['name'],
+    properties: {
+      name: { type: 'string' },
+      status: { type: 'string' },
+      scope: { type: 'string' },
+      cwd: { type: 'string' },
+      command: { type: 'string' },
+      args: { type: 'array', items: { type: 'string' } },
+      env: { type: 'object', additionalProperties: { type: 'string' } },
+      tools: { type: 'array', items: { type: 'object', additionalProperties: true } },
+      resources: { type: 'array', items: { type: 'object', additionalProperties: true } },
+    },
+    additionalProperties: true,
+  }
+}
+
+function settingsContractSchema() {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'Beya settings',
+    type: 'object',
+    properties: {
+      permissionMode: { type: 'string' },
+      user: { type: 'object', additionalProperties: true },
+      providers: { type: 'object', additionalProperties: true },
+      memory: { type: 'object', additionalProperties: true },
+      diagnostics: { type: 'object', additionalProperties: true },
+    },
+    additionalProperties: true,
+  }
+}
+
+function memoryContractSchema() {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'Beya memory file',
+    type: 'object',
+    required: ['path'],
+    properties: {
+      projectId: { type: 'string' },
+      path: { type: 'string' },
+      content: { type: 'string' },
+      kind: { type: 'string' },
+      scope: { type: 'string' },
+      updatedAt: { type: 'string' },
+    },
+    additionalProperties: true,
+  }
+}
+
+function runEventSchema() {
+  return {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    title: 'Beya chat run event',
+    type: 'object',
+    required: ['type', 'session_id', 'message'],
     properties: {
       type: {
         enum: [
-          'TASK_STARTED',
           'LLM_PARTIAL',
           'AGENT_THINKING',
+          'TOOL_INPUT_PARTIAL',
           'TOOL_INVOKED',
           'TOOL_OBSERVATION',
           'APPROVAL_REQUESTED',
           'WORKFLOW_COMPLETED',
           'WORKFLOW_FAILED',
-          'WORKFLOW_CANCELLED',
-          'done',
+          'STATUS',
         ],
       },
-      task_id: { type: 'string' },
-      workflow_id: { type: 'string' },
       session_id: { type: 'string' },
       timestamp: { type: 'string' },
       seq: { type: 'integer' },
-      stream_id: { type: 'string' },
       message: { type: 'string' },
       payload: { type: 'object' },
       result: { type: 'string' },

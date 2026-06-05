@@ -1,9 +1,9 @@
 # beya-sdk
 
-Python product client for the Beya Gateway API.
+Python product client for the Beya Server API.
 
-The SDK is a pure client. It connects to a running Beya Gateway and wraps
-Gateway capabilities as product resources instead of exposing raw routes as the
+The SDK is a pure client. It connects to a running Beya Server and wraps
+Beya capabilities as product resources instead of exposing raw routes as the
 main interface.
 
 ## Install
@@ -27,7 +27,7 @@ client = BeyaClient(base_url="http://127.0.0.1:3456")
 
 result = client.chat.run(
     "Review the current workspace and summarize risks",
-    skill="code-review",
+    work_dir="F:/Documents/beya",
 )
 
 print(result.result)
@@ -36,16 +36,15 @@ print(result.result)
 ## Streaming
 
 ```python
-handle = client.tasks.submit("Explain this repository")
-
-for event in client.tasks.stream(handle.task_id):
+for event in client.chat.stream("Explain this repository", work_dir="F:/Documents/beya"):
     print(event.type, event.message)
 ```
 
 ## Product Resources
 
 ```python
-client.tasks.submit("Run a design check")
+client.tasks.list()
+client.tasks.lists()
 client.sessions.history("session-id")
 client.providers.catalog()
 client.providers.create({...})
@@ -61,21 +60,40 @@ client.memory.files("project-id")
 client.schedules.list()
 client.diagnostics.export()
 client.local.browse(path="F:/Documents/beya", search="README")
-client.openai.create_chat_completion(
-    [{"role": "user", "content": "hello"}],
-    "beya",
+```
+
+## Plugins
+
+```python
+from beya import BeyaClient, RemoteToolExecutor, define_plugin, define_skill, define_tool
+
+tool = define_tool(
+    name="remote_echo",
+    description="Echo through a remote executor",
+    input_schema={"type": "object", "properties": {"message": {"type": "string"}}},
+    executor=RemoteToolExecutor(url="http://127.0.0.1:8000/internal/tools/execute"),
+    annotations={"readOnlyHint": True},
 )
+
+skill = define_skill(
+    name="echo_skill",
+    description="Use the echo tool",
+    content="Use remote_echo when the user asks for an echo.",
+    allowed_tools=["remote_echo"],
+)
+
+plugin = define_plugin("remote-tools-plugin", tools=[tool], skills=[skill])
+BeyaClient().plugins.install(plugin)
 ```
 
 `client.request(method, path, payload=None)` is available as an escape hatch for
-new Gateway resources, but customer-facing code should prefer the product
+new Beya Server resources, but customer-facing code should prefer the product
 resources above.
 
 ## CLI
 
 ```bash
-beya submit "What changed in this workspace?" --wait
-beya stream <task_id>
+beya chat "What changed in this workspace?" --work-dir F:/Documents/beya --stream
 beya skills-list
 beya skill-use code-review "Review this project"
 beya plugins-list
@@ -87,6 +105,7 @@ beya local-browse --path F:/Documents/beya --search README --include-files
 ## Notes
 
 - Python 3.8+ is supported.
-- The SDK does not start Beya and does not include the Beya runtime.
-- Local and workspace operations are real Beya Gateway operations and keep the
-  Gateway's permission and audit semantics.
+- The SDK does not start Beya Server and does not include the Beya runtime.
+- Chat uses the same session WebSocket protocol as Desktop.
+- Local and workspace operations are real Beya Server operations and keep the
+  server permission and audit semantics.

@@ -179,7 +179,7 @@ function startSpeculativeClassifierCheck(
 ): void {
   if (
     typeof command !== 'string' ||
-    toolUseContext.options.querySource === 'gateway'
+    toolUseContext.options.querySource === 'beya_server'
   ) {
     return
   }
@@ -398,8 +398,8 @@ function getMcpServerBaseUrlFromToolName(
 
 function findDeprecatedAliasTool(toolName: string): Tool | undefined {
   try {
-    // Keep the CLI deprecated-alias fallback out of headless Gateway bundles.
-    // Gateway tools are supplied explicitly through plugins, MCP, or remote
+    // Keep the CLI deprecated-alias fallback out of headless server bundles.
+    // Server tools are supplied explicitly through plugins, MCP, or remote
     // executors, so loading the full TUI tool table here is unnecessary.
     const requireFn = eval('require') as (id: string) => unknown
     const module = requireFn('../../tools.js') as {
@@ -425,7 +425,7 @@ export async function* runToolUse(
   // If not found, check if it's a deprecated tool being called by alias
   // (e.g., old transcripts calling "KillShell" which is now an alias for "TaskStop")
   // Only fall back for tools where the name matches an alias, not the primary name
-  if (!tool && toolUseContext.options.querySource !== 'gateway') {
+  if (!tool && toolUseContext.options.querySource !== 'beya_server') {
     const fallbackTool = findDeprecatedAliasTool(toolName)
     // Only use fallback if the tool was found via alias (deprecated name)
     if (fallbackTool && fallbackTool.aliases?.includes(toolName)) {

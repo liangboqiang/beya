@@ -4,11 +4,12 @@ import json
 import time
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 from . import errors
-from .models import Event, OpenAIChatCompletion, OpenAIChatCompletionChunk, TaskHandle, TaskStatus
+from ._websocket import WebSocketClient, WebSocketProtocolError
+from .models import ChatResult, RunEvent
 
 
 JsonObject = Dict[str, Any]
@@ -52,7 +53,6 @@ class BeyaClient:
         self.diagnostics = DiagnosticsResource(self)
         self.settings = SettingsResource(self)
         self.local = LocalResource(self)
-        self.openai = OpenAIResource(self)
 
     # Public escape hatch. Mainline usage should prefer product resources.
     def request(self, method, path, payload=None, timeout=None, params=None):
@@ -60,30 +60,8 @@ class BeyaClient:
             path = _append_query(path, params)
         return self._request(method, path, payload, timeout=timeout)
 
-    # Backward-compatible convenience methods.
-    def submit_task(self, query, **kwargs):
-        return self.tasks.submit(query, **kwargs)
-
-    def submit_and_stream(self, query, **kwargs):
-        return self.tasks.submit_and_stream(query, **kwargs)
-
-    def get_status(self, task_id, timeout=None):
-        return self.tasks.status(task_id, timeout=timeout)
-
     def list_tasks(self, **kwargs):
         return self.tasks.list(**kwargs)
-
-    def get_task_events(self, task_id, **kwargs):
-        return self.tasks.events(task_id, **kwargs)
-
-    def wait(self, task_id, timeout=None):
-        return self.tasks.wait(task_id, timeout=timeout)
-
-    def cancel(self, task_id, reason=None, timeout=None):
-        return self.tasks.cancel(task_id, reason=reason, timeout=timeout)
-
-    def stream(self, task_id, types=None, last_event_id=None, timeout=None):
-        return self.tasks.stream(task_id, types=types, last_event_id=last_event_id, timeout=timeout)
 
     def list_sessions(self, **kwargs):
         return self.sessions.list(**kwargs)
@@ -163,12 +141,6 @@ class BeyaClient:
     def set_current_model(self, model_id, timeout=None):
         return self.models.set_current(model_id, timeout=timeout)
 
-    def create_chat_completion(self, messages, model, timeout=None, **kwargs):
-        return self.openai.create_chat_completion(messages, model, timeout=timeout, **kwargs)
-
-    def stream_chat_completion(self, messages, model, timeout=None, **kwargs):
-        return self.openai.stream_chat_completion(messages, model, timeout=timeout, **kwargs)
-
     def health(self, timeout=None):
         return self._request("GET", "/api/health", timeout=timeout)
 
@@ -225,150 +197,61 @@ class BeyaClient:
         except URLError as exc:
             raise errors.BeyaServerUnavailableError(str(exc.reason), code="BEYA_SERVER_UNAVAILABLE")
 
-    def _stream_sse(self, path, payload=None, timeout=None):
-        data = json.dumps(payload).encode("utf-8") if payload is not None else None
-        req = Request(
-            "%s%s" % (self.base_url, path),
-            data=data,
-            method="POST" if payload is not None else "GET",
-            headers=self._headers(),
-        )
+    def _open_session_websocket(self, session_id, timeout=None):
+        headers = {}
+        if self.bearer_token:
+            headers["Authorization"] = "Bearer %s" % self.bearer_token
+        elif self.api_key:
+            headers["X-API-Key"] = self.api_key
         try:
-            with self._opener.open(req, timeout=timeout or self.default_timeout) as response:
-                buffer = ""
-                while True:
-                    chunk = response.read(1)
-                    if not chunk:
-                        break
-                    buffer += chunk.decode("utf-8", errors="replace")
-                    while "\n\n" in buffer:
-                        raw, buffer = buffer.split("\n\n", 1)
-                        data_lines = [
-                            line[len("data: "):]
-                            for line in raw.splitlines()
-                            if line.startswith("data: ")
-                        ]
-                        if not data_lines:
-                            continue
-                        data = "\n".join(data_lines)
-                        if data == "[DONE]":
-                            return
-                        yield json.loads(data)
-        except HTTPError as exc:
-            raw = exc.read().decode("utf-8", errors="replace")
-            try:
-                payload = json.loads(raw)
-            except Exception:
-                payload = raw
-            raise errors.error_from_response(exc.code, payload)
-        except URLError as exc:
-            raise errors.BeyaServerUnavailableError(str(exc.reason), code="BEYA_SERVER_UNAVAILABLE")
+            return WebSocketClient(
+                self._session_websocket_url(session_id),
+                headers=headers,
+                timeout=timeout or self.default_timeout,
+            )
+        except WebSocketProtocolError as exc:
+            raise errors.BeyaServerUnavailableError(str(exc), code="WEBSOCKET_UNAVAILABLE")
+
+    def _session_websocket_url(self, session_id):
+        parsed = urlsplit(self.base_url)
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        base_path = parsed.path.rstrip("/")
+        path = "%s/api/sessions/%s/ws" % (base_path, _path(session_id))
+        query = parsed.query
+        token = self.bearer_token or self.api_key
+        if token:
+            extra = urlencode({"token": token})
+            query = "%s&%s" % (query, extra) if query else extra
+        return urlunsplit((scheme, parsed.netloc, path, query, ""))
 
 
 class TasksResource:
     def __init__(self, client):
         self._client = client
 
-    def submit(
-        self,
-        query,
-        session_id=None,
-        context=None,
-        model_tier=None,
-        model_override=None,
-        provider_override=None,
-        mode=None,
-        skill=None,
-        skills=None,
-        plugins=None,
-        agent=None,
-        instructions=None,
-        max_turns=None,
-        permission_mode=None,
-        metadata=None,
-        timeout=None,
-    ):
-        payload = _drop_none({
-            "query": query,
-            "session_id": session_id,
-            "context": context,
-            "model_tier": model_tier,
-            "model_override": model_override,
-            "provider_override": provider_override,
-            "mode": mode,
-            "skill": skill,
-            "skills": skills,
-            "plugins": plugins,
-            "agent": agent,
-            "instructions": instructions,
-            "max_turns": max_turns,
-            "permission_mode": permission_mode,
-            "metadata": metadata,
-        })
-        data = self._client._request("POST", "/api/tasks", payload, timeout=timeout)
-        return TaskHandle(
-            task_id=data["task_id"],
-            workflow_id=data.get("workflow_id") or data["task_id"],
-            session_id=data.get("session_id"),
-            status=data.get("status", "QUEUED"),
-        )._set_client(self._client)
+    def list(self, timeout=None):
+        return self._client._request("GET", "/api/tasks", timeout=timeout)
 
-    def submit_and_stream(self, query, **kwargs):
-        handle = self.submit(query, **kwargs)
-        return handle, "/api/stream/sse?task_id=%s" % handle.task_id
+    def lists(self, timeout=None):
+        return self._client._request("GET", "/api/tasks/lists", timeout=timeout)
 
-    def get(self, task_id, timeout=None):
-        return self.status(task_id, timeout=timeout)
+    def get_list(self, task_list_id, timeout=None):
+        return self._client._request("GET", "/api/tasks/lists/%s" % _path(task_list_id), timeout=timeout)
 
-    def status(self, task_id, timeout=None):
-        data = self._client._request("GET", "/api/tasks/%s" % _path(task_id), timeout=timeout)
-        return _parse_task_status(data)
-
-    def list(self, limit=50, offset=0, status=None, session_id=None, timeout=None):
-        params = _drop_none({
-            "kind": "agent",
-            "limit": limit,
-            "offset": offset,
-            "status": status,
-            "session_id": session_id,
-        })
-        return self._client._request("GET", _append_query("/api/tasks", params), timeout=timeout)
-
-    def events(self, task_id, last_event_id=None, types=None, timeout=None):
-        params = _event_params(last_event_id=last_event_id, types=types)
-        data = self._client._request(
+    def get(self, task_list_id, task_id, timeout=None):
+        return self._client._request(
             "GET",
-            _append_query("/api/tasks/%s/events" % _path(task_id), params),
+            "/api/tasks/lists/%s/%s" % (_path(task_list_id), _path(task_id)),
             timeout=timeout,
         )
-        return [_parse_event(item) for item in data.get("events", [])]
 
-    def timeline(self, task_id, **kwargs):
-        return self.events(task_id, **kwargs)
-
-    def wait(self, task_id, timeout=None):
-        deadline = time.time() + (timeout if timeout is not None else self._client.default_timeout)
-        while time.time() < deadline:
-            status = self.status(task_id)
-            if status.status in ("COMPLETED", "FAILED", "CANCELLED"):
-                return status
-            time.sleep(0.25)
-        raise errors.BeyaError("Timed out waiting for task %s" % task_id, code="TIMEOUT")
-
-    def cancel(self, task_id, reason=None, timeout=None):
-        data = self._client._request(
+    def reset_list(self, task_list_id, timeout=None):
+        return self._client._request(
             "POST",
-            "/api/tasks/%s/cancel" % _path(task_id),
-            _drop_none({"reason": reason}),
+            "/api/tasks/lists/%s/reset" % _path(task_list_id),
+            {},
             timeout=timeout,
         )
-        return bool(data.get("ok"))
-
-    def stream(self, task_id, types=None, last_event_id=None, timeout=None):
-        params = {"task_id": task_id}
-        params.update(_event_params(last_event_id=last_event_id, types=types))
-        for item in self._client._stream_sse(_append_query("/api/stream/sse", params), timeout=timeout):
-            yield _parse_event(item)
 
 
 class ChatResource:
@@ -376,12 +259,92 @@ class ChatResource:
         self._client = client
 
     def run(self, input, **kwargs):
-        handle = self._client.tasks.submit(input, **kwargs)
-        return self._client.tasks.wait(handle.task_id, timeout=kwargs.get("timeout"))
+        events = list(self.stream(input, **kwargs))
+        session_id = str(kwargs.get("session_id") or "")
+        result = ""
+        usage = None
+        error = None
+        for event in events:
+            if event.session_id:
+                session_id = event.session_id
+            if event.type == "WORKFLOW_COMPLETED":
+                result = event.result or event.message
+            if event.type == "WORKFLOW_FAILED":
+                error = event.error or event.message
+            if event.payload and "usage" in event.payload:
+                usage = event.payload.get("usage")
+        return ChatResult(session_id=session_id, result=result, events=events, usage=usage, error=error)
 
-    def stream(self, input, **kwargs):
-        handle = self._client.tasks.submit(input, **kwargs)
-        return self._client.tasks.stream(handle.task_id)
+    def stream(
+        self,
+        input,
+        session_id=None,
+        work_dir=None,
+        permission_mode=None,
+        model=None,
+        model_override=None,
+        provider_id=None,
+        provider_override=None,
+        effort=None,
+        effort_level=None,
+        attachments=None,
+        timeout=None,
+        **_ignored,
+    ):
+        session_id = session_id or self._create_session(
+            work_dir=work_dir,
+            permission_mode=permission_mode,
+            timeout=timeout,
+        )
+        seq = 0
+        accumulated = []
+        try:
+            with self._client._open_session_websocket(session_id, timeout=timeout) as ws:
+                if permission_mode:
+                    ws.send_json({"type": "set_permission_mode", "mode": permission_mode})
+                selected_model = model_override or model
+                if selected_model:
+                    ws.send_json(_drop_none({
+                        "type": "set_runtime_config",
+                        "providerId": provider_override if provider_override is not None else provider_id,
+                        "modelId": selected_model,
+                        "effortLevel": effort_level or effort,
+                    }))
+                ws.send_json(_drop_none({
+                    "type": "user_message",
+                    "content": input,
+                    "attachments": attachments,
+                }))
+                while True:
+                    raw = ws.recv_json()
+                    if raw is None:
+                        break
+                    seq += 1
+                    event = _chat_frame_to_event(raw, session_id, seq, accumulated)
+                    if event is None:
+                        continue
+                    yield event
+                    if event.type in ("WORKFLOW_COMPLETED", "WORKFLOW_FAILED"):
+                        break
+        except WebSocketProtocolError as exc:
+            raise errors.BeyaServerUnavailableError(str(exc), code="WEBSOCKET_UNAVAILABLE")
+
+    def _create_session(self, work_dir=None, permission_mode=None, timeout=None):
+        data = self._client.sessions.create(
+            work_dir=work_dir,
+            permission_mode=permission_mode,
+            timeout=timeout,
+        )
+        session_id = (
+            data.get("session_id")
+            or data.get("sessionId")
+            or data.get("id")
+            if isinstance(data, dict)
+            else None
+        )
+        if not session_id:
+            raise errors.BeyaError("Beya Server did not return a session id", code="SESSION_CREATE_FAILED")
+        return str(session_id)
 
 
 class SessionsResource:
@@ -540,7 +503,7 @@ class SkillsResource:
     def use(self, name, query, **kwargs):
         skills = list(kwargs.pop("skills", []) or [])
         skills.insert(0, name)
-        return self._client.tasks.submit(query, skills=skills, **kwargs)
+        return self._client.chat.run(query, skills=skills, **kwargs)
 
 
 class PluginsResource:
@@ -828,30 +791,6 @@ class LocalResource:
         return self._client._request("POST", "/api/computer-use/setup", {}, timeout=timeout or 300)
 
 
-class OpenAIResource:
-    def __init__(self, client):
-        self._client = client
-
-    def models(self, timeout=None):
-        return self._client._request("GET", "/api/openai/models", timeout=timeout)
-
-    def create_chat_completion(self, messages, model, timeout=None, **kwargs):
-        payload = dict(kwargs)
-        payload.update({"messages": [_serialize_message(m) for m in messages], "model": model})
-        data = self._client._request("POST", "/api/openai/chat/completions", payload, timeout=timeout)
-        return OpenAIChatCompletion(**data)
-
-    def stream_chat_completion(self, messages, model, timeout=None, **kwargs):
-        payload = dict(kwargs)
-        payload.update({
-            "messages": [_serialize_message(m) for m in messages],
-            "model": model,
-            "stream": True,
-        })
-        for item in self._client._stream_sse("/api/openai/chat/completions", payload=payload, timeout=timeout):
-            yield OpenAIChatCompletionChunk(**item)
-
-
 class AsyncBeyaClient:
     def __init__(self, *args, **kwargs):
         self._client = BeyaClient(*args, **kwargs)
@@ -872,22 +811,9 @@ class AsyncBeyaClient:
         self.diagnostics = _AsyncResourceProxy(self._client.diagnostics)
         self.settings = _AsyncResourceProxy(self._client.settings)
         self.local = _AsyncResourceProxy(self._client.local)
-        self.openai = _AsyncResourceProxy(self._client.openai)
 
     async def request(self, *args, **kwargs):
         return await _run_blocking(self._client.request, *args, **kwargs)
-
-    async def submit_task(self, *args, **kwargs):
-        return await _run_blocking(self._client.submit_task, *args, **kwargs)
-
-    async def get_status(self, *args, **kwargs):
-        return await _run_blocking(self._client.get_status, *args, **kwargs)
-
-    async def wait(self, *args, **kwargs):
-        return await _run_blocking(self._client.wait, *args, **kwargs)
-
-    async def cancel(self, *args, **kwargs):
-        return await _run_blocking(self._client.cancel, *args, **kwargs)
 
     async def health(self, *args, **kwargs):
         return await _run_blocking(self._client.health, *args, **kwargs)
@@ -904,11 +830,6 @@ class AsyncBeyaClient:
             return await _run_blocking(attr, *args, **kwargs)
 
         return call
-
-    async def stream(self, *args, **kwargs):
-        events = await _run_blocking(lambda: list(self._client.stream(*args, **kwargs)))
-        for event in events:
-            yield event
 
     async def __aenter__(self):
         return self
@@ -938,46 +859,6 @@ async def _run_blocking(fn, *args, **kwargs):
     return await loop.run_in_executor(None, lambda: fn(*args, **kwargs))
 
 
-def _serialize_message(message):
-    if hasattr(message, "__dict__"):
-        return _drop_none(message.__dict__)
-    return message
-
-
-def _parse_task_status(data):
-    return TaskStatus(
-        task_id=data["task_id"],
-        workflow_id=data.get("workflow_id") or data["task_id"],
-        query=data.get("query", ""),
-        status=data.get("status", "QUEUED"),
-        session_id=data.get("session_id"),
-        created_at=data.get("created_at"),
-        updated_at=data.get("updated_at"),
-        completed_at=data.get("completed_at"),
-        result=data.get("result"),
-        error_message=data.get("error_message"),
-        model_used=data.get("model_used"),
-        provider=data.get("provider"),
-        metadata=data.get("metadata"),
-    )
-
-
-def _parse_event(data):
-    return Event(
-        type=data.get("type", ""),
-        task_id=data.get("task_id", ""),
-        workflow_id=data.get("workflow_id") or data.get("task_id", ""),
-        session_id=data.get("session_id", ""),
-        message=data.get("message", ""),
-        timestamp=data.get("timestamp", ""),
-        seq=int(data.get("seq") or 0),
-        stream_id=data.get("stream_id"),
-        payload=data.get("payload"),
-        result=data.get("result"),
-        error=data.get("error"),
-    )
-
-
 def _path(value):
     return quote(str(value), safe="")
 
@@ -993,16 +874,154 @@ def _append_query(path, params):
     return "%s?%s" % (path, urlencode(cleaned))
 
 
-def _event_params(last_event_id=None, types=None):
-    params = {}
-    if last_event_id:
-        params["last_event_id"] = last_event_id
-    if types:
-        params["types"] = ",".join([str(t.value if hasattr(t, "value") else t) for t in types])
-    return params
-
-
 def _bool_query(value):
     if value is None:
         return None
     return "true" if bool(value) else "false"
+
+
+def _chat_frame_to_event(raw, session_id, seq, accumulated):
+    if not isinstance(raw, dict):
+        return None
+    typ = str(raw.get("type") or "")
+    timestamp = _now_iso()
+
+    if typ in ("connected", "pong", "content_start"):
+        return None
+
+    if typ == "content_delta":
+        text = str(raw.get("text") or "")
+        if text:
+            accumulated.append(text)
+            return RunEvent(
+                type="LLM_PARTIAL",
+                session_id=session_id,
+                message=text,
+                timestamp=timestamp,
+                seq=seq,
+                raw=raw,
+            )
+        tool_input = str(raw.get("toolInput") or "")
+        if tool_input:
+            return RunEvent(
+                type="TOOL_INPUT_PARTIAL",
+                session_id=session_id,
+                message=tool_input,
+                timestamp=timestamp,
+                seq=seq,
+                raw=raw,
+            )
+        return None
+
+    if typ == "thinking":
+        return RunEvent(
+            type="AGENT_THINKING",
+            session_id=session_id,
+            message=str(raw.get("text") or ""),
+            timestamp=timestamp,
+            seq=seq,
+            raw=raw,
+        )
+
+    if typ == "tool_use_complete":
+        payload = {
+            "tool_call_id": raw.get("toolUseId"),
+            "name": raw.get("toolName"),
+            "input": raw.get("input"),
+            "parent_tool_use_id": raw.get("parentToolUseId"),
+        }
+        return RunEvent(
+            type="TOOL_INVOKED",
+            session_id=session_id,
+            message=str(raw.get("toolName") or ""),
+            timestamp=timestamp,
+            seq=seq,
+            payload=payload,
+            raw=raw,
+        )
+
+    if typ == "tool_result":
+        payload = {
+            "tool_call_id": raw.get("toolUseId"),
+            "result": raw.get("content"),
+            "is_error": raw.get("isError") is True,
+            "parent_tool_use_id": raw.get("parentToolUseId"),
+        }
+        return RunEvent(
+            type="TOOL_OBSERVATION",
+            session_id=session_id,
+            message=str(raw.get("toolUseId") or ""),
+            timestamp=timestamp,
+            seq=seq,
+            payload=payload,
+            raw=raw,
+        )
+
+    if typ == "permission_request":
+        payload = {
+            "approval_id": raw.get("requestId"),
+            "tool_call_id": raw.get("toolUseId"),
+            "name": raw.get("toolName"),
+            "input": raw.get("input"),
+            "reason": raw.get("description"),
+        }
+        return RunEvent(
+            type="APPROVAL_REQUESTED",
+            session_id=session_id,
+            message=str(raw.get("description") or raw.get("toolName") or ""),
+            timestamp=timestamp,
+            seq=seq,
+            payload=payload,
+            raw=raw,
+        )
+
+    if typ == "message_complete":
+        result = "".join(accumulated)
+        return RunEvent(
+            type="WORKFLOW_COMPLETED",
+            session_id=session_id,
+            message=result,
+            result=result,
+            timestamp=timestamp,
+            seq=seq,
+            payload={"usage": raw.get("usage")},
+            raw=raw,
+        )
+
+    if typ == "error":
+        message = str(raw.get("message") or "Beya Server chat failed")
+        return RunEvent(
+            type="WORKFLOW_FAILED",
+            session_id=session_id,
+            message=message,
+            error=message,
+            timestamp=timestamp,
+            seq=seq,
+            payload={"code": raw.get("code"), "retryable": raw.get("retryable")},
+            raw=raw,
+        )
+
+    if typ == "status":
+        return RunEvent(
+            type="STATUS",
+            session_id=session_id,
+            message=str(raw.get("verb") or raw.get("state") or ""),
+            timestamp=timestamp,
+            seq=seq,
+            payload={key: value for key, value in raw.items() if key != "type"},
+            raw=raw,
+        )
+
+    return RunEvent(
+        type=typ or "SERVER_EVENT",
+        session_id=session_id,
+        message=str(raw.get("message") or ""),
+        timestamp=timestamp,
+        seq=seq,
+        payload={key: value for key, value in raw.items() if key != "type"},
+        raw=raw,
+    )
+
+
+def _now_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

@@ -268,7 +268,7 @@ export async function executeDesktopSmoke(
 
   let previousPermissionMode: string | null = null
   try {
-    await waitForHttp(`${baseUrl}/health`, 20_000)
+    await waitForHttp(`${baseUrl}/api/health`, 20_000)
     await waitForHttp(appUrl, 30_000)
 
     const permission = await fetchJson<{ mode: string }>(`${baseUrl}/api/permissions/mode`)

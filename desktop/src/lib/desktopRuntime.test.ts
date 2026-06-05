@@ -112,7 +112,7 @@ describe('desktopRuntime browser H5 bootstrap', () => {
 
     expect(clientMocks.setBaseUrl).toHaveBeenLastCalledWith(window.location.origin)
     expect(clientMocks.setAuthToken).toHaveBeenLastCalledWith(null)
-    expect(globalThis.fetch).toHaveBeenCalledWith(`${window.location.origin}/health`, {
+    expect(globalThis.fetch).toHaveBeenCalledWith(`${window.location.origin}/api/health`, {
       cache: 'no-store',
     })
     expect(globalThis.fetch).toHaveBeenCalledWith(`${window.location.origin}/api/status`, {
@@ -130,7 +130,7 @@ describe('desktopRuntime browser H5 bootstrap', () => {
     ) as typeof fetch
 
     const startup = expect(initializeDesktopServerUrl()).rejects.toThrow(
-      `Server healthcheck failed: healthcheck returned non-JSON response from ${window.location.origin}/health`,
+      `Server healthcheck failed: healthcheck returned non-JSON response from ${window.location.origin}/api/health`,
     )
     await vi.runAllTimersAsync()
 
@@ -151,7 +151,7 @@ describe('desktopRuntime browser H5 bootstrap', () => {
 
     expect(clientMocks.setBaseUrl).toHaveBeenLastCalledWith('http://127.0.0.1:55189')
     expect(clientMocks.setAuthToken).toHaveBeenLastCalledWith(null)
-    expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:55189/health', {
+    expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:55189/api/health', {
       cache: 'no-store',
     })
     expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:55189/api/status', {

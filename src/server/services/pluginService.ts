@@ -1,4 +1,5 @@
-import { basename, join, sep } from 'node:path'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { basename, join, resolve, sep } from 'node:path'
 import { getBuiltinPluginDefinition } from '../../plugins/builtinPlugins.js'
 import type { McpServerConfig } from '../../services/mcp/types.js'
 import {
@@ -21,8 +22,14 @@ import {
 } from '../../utils/plugins/marketplaceManager.js'
 import { loadPluginLspServers } from '../../utils/plugins/lspPluginIntegration.js'
 import { loadPluginMcpServers } from '../../utils/plugins/mcpPluginIntegration.js'
-import { parsePluginIdentifier } from '../../utils/plugins/pluginIdentifier.js'
-import { loadAllPlugins } from '../../utils/plugins/pluginLoader.js'
+import {
+  parsePluginIdentifier,
+  scopeToSettingSource,
+} from '../../utils/plugins/pluginIdentifier.js'
+import {
+  loadAllPlugins,
+  loadPluginManifest,
+} from '../../utils/plugins/pluginLoader.js'
 import { loadPluginHooks } from '../../utils/plugins/loadPluginHooks.js'
 import { getPluginSkills } from '../../utils/plugins/loadPluginCommands.js'
 import { clearPluginCacheExclusions } from '../../utils/plugins/orphanedPluginFilter.js'
@@ -33,14 +40,24 @@ import type {
   PluginInstallationEntry,
   PluginScope,
 } from '../../utils/plugins/schemas.js'
+import { getBeyaConfigHomeDir } from '../../utils/envUtils.js'
+import {
+  registerPluginInstallation,
+} from '../../utils/plugins/pluginInstallationHelpers.js'
+import {
+  getSettingsForSource,
+  updateSettingsForSource,
+} from '../../utils/settings/settings.js'
 import { ApiError } from '../middleware/errorHandler.js'
 import { walkPluginMarkdown } from '../../utils/plugins/walkPluginMarkdown.js'
 import type { HookCommand, HooksSettings } from '../../utils/settings/types.js'
+import { loadLoadedPluginTools } from './beyaPluginRuntime.js'
 
 export type ApiPluginCapabilitySet = {
   commands: string[]
   agents: string[]
   skills: string[]
+  tools: string[]
   hooks: string[]
   mcpServers: string[]
   lspServers: string[]
@@ -82,6 +99,11 @@ export type ApiPluginAgentEntry = {
   description: string
 }
 
+export type ApiPluginToolEntry = {
+  name: string
+  description: string
+}
+
 export type ApiPluginHookEntry = {
   event: string
   matcher?: string
@@ -99,6 +121,7 @@ export type ApiPluginDetail = ApiPluginSummary & {
   capabilities: ApiPluginCapabilitySet
   commandEntries: ApiPluginCommandEntry[]
   agentEntries: ApiPluginAgentEntry[]
+  toolEntries: ApiPluginToolEntry[]
   hookEntries: ApiPluginHookEntry[]
   skillEntries: ApiPluginSkillEntry[]
   mcpServerEntries: ApiPluginMcpServerEntry[]
@@ -123,9 +146,108 @@ export type ApiPluginListResponse = {
   }
 }
 
+function resolveLocalPluginPath(pluginPath: string | undefined): string {
+  if (!pluginPath || pluginPath.trim().length === 0) {
+    throw ApiError.badRequest('Missing required "path" for plugin installation')
+  }
+  return resolve(pluginPath)
+}
+
+async function writeInlinePlugin(definition: Record<string, unknown>): Promise<string> {
+  const name = safePluginName(stringField(definition.name) ?? 'sdk-plugin')
+  const root = join(getBeyaConfigHomeDir(), 'sdk-plugins', name)
+  await rm(root, { recursive: true, force: true })
+  await mkdir(join(root, '.beya-plugin'), { recursive: true })
+
+  const skills = Array.isArray(definition.skills) ? definition.skills : []
+  const tools = Array.isArray(definition.tools) ? definition.tools : []
+  const resources = Array.isArray(definition.resources) ? definition.resources : []
+
+  await writeFile(
+    join(root, '.beya-plugin', 'plugin.json'),
+    `${JSON.stringify({
+      name,
+      description: stringField(definition.description) ?? '',
+      version: stringField(definition.version) ?? '0.1.0',
+      ...(skills.length ? { skills: './skills' } : {}),
+      ...(tools.length ? { tools: './tools' } : {}),
+      ...(resources.length ? { resources: './resources' } : {}),
+      ...(isRecord(definition.mcpServers) ? { mcpServers: definition.mcpServers } : {}),
+    }, null, 2)}\n`,
+    'utf-8',
+  )
+
+  if (skills.length) {
+    const skillsRoot = join(root, 'skills')
+    await mkdir(skillsRoot, { recursive: true })
+    for (const item of skills) {
+      if (!isRecord(item)) continue
+      const skillName = safePluginName(stringField(item.name) ?? 'skill')
+      const skillDir = join(skillsRoot, skillName)
+      await mkdir(skillDir, { recursive: true })
+      await writeFile(
+        join(skillDir, 'SKILL.md'),
+        `${stringField(item.content) ?? stringField(item.description) ?? skillName}\n`,
+        'utf-8',
+      )
+    }
+  }
+
+  if (tools.length) {
+    const toolsRoot = join(root, 'tools')
+    await mkdir(toolsRoot, { recursive: true })
+    for (const item of tools) {
+      if (!isRecord(item)) continue
+      const toolName = safePluginName(stringField(item.name) ?? 'tool')
+      const toolDir = join(toolsRoot, toolName)
+      await mkdir(toolDir, { recursive: true })
+      await writeFile(
+        join(toolDir, 'tool.json'),
+        `${JSON.stringify(item, null, 2)}\n`,
+        'utf-8',
+      )
+    }
+  }
+
+  if (resources.length) {
+    const resourcesRoot = join(root, 'resources')
+    await mkdir(resourcesRoot, { recursive: true })
+    let index = 0
+    for (const resource of resources) {
+      index += 1
+      await writeFile(
+        join(resourcesRoot, `resource-${String(index).padStart(3, '0')}.md`),
+        `${String(resource).trim()}\n`,
+        'utf-8',
+      )
+    }
+  }
+
+  return root
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : undefined
+}
+
+function safePluginName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_.-]/g, '-').replace(/^-+|-+$/g, '') || 'sdk-plugin'
+}
+
 export type ApiPluginActionResponse = {
   ok: true
   message: string
+}
+
+export type ApiPluginInstallResponse = ApiPluginActionResponse & {
+  pluginId: string
+  installPath: string
 }
 
 export type ApiPluginReloadResponse = {
@@ -175,6 +297,51 @@ export class PluginService {
     }
 
     return detail
+  }
+
+  async installLocalPlugin(input: {
+    path?: string
+    inline?: Record<string, unknown>
+    scope?: Exclude<PluginScope, 'managed'>
+  }): Promise<ApiPluginInstallResponse> {
+    const scope = input.scope ?? 'user'
+    const installPath = input.inline
+      ? await writeInlinePlugin(input.inline)
+      : resolveLocalPluginPath(input.path)
+    const manifest = await loadPluginManifest(
+      join(installPath, '.beya-plugin', 'plugin.json'),
+      `sdk:${installPath}`,
+      installPath,
+    )
+    const pluginId = `${manifest.name}@local`
+    registerPluginInstallation(
+      {
+        pluginId,
+        installPath,
+        version: manifest.version ?? 'unknown',
+      },
+      scope,
+      undefined,
+    )
+    const settingSource = scopeToSettingSource(scope)
+    const settings = getSettingsForSource(settingSource)
+    const result = updateSettingsForSource(settingSource, {
+      ...settings,
+      enabledPlugins: {
+        ...settings?.enabledPlugins,
+        [pluginId]: true,
+      },
+    })
+    if (result.error) {
+      throw ApiError.badRequest(result.error.message)
+    }
+    clearAllCaches()
+    return {
+      ok: true,
+      pluginId,
+      installPath,
+      message: `Installed plugin ${pluginId}`,
+    }
   }
 
   async enablePlugin(
@@ -282,8 +449,12 @@ export class PluginService {
       Promise.resolve(loadInstalledPluginsV2()),
       loadKnownMarketplacesConfig(),
     ])
+    const pluginErrors = pluginState.errors
 
-    const allLoaded = [...pluginState.enabled, ...pluginState.disabled]
+    const allLoaded = [
+      ...pluginState.enabled,
+      ...pluginState.disabled,
+    ]
     const loadedById = new Map(
       allLoaded
         .filter((plugin) => !plugin.source.endsWith('@inline'))
@@ -309,7 +480,7 @@ export class PluginService {
         pluginId,
         installation,
         loaded,
-        pluginState.errors,
+        pluginErrors,
       )
       detailById.set(pluginId, detail)
     }
@@ -367,6 +538,7 @@ export class PluginService {
         capabilities: this.emptyCapabilities(),
         commandEntries: [],
         agentEntries: [],
+        toolEntries: [],
         hookEntries: [],
         skillEntries: [],
         mcpServerEntries: [],
@@ -377,6 +549,7 @@ export class PluginService {
       capabilities,
       commandEntries,
       agentEntries,
+      toolEntries,
       hookEntries,
       skillEntries,
       mcpServerEntries,
@@ -399,6 +572,7 @@ export class PluginService {
       capabilities,
       commandEntries,
       agentEntries,
+      toolEntries,
       hookEntries,
       skillEntries,
       mcpServerEntries,
@@ -411,6 +585,7 @@ export class PluginService {
     capabilities: ApiPluginCapabilitySet
     commandEntries: ApiPluginCommandEntry[]
     agentEntries: ApiPluginAgentEntry[]
+    toolEntries: ApiPluginToolEntry[]
     hookEntries: ApiPluginHookEntry[]
     skillEntries: ApiPluginSkillEntry[]
     mcpServerEntries: ApiPluginMcpServerEntry[]
@@ -433,12 +608,14 @@ export class PluginService {
           commands: [],
           agents: [],
           skills: skillEntries.map((skill) => skill.name),
+          tools: [],
           hooks: definition?.hooks ? Object.keys(definition.hooks) : [],
           mcpServers: mcpServerEntries.map((server) => server.name),
           lspServers: [],
         },
         commandEntries: [],
         agentEntries: [],
+        toolEntries: [],
         hookEntries: this.collectHookEntries(definition?.hooks),
         skillEntries,
         mcpServerEntries,
@@ -447,6 +624,7 @@ export class PluginService {
 
     const commandEntries = await this.collectCommandEntries(plugin)
     const agentEntries = await this.collectAgentEntries(plugin)
+    const toolEntries = await this.collectToolEntries(plugin)
     const hookEntries = this.collectHookEntries(plugin.hooksConfig)
     const skillEntries = await this.collectSkillEntries([
       plugin.skillsPath,
@@ -459,16 +637,28 @@ export class PluginService {
         commands: commandEntries.map((command) => command.name),
         agents: agentEntries.map((agent) => agent.name),
         skills: skillEntries.map((skill) => skill.name),
+        tools: toolEntries.map((tool) => tool.name),
         hooks: [...new Set(hookEntries.map((hook) => hook.event))],
         mcpServers: mcpServerEntries.map((server) => server.name),
         lspServers: plugin.lspServers ? Object.keys(plugin.lspServers) : [],
       },
       commandEntries,
       agentEntries,
+      toolEntries,
       hookEntries,
       skillEntries,
       mcpServerEntries,
     }
+  }
+
+  private async collectToolEntries(
+    plugin: LoadedPlugin,
+  ): Promise<ApiPluginToolEntry[]> {
+    const tools = await loadLoadedPluginTools(plugin)
+    return tools.map(tool => ({
+      name: tool.name,
+      description: tool.description,
+    }))
   }
 
   private async collectCommandEntries(
@@ -722,12 +912,18 @@ export class PluginService {
     errors: PluginError[],
   ): string[] {
     return errors
-      .filter((error) => {
-        if (error.source === pluginId) return true
-        if ('plugin' in error && error.plugin === pluginName) return true
-        return error.source.startsWith(`${pluginName}@`)
-      })
+      .filter((error) => this.pluginErrorMatches(error, pluginId, pluginName))
       .map(getPluginErrorMessage)
+  }
+
+  private pluginErrorMatches(
+    error: PluginError,
+    pluginId: string,
+    pluginName = parsePluginIdentifier(pluginId).name,
+  ): boolean {
+    if (error.source === pluginId) return true
+    if ('plugin' in error && error.plugin === pluginName) return true
+    return error.source.startsWith(`${pluginName}@`)
   }
 
   private pickInstallation(
@@ -763,6 +959,7 @@ export class PluginService {
       commands: [],
       agents: [],
       skills: [],
+      tools: [],
       hooks: [],
       mcpServers: [],
       lspServers: [],
@@ -776,6 +973,7 @@ export class PluginService {
       commands: capabilities.commands.length,
       agents: capabilities.agents.length,
       skills: capabilities.skills.length,
+      tools: capabilities.tools.length,
       hooks: capabilities.hooks.length,
       mcpServers: capabilities.mcpServers.length,
       lspServers: capabilities.lspServers.length,

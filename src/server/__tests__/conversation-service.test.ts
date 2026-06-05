@@ -8,6 +8,10 @@ import {
 } from '../services/conversationService.js'
 import { ProviderService } from '../services/providerService.js'
 import { resetTerminalShellEnvironmentCacheForTests } from '../../utils/terminalShellEnvironment.js'
+import {
+  ensureEmbeddedCliMacroFallback,
+  extractEmbeddedCliArgs,
+} from '../embeddedCli.js'
 
 describe('ConversationService', () => {
   let tmpDir: string
@@ -423,6 +427,44 @@ describe('ConversationService', () => {
       expect(args[3]).toContain(path.join('src', 'entrypoints', 'cli.tsx'))
     } else {
       expect(args[0]).toContain(path.join('bin', 'beya'))
+    }
+  })
+
+  test('detects embedded CLI args before starting the server executable', () => {
+    const args = extractEmbeddedCliArgs([
+      'beya-server.exe',
+      '--preload',
+      'B:\\~BUN\\root\\preload.ts',
+      'B:\\~BUN\\root\\src\\entrypoints\\cli.tsx',
+      '--print',
+      '--sdk-url',
+      'ws://127.0.0.1:3456/sdk/session?token=test',
+    ])
+
+    expect(args).toEqual([
+      '--print',
+      '--sdk-url',
+      'ws://127.0.0.1:3456/sdk/session?token=test',
+    ])
+    expect(extractEmbeddedCliArgs(['beya-server.exe', '--port', '3456'])).toBeNull()
+  })
+
+  test('installs embedded CLI macro fallback before importing CLI runtime', () => {
+    const globalWithMacro = globalThis as typeof globalThis & { MACRO?: { VERSION?: string } }
+    const previousMacro = globalWithMacro.MACRO
+    const previousVersion = process.env.BEYA_VERSION
+    try {
+      delete globalWithMacro.MACRO
+      process.env.BEYA_VERSION = '9.9.9-test'
+
+      ensureEmbeddedCliMacroFallback()
+
+      expect(globalWithMacro.MACRO?.VERSION).toBe('9.9.9-test')
+    } finally {
+      if (previousMacro === undefined) delete globalWithMacro.MACRO
+      else globalWithMacro.MACRO = previousMacro
+      if (previousVersion === undefined) delete process.env.BEYA_VERSION
+      else process.env.BEYA_VERSION = previousVersion
     }
   })
 

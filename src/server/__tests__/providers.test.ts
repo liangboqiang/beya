@@ -1258,7 +1258,8 @@ describe('Providers API', () => {
     const body = (await res.json()) as { providers: { displayName: string; apiKey: string }[] }
     expect(body.providers).toHaveLength(1)
     expect(body.providers[0].displayName).toBe('Test Provider')
-    expect(body.providers[0].apiKey).toBe('sk-test-key-123')
+    expect(body.providers[0].apiKey).toBe('***REDACTED***')
+    expect(JSON.stringify(body)).not.toContain('sk-test-key-123')
   })
 
   // ─── POST /api/providers ─────────────────────────────────────────────────

@@ -64,6 +64,33 @@ function Wait-Http([string]$Url, [string]$LogFile, [scriptblock]$IsAlive) {
   throw "Timed out waiting for $Url. Recent log:`n$(Get-Content -Raw -LiteralPath $LogFile -ErrorAction SilentlyContinue)"
 }
 
+function Stop-ProcessTree([int]$ProcessId) {
+  $children = Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue
+  foreach ($child in $children) {
+    Stop-ProcessTree -ProcessId ([int]$child.ProcessId)
+  }
+
+  $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+  if ($process) {
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Stop-ListenerOnPort([int]$Port, [string]$ExpectedRoot) {
+  $connections = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
+  foreach ($connection in $connections) {
+    $ownerPid = [int]$connection.OwningProcess
+    $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $ownerPid" -ErrorAction SilentlyContinue
+    $commandLine = ""
+    if ($owner -and $owner.CommandLine) {
+      $commandLine = [string]$owner.CommandLine
+    }
+    if ($commandLine.Contains($ExpectedRoot) -or $commandLine.Contains("src/server/index.ts") -or $commandLine.Contains("vite")) {
+      Stop-ProcessTree -ProcessId $ownerPid
+    }
+  }
+}
+
 function Quote-PowerShell([string]$Value) {
   return "'" + $Value.Replace("'", "''") + "'"
 }
@@ -111,7 +138,7 @@ $serverCommand = @(
 $server = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $serverCommand) -RedirectStandardOutput $serverLog -RedirectStandardError $serverErr -WindowStyle Hidden -PassThru
 
 try {
-  Wait-Http "$serverUrl/health" $serverLog { -not $server.HasExited }
+  Wait-Http "$serverUrl/api/health" $serverLog { -not $server.HasExited }
 
   Write-Host "Starting Web UI: http://${HostAddress}:$webPortResolved"
   $webCommand = @(
@@ -148,10 +175,12 @@ try {
 
   throw "Web UI process exited with code $($web.ExitCode). Recent log:`n$(Get-Content -Raw -LiteralPath $webLog -ErrorAction SilentlyContinue)"
 } finally {
-  if ($web -and -not $web.HasExited) {
-    Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
+  if ($web) {
+    Stop-ProcessTree -ProcessId $web.Id
   }
-  if ($server -and -not $server.HasExited) {
-    Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+  if ($server) {
+    Stop-ProcessTree -ProcessId $server.Id
   }
+  Stop-ListenerOnPort -Port $webPortResolved -ExpectedRoot $rootDir
+  Stop-ListenerOnPort -Port $serverPortResolved -ExpectedRoot $rootDir
 }

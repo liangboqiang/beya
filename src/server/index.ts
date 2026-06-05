@@ -25,7 +25,8 @@ import { ensurePersistentStorageUpgraded } from './services/persistentStorageMig
 import { handleStaticH5Request } from './staticH5.js'
 import { classifyH5Request, shouldBlockDisabledH5Access, shouldRequireH5Token } from './h5AccessPolicy.js'
 import { H5AccessService } from './services/h5AccessService.js'
-import { handleGatewayRequest } from '../gateway/handler.js'
+import { handleApiRequest } from './router.js'
+import { runEmbeddedCliIfRequested } from './embeddedCli.js'
 
 function readArgValue(flag: string): string | undefined {
   const args = process.argv.slice(2)
@@ -123,6 +124,15 @@ function originFromUrl(value: string | null): string | null {
   }
 }
 
+function sessionWebSocketIdFromPath(pathname: string): string | null {
+  if (pathname.startsWith('/ws/')) {
+    return pathname.split('/').pop() || ''
+  }
+
+  const match = pathname.match(/^\/api\/sessions\/([^/]+)\/ws$/)
+  return match ? decodeURIComponent(match[1] || '') : null
+}
+
 export function startServer(port = PORT, host = HOST) {
   enableConfigs()
   diagnosticsService.installConsoleCapture()
@@ -195,8 +205,10 @@ export function startServer(port = PORT, host = HOST) {
           return new Response(null, { status: 204, headers: cors.headers })
         }
 
-        // WebSocket upgrade
-        if (url.pathname.startsWith('/ws/')) {
+        // Session WebSocket upgrade. /api/sessions/:id/ws is the canonical
+        // public path; /ws/:id remains an internal compatibility alias.
+        const sessionWebSocketId = sessionWebSocketIdFromPath(url.pathname)
+        if (sessionWebSocketId !== null) {
           if (cors.rejected) {
             return corsRejectedResponse(cors)
           }
@@ -215,7 +227,7 @@ export function startServer(port = PORT, host = HOST) {
           }
 
           // Validate session ID format
-          const sessionId = url.pathname.split('/').pop() || ''
+          const sessionId = sessionWebSocketId
           if (!sessionId || !/^[0-9a-zA-Z_-]{1,64}$/.test(sessionId)) {
             return new Response('Invalid session ID', { status: 400 })
           }
@@ -233,7 +245,7 @@ export function startServer(port = PORT, host = HOST) {
           return new Response('WebSocket upgrade failed', { status: 400 })
         }
 
-        // Internal SDK WebSocket used by the spawned Beya CLI.
+        // Internal SDK WebSocket used by the spawned agent runtime process.
         if (url.pathname.startsWith('/sdk/')) {
           if (classifyH5Request(req, url, h5RequestContext) !== 'internal-sdk') {
             return h5AccessControlRejectedResponse()
@@ -328,13 +340,11 @@ export function startServer(port = PORT, host = HOST) {
           return withCors(response, cors)
         }
 
-        // Unified Beya Gateway API. Desktop, SDKs, CLI and OpenAI-compatible
-        // clients converge on this protocol.
+        // Unified Beya Server API. Desktop, SDKs, CLI and external clients
+        // converge on this canonical /api/* protocol.
         if (
-          url.pathname.startsWith('/api/') ||
-          url.pathname.startsWith('/v1/') ||
-          url.pathname === '/health' ||
-          url.pathname === '/readiness'
+          url.pathname === '/api' ||
+          url.pathname.startsWith('/api/')
         ) {
           if (cors.rejected) {
             return corsRejectedResponse(cors)
@@ -353,18 +363,18 @@ export function startServer(port = PORT, host = HOST) {
           }
 
           try {
-            const response = await handleGatewayRequest(req, url)
+            const response = await handleApiRequest(req, url)
             return withCors(response, cors)
           } catch (error) {
             void diagnosticsService.recordEvent({
-              type: 'gateway_request_failed',
+              type: 'server_api_request_failed',
               severity: 'error',
               summary: error instanceof Error ? error.message : String(error),
               details: { path: url.pathname, method: req.method, error },
             })
-            console.error('[Server] Gateway error:', error)
+            console.error('[Server] API error:', error)
             return withCors(Response.json(
-              { error: 'Internal gateway error' },
+              { error: 'Internal server API error' },
               { status: 500 },
             ), cors)
           }
@@ -405,18 +415,6 @@ export function startServer(port = PORT, host = HOST) {
           }
         }
 
-        // Health check
-        if (url.pathname === '/health') {
-          if (cors.rejected) {
-            return corsRejectedResponse(cors)
-          }
-
-          return Response.json(
-            { status: 'ok', timestamp: new Date().toISOString() },
-            { headers: cors.headers },
-          )
-        }
-
         // Static H5 shell/assets are non-secret bootstrap content and must load
         // before the browser can read the QR token; API/proxy/ws stay protected above.
         const staticResponse = await handleStaticH5Request(req, url)
@@ -453,14 +451,14 @@ export function startServer(port = PORT, host = HOST) {
   return server
 }
 
-// ─── Graceful shutdown: kill all CLI subprocesses on exit ────────────────────
+// ─── Graceful shutdown: kill all agent runtime processes on exit ─────────────
 
 let shutdownInProgress: Promise<void> | null = null
 
 function cleanupAllSessions() {
   const active = conversationService.getActiveSessions()
   if (active.length > 0) {
-    console.log(`[Server] Shutting down — killing ${active.length} CLI subprocess(es)`)
+    console.log(`[Server] Shutting down — killing ${active.length} agent runtime process(es)`)
     conversationService.stopAllSessions()
   }
 }
@@ -468,7 +466,7 @@ function cleanupAllSessions() {
 async function cleanupAllSessionsAndWait() {
   const active = conversationService.getActiveSessions()
   if (active.length > 0) {
-    console.log(`[Server] Shutting down — killing ${active.length} CLI subprocess(es)`)
+    console.log(`[Server] Shutting down — killing ${active.length} agent runtime process(es)`)
     await conversationService.stopAllSessionsAndWait()
   }
 }
@@ -503,5 +501,13 @@ process.on('exit', () => {
 
 // Direct execution
 if (import.meta.main) {
-  startServer()
+  void (async () => {
+    if (await runEmbeddedCliIfRequested()) {
+      return
+    }
+    startServer()
+  })().catch((error) => {
+    console.error('[Server] Uncaught exception:', error)
+    process.exit(1)
+  })
 }

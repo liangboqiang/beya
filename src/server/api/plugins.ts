@@ -31,6 +31,19 @@ export async function handlePluginsApi(
       return Response.json(await pluginService.listPlugins(cwd))
     }
 
+    if (method === 'POST' && !sub) {
+      const body = await parseJsonBody(req)
+      const scope = coerceInstallScope(body.scope)
+      const inline = body.type === 'inline' && body.definition && typeof body.definition === 'object'
+        ? body.definition as Record<string, unknown>
+        : undefined
+      return Response.json(await pluginService.installLocalPlugin({
+        path: asString(body.path),
+        inline,
+        scope,
+      }))
+    }
+
     if (method === 'GET' && sub === 'detail') {
       const pluginId = url.searchParams.get('id')
       if (!pluginId) {
@@ -38,6 +51,12 @@ export async function handlePluginsApi(
       }
       return Response.json({
         detail: await pluginService.getPluginDetail(pluginId, cwd),
+      })
+    }
+
+    if (method === 'GET' && sub) {
+      return Response.json({
+        detail: await pluginService.getPluginDetail(decodeURIComponent(sub), cwd),
       })
     }
 
@@ -170,5 +189,19 @@ function coerceScope(value: unknown):
   }
   throw ApiError.badRequest(
     'Invalid "scope". Expected one of: user, project, local, managed',
+  )
+}
+
+function coerceInstallScope(value: unknown):
+  | 'user'
+  | 'project'
+  | 'local'
+  | undefined {
+  if (value == null) return undefined
+  if (value === 'user' || value === 'project' || value === 'local') {
+    return value
+  }
+  throw ApiError.badRequest(
+    'Invalid "scope". Expected one of: user, project, local',
   )
 }

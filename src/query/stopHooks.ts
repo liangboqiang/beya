@@ -212,7 +212,7 @@ export async function* handleStopHooks(
   if (!isBareMode()) {
     // Inline env check for dead code elimination in external builds
     if (
-      querySource !== 'gateway' &&
+      querySource !== 'beya_server' &&
       !isEnvDefinedFalsy(process.env.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION)
     ) {
       void executePromptSuggestion(stopHookContext)
@@ -230,7 +230,7 @@ export async function* handleStopHooks(
         toolUseContext.appendSystemMessage,
       )
     }
-    if (!toolUseContext.agentId && querySource !== 'gateway') {
+    if (!toolUseContext.agentId && querySource !== 'beya_server') {
       void executeAutoDream(stopHookContext, toolUseContext.appendSystemMessage)
     }
   }

@@ -1,22 +1,23 @@
 import { basename, resolve } from 'path'
-import { createSkillCommand } from '../skills/loadSkillsDir.js'
-import type { Command } from '../types/command.js'
-import type { LoadedPlugin } from '../types/plugin.js'
+import { readdir, readFile, stat } from 'fs/promises'
+import { createSkillCommand } from '../../skills/loadSkillsDir.js'
+import type { Command } from '../../types/command.js'
+import type { LoadedPlugin, PluginError } from '../../types/plugin.js'
 import {
   McpServerConfigSchema,
   type ScopedMcpServerConfig,
-} from '../services/mcp/types.js'
-import { loadPluginMcpServers } from '../utils/plugins/mcpPluginIntegration.js'
-import { createPluginFromPath } from '../utils/plugins/pluginLoader.js'
-import { loadSkillsFromDirectory } from '../utils/plugins/loadPluginCommands.js'
+} from '../../services/mcp/types.js'
+import { loadPluginMcpServers } from '../../utils/plugins/mcpPluginIntegration.js'
+import { createPluginFromPath, loadAllPlugins } from '../../utils/plugins/pluginLoader.js'
+import { loadSkillsFromDirectory } from '../../utils/plugins/loadPluginCommands.js'
 import type {
   PluginDefinition,
   PluginRef,
   SkillDefinition,
   ToolDefinition,
-} from './types.js'
+} from '../types/serverRuntime.js'
 
-export type LoadedGatewayPlugin = {
+export type LoadedBeyaPlugin = {
   name: string
   path: string
   tools: ToolDefinition[]
@@ -26,15 +27,38 @@ export type LoadedGatewayPlugin = {
   errors: unknown[]
 }
 
-export async function loadGatewayPlugins(
+export async function loadBeyaPlugins(
   plugins: PluginRef[] = [],
-): Promise<LoadedGatewayPlugin[]> {
-  return Promise.all(plugins.map(loadGatewayPlugin))
+): Promise<LoadedBeyaPlugin[]> {
+  return Promise.all(plugins.map(loadBeyaPlugin))
 }
 
-const registeredGatewayPlugins = new Map<string, PluginRef>()
+export async function loadInstalledBeyaPlugins(): Promise<LoadedBeyaPlugin[]> {
+  const { enabled, errors } = await loadAllPlugins()
+  return Promise.all(
+    enabled.map(plugin => loadedPluginToBeyaPlugin(
+      plugin,
+      filterPluginErrors(errors, plugin),
+    )),
+  )
+}
 
-export async function listRegisteredGatewayPlugins(): Promise<{
+function filterPluginErrors(
+  errors: PluginError[],
+  plugin: LoadedPlugin,
+): PluginError[] {
+  return errors.filter(error => pluginErrorMatches(error, plugin))
+}
+
+function pluginErrorMatches(error: PluginError, plugin: LoadedPlugin): boolean {
+  if (error.source === plugin.source) return true
+  if ('plugin' in error && error.plugin === plugin.name) return true
+  return error.source.startsWith(`${plugin.name}@`)
+}
+
+const registeredBeyaPlugins = new Map<string, PluginRef>()
+
+export async function listRegisteredBeyaPlugins(): Promise<{
   plugins: Array<{
     id: string
     name: string
@@ -46,51 +70,51 @@ export async function listRegisteredGatewayPlugins(): Promise<{
   }>
 }> {
   const plugins = await Promise.all(
-    Array.from(registeredGatewayPlugins.entries()).map(
-      async ([id, ref]) => summarizeRegisteredGatewayPlugin(id, ref),
+    Array.from(registeredBeyaPlugins.entries()).map(
+      async ([id, ref]) => summarizeRegisteredBeyaPlugin(id, ref),
     ),
   )
   return { plugins }
 }
 
-export async function getRegisteredGatewayPlugin(id: string): Promise<{
-  plugin: Awaited<ReturnType<typeof summarizeRegisteredGatewayPlugin>>
+export async function getRegisteredBeyaPlugin(id: string): Promise<{
+  plugin: Awaited<ReturnType<typeof summarizeRegisteredBeyaPlugin>>
 }> {
-  const ref = registeredGatewayPlugins.get(id)
+  const ref = registeredBeyaPlugins.get(id)
   if (!ref) throw new Error(`Plugin not found: ${id}`)
-  return { plugin: await summarizeRegisteredGatewayPlugin(id, ref) }
+  return { plugin: await summarizeRegisteredBeyaPlugin(id, ref) }
 }
 
-export async function registerGatewayPlugin(
+export async function registerBeyaPlugin(
   ref: PluginRef,
   id = defaultPluginId(ref),
 ): Promise<{
-  plugin: Awaited<ReturnType<typeof summarizeRegisteredGatewayPlugin>>
+  plugin: Awaited<ReturnType<typeof summarizeRegisteredBeyaPlugin>>
 }> {
-  const loaded = await loadGatewayPlugins([ref])
+  const loaded = await loadBeyaPlugins([ref])
   const errors = loaded.flatMap(plugin => plugin.errors)
   if (errors.length > 0) {
     throw new Error(
-      `Failed to load Gateway plugin ${id}: ${errors.map(String).join('; ')}`,
+      `Failed to load Beya plugin ${id}: ${errors.map(String).join('; ')}`,
     )
   }
-  registeredGatewayPlugins.set(id, ref)
-  return { plugin: await summarizeRegisteredGatewayPlugin(id, ref) }
+  registeredBeyaPlugins.set(id, ref)
+  return { plugin: await summarizeRegisteredBeyaPlugin(id, ref) }
 }
 
-export function unregisterGatewayPlugin(id: string): boolean {
-  return registeredGatewayPlugins.delete(id)
+export function unregisterBeyaPlugin(id: string): boolean {
+  return registeredBeyaPlugins.delete(id)
 }
 
-export async function reloadRegisteredGatewayPlugins(): Promise<{
-  plugins: Awaited<ReturnType<typeof listRegisteredGatewayPlugins>>['plugins']
+export async function reloadRegisteredBeyaPlugins(): Promise<{
+  plugins: Awaited<ReturnType<typeof listRegisteredBeyaPlugins>>['plugins']
   reloaded: true
 }> {
-  const { plugins } = await listRegisteredGatewayPlugins()
+  const { plugins } = await listRegisteredBeyaPlugins()
   return { plugins, reloaded: true }
 }
 
-export async function listRegisteredGatewaySkills(): Promise<{
+export async function listRegisteredBeyaSkills(): Promise<{
   skills: Array<{
     name: string
     description: string
@@ -100,7 +124,7 @@ export async function listRegisteredGatewaySkills(): Promise<{
   }>
 }> {
   const loaded = await Promise.all(
-    Array.from(registeredGatewayPlugins.values()).map(ref => loadGatewayPlugins([ref])),
+    Array.from(registeredBeyaPlugins.values()).map(ref => loadBeyaPlugins([ref])),
   )
   return {
     skills: loaded
@@ -118,10 +142,10 @@ export async function listRegisteredGatewaySkills(): Promise<{
   }
 }
 
-export async function getRegisteredGatewaySkill(name: string): Promise<{
-  skill: Awaited<ReturnType<typeof listRegisteredGatewaySkills>>['skills'][number]
+export async function getRegisteredBeyaSkill(name: string): Promise<{
+  skill: Awaited<ReturnType<typeof listRegisteredBeyaSkills>>['skills'][number]
 }> {
-  const { skills } = await listRegisteredGatewaySkills()
+  const { skills } = await listRegisteredBeyaSkills()
   const skill = skills.find(candidate => candidate.name === name)
   if (!skill) throw new Error(`Skill not found: ${name}`)
   return { skill }
@@ -129,7 +153,7 @@ export async function getRegisteredGatewaySkill(name: string): Promise<{
 
 export function inlineSkillToCommand(
   skill: SkillDefinition,
-  pluginName = 'gateway',
+  pluginName = 'beya-server',
 ): Command {
   const skillName = skill.name.includes(':')
     ? skill.name
@@ -161,7 +185,7 @@ export function inlineSkillToCommand(
   })
 }
 
-async function loadGatewayPlugin(plugin: PluginRef): Promise<LoadedGatewayPlugin> {
+async function loadBeyaPlugin(plugin: PluginRef): Promise<LoadedBeyaPlugin> {
   if (typeof plugin === 'object' && plugin.type === 'inline') {
     const definition = plugin.definition
     return {
@@ -181,19 +205,95 @@ async function loadGatewayPlugin(plugin: PluginRef): Promise<LoadedGatewayPlugin
   )
   const { plugin: loadedPlugin, errors } = await createPluginFromPath(
     pluginPath,
-    'gateway',
+    'server',
     true,
     basename(pluginPath),
   )
+  return loadedPluginToBeyaPlugin(loadedPlugin, errors)
+}
+
+async function loadedPluginToBeyaPlugin(
+  loadedPlugin: LoadedPlugin,
+  errors: unknown[] = [],
+): Promise<LoadedBeyaPlugin> {
   return {
     name: loadedPlugin.name,
     path: loadedPlugin.path,
     loadedPlugin,
-    tools: [],
+    tools: await loadLoadedPluginTools(loadedPlugin),
     commands: await loadLoadedPluginSkills(loadedPlugin),
     mcpServers: await loadLoadedPluginMcpServers(loadedPlugin),
     errors,
   }
+}
+
+export async function loadLoadedPluginTools(
+  plugin: LoadedPlugin,
+): Promise<ToolDefinition[]> {
+  const toolRoots = await existingToolRoots(plugin)
+  const nested = await Promise.all(toolRoots.map(loadToolDefinitionsFromRoot))
+  return nested.flat()
+}
+
+async function existingToolRoots(plugin: LoadedPlugin): Promise<string[]> {
+  const candidates = [
+    resolve(plugin.path, 'tools'),
+    ...manifestToolPaths(plugin),
+  ]
+  const seen = new Set<string>()
+  const existing: string[] = []
+  for (const candidate of candidates) {
+    const resolved = resolve(candidate)
+    if (seen.has(resolved)) continue
+    seen.add(resolved)
+    try {
+      if ((await stat(resolved)).isDirectory()) {
+        existing.push(resolved)
+      }
+    } catch {
+      // Missing tool directories are allowed; plugin schema still owns validation.
+    }
+  }
+  return existing
+}
+
+function manifestToolPaths(plugin: LoadedPlugin): string[] {
+  const tools = (plugin.manifest as { tools?: unknown }).tools
+  if (typeof tools === 'string') return [resolve(plugin.path, tools)]
+  if (Array.isArray(tools)) {
+    return tools
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map(entry => resolve(plugin.path, entry))
+  }
+  return []
+}
+
+async function loadToolDefinitionsFromRoot(root: string): Promise<ToolDefinition[]> {
+  const entries = await readdir(root, { withFileTypes: true })
+  const tools = await Promise.all(entries.map(async entry => {
+    const candidate = entry.isDirectory()
+      ? resolve(root, entry.name, 'tool.json')
+      : entry.name.endsWith('.json')
+        ? resolve(root, entry.name)
+        : ''
+    if (!candidate) return null
+    try {
+      const parsed = JSON.parse(await readFile(candidate, 'utf-8')) as unknown
+      return isToolDefinition(parsed) ? parsed : null
+    } catch {
+      return null
+    }
+  }))
+  return tools.filter((tool): tool is ToolDefinition => tool !== null)
+}
+
+function isToolDefinition(value: unknown): value is ToolDefinition {
+  if (!value || typeof value !== 'object') return false
+  const tool = value as ToolDefinition
+  return typeof tool.name === 'string' &&
+    tool.name.trim().length > 0 &&
+    typeof tool.description === 'string' &&
+    tool.description.trim().length > 0
 }
 
 async function loadLoadedPluginSkills(
@@ -263,8 +363,8 @@ function isInlineSkill(skill: string | SkillDefinition): skill is SkillDefinitio
   return typeof skill === 'object' && skill !== null
 }
 
-async function summarizeRegisteredGatewayPlugin(id: string, ref: PluginRef) {
-  const [loaded] = await loadGatewayPlugins([ref])
+async function summarizeRegisteredBeyaPlugin(id: string, ref: PluginRef) {
+  const [loaded] = await loadBeyaPlugins([ref])
   if (!loaded) {
     return {
       id,

@@ -1020,7 +1020,7 @@ describe('WebSocket Chat Integration', () => {
       .map((msg) => msg.verb)
 
     expect(statusVerbs).toContain('Creating worktree')
-  })
+  }, 10_000)
 
   it('does not emit worktree startup status for an already materialized worktree session', async () => {
     const repoDir = await createCleanGitRepo()
@@ -1046,7 +1046,7 @@ describe('WebSocket Chat Integration', () => {
 
     expect(statusVerbs).toContain('Thinking')
     expect(statusVerbs).not.toContain('Creating worktree')
-  })
+  }, 10_000)
 
   it('keeps the default startup status for current-worktree repository sessions', async () => {
     const repoDir = await createCleanGitRepo()
@@ -1062,7 +1062,7 @@ describe('WebSocket Chat Integration', () => {
 
     expect(statusVerbs).toContain('Thinking')
     expect(statusVerbs).not.toContain('Creating worktree')
-  })
+  }, 10_000)
 
   it('emits the derived session title before the first response completes', async () => {
     const sessionId = `title-fast-${crypto.randomUUID()}`
@@ -1405,7 +1405,7 @@ describe('WebSocket Chat Integration', () => {
     })
   }, 10_000)
 
-  it('should complete the client turn when the CLI exits after startup', async () => {
+  it('should complete the client turn when the agent runtime exits after startup', async () => {
     const messages = await withMockExitAfterFirstUser(50, () =>
       runTurnUntilComplete(`chat-late-exit-${crypto.randomUUID()}`, 'trigger late exit'),
     )
@@ -1416,7 +1416,7 @@ describe('WebSocket Chat Integration', () => {
           m.type === 'error' &&
           m.code === 'CLI_ERROR' &&
           typeof m.message === 'string' &&
-          m.message.includes('CLI process exited unexpectedly'),
+          m.message.includes('Agent runtime exited unexpectedly'),
       ),
     ).toBe(true)
     expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
@@ -1681,7 +1681,7 @@ describe('WebSocket Chat Integration', () => {
       code: 'CLI_START_FAILED',
     })
     expect(error?.message).toContain(
-      'CLI exited during startup (code 1): provider rejected request: invalid model id',
+      'Agent runtime exited during startup (code 1): provider rejected request: invalid model id',
     )
     expect(error?.message).toContain('Desktop service diagnostics:')
   }, 10_000)

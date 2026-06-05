@@ -35,6 +35,24 @@ function makePluginReloadRequest(): { req: Request; url: URL; segments: string[]
   }
 }
 
+function makeJsonRequest(
+  method: string,
+  urlStr: string,
+  body: unknown,
+): { req: Request; url: URL; segments: string[] } {
+  const url = new URL(urlStr, 'http://localhost:3456')
+  const req = new Request(url.toString(), {
+    method,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return {
+    req,
+    url,
+    segments: url.pathname.split('/').filter(Boolean),
+  }
+}
+
 async function writeSkill(root: string, skillName: string, content: string): Promise<void> {
   const skillDir = path.join(root, skillName)
   await fs.mkdir(skillDir, { recursive: true })
@@ -377,6 +395,49 @@ describe('Skills API', () => {
         name: 'draw:render',
         source: 'plugin',
         description: 'Render with the drawing plugin.',
+      }),
+    )
+  })
+
+  it('lists plugin skills installed through the plugins API without a marketplace catalog', async () => {
+    const install = makeJsonRequest('POST', '/api/plugins', {
+      type: 'inline',
+      scope: 'user',
+      definition: {
+        name: 'sdk-local-demo',
+        description: 'SDK local plugin',
+        skills: [
+          {
+            name: 'render',
+            content: [
+              '---',
+              'description: Render with an SDK installed local plugin.',
+              '---',
+              '',
+              '# Render',
+            ].join('\n'),
+          },
+        ],
+      },
+    })
+    const installRes = await handlePluginsApi(install.req, install.url, install.segments)
+    expect(installRes.status).toBe(200)
+    const installBody = await installRes.json() as { pluginId: string; installPath: string }
+    expect(installBody.pluginId).toBe('sdk-local-demo@local')
+    expect(installBody.installPath).toContain('sdk-plugins')
+
+    const after = makeRequest('/api/skills')
+    const afterRes = await handleSkillsApi(after.req, after.url, after.segments)
+    expect(afterRes.status).toBe(200)
+    const afterBody = await afterRes.json() as {
+      skills: Array<{ name: string; source: string; description: string }>
+    }
+
+    expect(afterBody.skills).toContainEqual(
+      expect.objectContaining({
+        name: 'sdk-local-demo:render',
+        source: 'plugin',
+        description: 'Render with an SDK installed local plugin.',
       }),
     )
   })
