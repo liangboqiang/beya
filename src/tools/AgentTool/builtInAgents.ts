@@ -9,6 +9,7 @@ import { PLAN_AGENT } from './built-in/planAgent.js'
 import { STATUSLINE_SETUP_AGENT } from './built-in/statuslineSetup.js'
 import { VERIFICATION_AGENT } from './built-in/verificationAgent.js'
 import type { AgentDefinition } from './loadAgentsDir.js'
+import * as workerAgentModule from '../../coordinator/workerAgent.js'
 
 export function areExplorePlanAgentsEnabled(): boolean {
   if (process.env.USER_TYPE !== 'ant') {
@@ -47,10 +48,7 @@ export function getBuiltInAgents(): AgentDefinition[] {
   // which depend on AgentTool which imports this file.
   if (feature('COORDINATOR_MODE')) {
     if (isEnvTruthy(process.env.CLAUDE_CODE_COORDINATOR_MODE)) {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      const { getCoordinatorAgents } =
-        require('../../coordinator/workerAgent.js') as typeof import('../../coordinator/workerAgent.js')
-      /* eslint-enable @typescript-eslint/no-require-imports */
+      const { getCoordinatorAgents } = workerAgentModule as any
       return getCoordinatorAgents()
     }
   }

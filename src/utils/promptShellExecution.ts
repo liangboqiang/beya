@@ -6,6 +6,8 @@ import type { FrontmatterShell } from './frontmatterParser.js'
 import { createAssistantMessage } from './messages.js'
 import { hasPermissionsToUseTool } from './permissions/permissions.js'
 import { processToolResultBlock } from './toolResultStorage.js'
+import { BashTool } from '../tools/BashTool/BashTool.js'
+import { PowerShellTool } from '../tools/PowerShellTool/PowerShellTool.js'
 
 // Narrow structural slice both BashTool and PowerShellTool satisfy. We can't
 // use the base Tool type: it marks call()'s canUseTool/parentMessage as
@@ -25,34 +27,11 @@ type PromptShellTool = Tool & {
 
 import { isPowerShellToolEnabled } from './shell/shellToolUtils.js'
 
-// Lazy: this file is on the startup import chain (main → commands →
-// loadSkillsDir → here). A static import would load PowerShellTool.ts
-// (and transitively parser.ts, validators, etc.) at startup on all
-// platforms, defeating tools.ts's lazy require. Deferred until the
-// first skill with `shell: powershell` actually runs.
-/* eslint-disable @typescript-eslint/no-require-imports */
-const getPowerShellTool = (() => {
-  let cached: PromptShellTool | undefined
-  return (): PromptShellTool => {
-    if (!cached) {
-      const requireFn = eval('require') as (id: string) => unknown
-      cached = (requireFn('../tools/PowerShellTool/PowerShellTool.js') as any)
-        .PowerShellTool
-    }
-    return cached
-  }
-})()
-const getBashTool = (() => {
-  let cached: PromptShellTool | undefined
-  return (): PromptShellTool => {
-    if (!cached) {
-      const requireFn = eval('require') as (id: string) => unknown
-      cached = (requireFn('../tools/BashTool/BashTool.js') as any).BashTool
-    }
-    return cached
-  }
-})()
-/* eslint-enable @typescript-eslint/no-require-imports */
+// Static imports keep packaged Bun single-file runtimes ESM-safe. The tool is
+// still selected lazily by frontmatter below.
+const getPowerShellTool = (): PromptShellTool =>
+  PowerShellTool as PromptShellTool
+const getBashTool = (): PromptShellTool => BashTool as PromptShellTool
 
 // Pattern for code blocks: ```! command ```
 const BLOCK_PATTERN = /```!\s*\n?([\s\S]*?)\n?```/g

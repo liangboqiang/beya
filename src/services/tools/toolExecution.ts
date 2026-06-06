@@ -31,6 +31,7 @@ import {
   type ToolUseContext,
 } from '../../Tool.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
+import { getAllBaseTools } from '../../tools.js'
 import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js'
 import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
@@ -401,12 +402,7 @@ function findDeprecatedAliasTool(toolName: string): Tool | undefined {
     // Keep the CLI deprecated-alias fallback out of headless server bundles.
     // Server tools are supplied explicitly through plugins, MCP, or remote
     // executors, so loading the full TUI tool table here is unnecessary.
-    const requireFn = eval('require') as (id: string) => unknown
-    const module = requireFn('../../tools.js') as {
-      getAllBaseTools?: () => readonly Tool[]
-    }
-    const tools = module.getAllBaseTools?.()
-    return tools ? findToolByName(tools, toolName) : undefined
+    return findToolByName(getAllBaseTools(), toolName)
   } catch {
     return undefined
   }

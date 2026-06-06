@@ -11,47 +11,52 @@ import { NotebookEditTool } from './tools/NotebookEditTool/NotebookEditTool.js'
 import { WebFetchTool } from './tools/WebFetchTool/WebFetchTool.js'
 import { TaskStopTool } from './tools/TaskStopTool/TaskStopTool.js'
 import { BriefTool } from './tools/BriefTool/BriefTool.js'
-// Dead code elimination: conditional import for ant-only tools
-/* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
+import REPLToolModule from './tools/REPLTool/REPLTool.js'
+import SuggestBackgroundPRToolModule from './tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.js'
+import SleepToolModule from './tools/SleepTool/SleepTool.js'
+import { CronCreateTool } from './tools/ScheduleCronTool/CronCreateTool.js'
+import { CronUpdateTool } from './tools/ScheduleCronTool/CronUpdateTool.js'
+import { CronDeleteTool } from './tools/ScheduleCronTool/CronDeleteTool.js'
+import { CronListTool } from './tools/ScheduleCronTool/CronListTool.js'
+import { RemoteTriggerTool as RemoteTriggerToolBase } from './tools/RemoteTriggerTool/RemoteTriggerTool.js'
+import MonitorToolModule from './tools/MonitorTool/MonitorTool.js'
+import SendUserFileToolModule from './tools/SendUserFileTool/SendUserFileTool.js'
+import PushNotificationToolModule from './tools/PushNotificationTool/PushNotificationTool.js'
+import SubscribePRToolModule from './tools/SubscribePRTool/SubscribePRTool.js'
+// Dead code elimination: conditional tool selection for ant-only tools
+/* eslint-disable custom-rules/no-process-env-top-level */
 const REPLTool =
   process.env.USER_TYPE === 'ant'
-    ? require('./tools/REPLTool/REPLTool.js').REPLTool
+    ? (REPLToolModule as any).REPLTool
     : null
 const SuggestBackgroundPRTool =
   process.env.USER_TYPE === 'ant'
-    ? require('./tools/SuggestBackgroundPRTool/SuggestBackgroundPRTool.js')
-        .SuggestBackgroundPRTool
+    ? (SuggestBackgroundPRToolModule as any).SuggestBackgroundPRTool
     : null
 const SleepTool =
   feature('PROACTIVE') || feature('KAIROS')
-    ? require('./tools/SleepTool/SleepTool.js').SleepTool
+    ? (SleepToolModule as any).SleepTool
     : null
 const cronTools = feature('AGENT_TRIGGERS')
-  ? [
-      require('./tools/ScheduleCronTool/CronCreateTool.js').CronCreateTool,
-      require('./tools/ScheduleCronTool/CronUpdateTool.js').CronUpdateTool,
-      require('./tools/ScheduleCronTool/CronDeleteTool.js').CronDeleteTool,
-      require('./tools/ScheduleCronTool/CronListTool.js').CronListTool,
-    ]
+  ? [CronCreateTool, CronUpdateTool, CronDeleteTool, CronListTool]
   : []
 const RemoteTriggerTool = feature('AGENT_TRIGGERS_REMOTE')
-  ? require('./tools/RemoteTriggerTool/RemoteTriggerTool.js').RemoteTriggerTool
+  ? RemoteTriggerToolBase
   : null
 const MonitorTool = feature('MONITOR_TOOL')
-  ? require('./tools/MonitorTool/MonitorTool.js').MonitorTool
+  ? (MonitorToolModule as any).MonitorTool
   : null
 const SendUserFileTool = feature('KAIROS')
-  ? require('./tools/SendUserFileTool/SendUserFileTool.js').SendUserFileTool
+  ? (SendUserFileToolModule as any).SendUserFileTool
   : null
 const PushNotificationTool =
   feature('KAIROS') || feature('KAIROS_PUSH_NOTIFICATION')
-    ? require('./tools/PushNotificationTool/PushNotificationTool.js')
-        .PushNotificationTool
+    ? (PushNotificationToolModule as any).PushNotificationTool
     : null
 const SubscribePRTool = feature('KAIROS_GITHUB_WEBHOOKS')
-  ? require('./tools/SubscribePRTool/SubscribePRTool.js').SubscribePRTool
+  ? (SubscribePRToolModule as any).SubscribePRTool
   : null
-/* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
+/* eslint-enable custom-rules/no-process-env-top-level */
 import { TaskOutputTool } from './tools/TaskOutputTool/TaskOutputTool.js'
 import { WebSearchTool } from './tools/WebSearchTool/WebSearchTool.js'
 import { TodoWriteTool } from './tools/TodoWriteTool/TodoWriteTool.js'
@@ -59,18 +64,9 @@ import { ExitPlanModeV2Tool } from './tools/ExitPlanModeTool/ExitPlanModeV2Tool.
 import { TestingPermissionTool } from './tools/testing/TestingPermissionTool.js'
 import { GrepTool } from './tools/GrepTool/GrepTool.js'
 import { TungstenTool } from './tools/TungstenTool/TungstenTool.js'
-// Lazy require to break circular dependency: tools.ts -> TeamCreateTool/TeamDeleteTool -> ... -> tools.ts
-/* eslint-disable @typescript-eslint/no-require-imports */
-const getTeamCreateTool = () =>
-  require('./tools/TeamCreateTool/TeamCreateTool.js')
-    .TeamCreateTool as typeof import('./tools/TeamCreateTool/TeamCreateTool.js').TeamCreateTool
-const getTeamDeleteTool = () =>
-  require('./tools/TeamDeleteTool/TeamDeleteTool.js')
-    .TeamDeleteTool as typeof import('./tools/TeamDeleteTool/TeamDeleteTool.js').TeamDeleteTool
-const getSendMessageTool = () =>
-  require('./tools/SendMessageTool/SendMessageTool.js')
-    .SendMessageTool as typeof import('./tools/SendMessageTool/SendMessageTool.js').SendMessageTool
-/* eslint-enable @typescript-eslint/no-require-imports */
+import { TeamCreateTool } from './tools/TeamCreateTool/TeamCreateTool.js'
+import { TeamDeleteTool } from './tools/TeamDeleteTool/TeamDeleteTool.js'
+import { SendMessageTool } from './tools/SendMessageTool/SendMessageTool.js'
 import { AskUserQuestionTool } from './tools/AskUserQuestionTool/AskUserQuestionTool.js'
 import { LSPTool } from './tools/LSPTool/LSPTool.js'
 import { ListMcpResourcesTool } from './tools/ListMcpResourcesTool/ListMcpResourcesTool.js'
@@ -87,14 +83,14 @@ import { TaskListTool } from './tools/TaskListTool/TaskListTool.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { isToolSearchEnabledOptimistic } from './utils/toolSearch.js'
 import { isTodoV2Enabled } from './utils/tasks.js'
-// Dead code elimination: conditional import for CLAUDE_CODE_VERIFY_PLAN
-/* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
+import VerifyPlanExecutionToolModule from './tools/VerifyPlanExecutionTool/VerifyPlanExecutionTool.js'
+// Dead code elimination: conditional tool selection for CLAUDE_CODE_VERIFY_PLAN
+/* eslint-disable custom-rules/no-process-env-top-level */
 const VerifyPlanExecutionTool =
   process.env.CLAUDE_CODE_VERIFY_PLAN === 'true'
-    ? require('./tools/VerifyPlanExecutionTool/VerifyPlanExecutionTool.js')
-        .VerifyPlanExecutionTool
+    ? (VerifyPlanExecutionToolModule as any).VerifyPlanExecutionTool
     : null
-/* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
+/* eslint-enable custom-rules/no-process-env-top-level */
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from './tools/SyntheticOutputTool/SyntheticOutputTool.js'
 export {
   ALL_AGENT_DISALLOWED_TOOLS,
@@ -103,37 +99,42 @@ export {
   COORDINATOR_MODE_ALLOWED_TOOLS,
 } from './constants/tools.js'
 import { feature } from 'bun:bundle'
-// Dead code elimination: conditional import for OVERFLOW_TEST_TOOL
-/* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
+import OverflowTestToolModule from './tools/OverflowTestTool/OverflowTestTool.js'
+import CtxInspectToolModule from './tools/CtxInspectTool/CtxInspectTool.js'
+import TerminalCaptureToolModule from './tools/TerminalCaptureTool/TerminalCaptureTool.js'
+import WebBrowserToolModule from './tools/WebBrowserTool/WebBrowserTool.js'
+import * as coordinatorModeModule from './coordinator/coordinatorMode.js'
+import SnipToolModule from './tools/SnipTool/SnipTool.js'
+import ListPeersToolModule from './tools/ListPeersTool/ListPeersTool.js'
+import WorkflowBundledModule from './tools/WorkflowTool/bundled/index.js'
+import WorkflowToolModule from './tools/WorkflowTool/WorkflowTool.js'
+// Dead code elimination: conditional tool selection for feature-gated tools
+/* eslint-disable custom-rules/no-process-env-top-level */
 const OverflowTestTool = feature('OVERFLOW_TEST_TOOL')
-  ? require('./tools/OverflowTestTool/OverflowTestTool.js').OverflowTestTool
+  ? (OverflowTestToolModule as any).OverflowTestTool
   : null
 const CtxInspectTool = feature('CONTEXT_COLLAPSE')
-  ? require('./tools/CtxInspectTool/CtxInspectTool.js').CtxInspectTool
+  ? (CtxInspectToolModule as any).CtxInspectTool
   : null
 const TerminalCaptureTool = feature('TERMINAL_PANEL')
-  ? require('./tools/TerminalCaptureTool/TerminalCaptureTool.js')
-      .TerminalCaptureTool
+  ? (TerminalCaptureToolModule as any).TerminalCaptureTool
   : null
 const WebBrowserTool = feature('WEB_BROWSER_TOOL')
-  ? require('./tools/WebBrowserTool/WebBrowserTool.js').WebBrowserTool
-  : null
-const coordinatorModeModule = feature('COORDINATOR_MODE')
-  ? (require('./coordinator/coordinatorMode.js') as typeof import('./coordinator/coordinatorMode.js'))
+  ? (WebBrowserToolModule as any).WebBrowserTool
   : null
 const SnipTool = feature('HISTORY_SNIP')
-  ? require('./tools/SnipTool/SnipTool.js').SnipTool
+  ? (SnipToolModule as any).SnipTool
   : null
 const ListPeersTool = feature('UDS_INBOX')
-  ? require('./tools/ListPeersTool/ListPeersTool.js').ListPeersTool
+  ? (ListPeersToolModule as any).ListPeersTool
   : null
 const WorkflowTool = feature('WORKFLOW_SCRIPTS')
   ? (() => {
-      require('./tools/WorkflowTool/bundled/index.js').initBundledWorkflows()
-      return require('./tools/WorkflowTool/WorkflowTool.js').WorkflowTool
+      ;(WorkflowBundledModule as any).initBundledWorkflows?.()
+      return (WorkflowToolModule as any).WorkflowTool
     })()
   : null
-/* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
+/* eslint-enable custom-rules/no-process-env-top-level */
 import type { ToolPermissionContext } from './Tool.js'
 import { getDenyRuleForTool } from './utils/permissions/permissions.js'
 import { hasEmbeddedSearchTools } from './utils/embeddedTools.js'
@@ -147,14 +148,7 @@ import {
   isReplModeEnabled,
 } from './tools/REPLTool/constants.js'
 export { REPL_ONLY_TOOLS }
-/* eslint-disable @typescript-eslint/no-require-imports */
-const getPowerShellTool = () => {
-  if (!isPowerShellToolEnabled()) return null
-  return (
-    require('./tools/PowerShellTool/PowerShellTool.js') as typeof import('./tools/PowerShellTool/PowerShellTool.js')
-  ).PowerShellTool
-}
-/* eslint-enable @typescript-eslint/no-require-imports */
+import { PowerShellTool } from './tools/PowerShellTool/PowerShellTool.js'
 
 /**
  * Predefined tool presets that can be used with --tools flag
@@ -224,10 +218,10 @@ export function getAllBaseTools(): Tools {
     ...(TerminalCaptureTool ? [TerminalCaptureTool] : []),
     ...(isEnvTruthy(process.env.ENABLE_LSP_TOOL) ? [LSPTool] : []),
     ...(isWorktreeModeEnabled() ? [EnterWorktreeTool, ExitWorktreeTool] : []),
-    getSendMessageTool(),
+    SendMessageTool,
     ...(ListPeersTool ? [ListPeersTool] : []),
     ...(isAgentSwarmsEnabled()
-      ? [getTeamCreateTool(), getTeamDeleteTool()]
+      ? [TeamCreateTool, TeamDeleteTool]
       : []),
     ...(VerifyPlanExecutionTool ? [VerifyPlanExecutionTool] : []),
     ...(process.env.USER_TYPE === 'ant' && REPLTool ? [REPLTool] : []),
@@ -240,7 +234,7 @@ export function getAllBaseTools(): Tools {
     ...(SendUserFileTool ? [SendUserFileTool] : []),
     ...(PushNotificationTool ? [PushNotificationTool] : []),
     ...(SubscribePRTool ? [SubscribePRTool] : []),
-    ...(getPowerShellTool() ? [getPowerShellTool()] : []),
+    ...(isPowerShellToolEnabled() ? [PowerShellTool] : []),
     ...(SnipTool ? [SnipTool] : []),
     ...(process.env.NODE_ENV === 'test' ? [TestingPermissionTool] : []),
     ListMcpResourcesTool,
@@ -279,9 +273,9 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
       const replSimple: Tool[] = [REPLTool]
       if (
         feature('COORDINATOR_MODE') &&
-        coordinatorModeModule?.isCoordinatorMode()
+        coordinatorModeModule.isCoordinatorMode()
       ) {
-        replSimple.push(TaskStopTool, getSendMessageTool())
+        replSimple.push(TaskStopTool, SendMessageTool)
       }
       return filterToolsByDenyRules(replSimple, permissionContext)
     }
@@ -291,9 +285,9 @@ export const getTools = (permissionContext: ToolPermissionContext): Tools => {
     // workers get Bash/Read/Edit (via filterToolsForAgent filtering).
     if (
       feature('COORDINATOR_MODE') &&
-      coordinatorModeModule?.isCoordinatorMode()
+      coordinatorModeModule.isCoordinatorMode()
     ) {
-      simpleTools.push(AgentTool, TaskStopTool, getSendMessageTool())
+      simpleTools.push(AgentTool, TaskStopTool, SendMessageTool)
     }
     return filterToolsByDenyRules(simpleTools, permissionContext)
   }

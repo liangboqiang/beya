@@ -6,15 +6,13 @@ import { clearClassifierApprovals } from '../../utils/classifierApprovals.js'
 import { resetGetMemoryFilesCache } from '../../utils/claudemd.js'
 import { clearSessionMessagesCache } from '../../utils/sessionStorage.js'
 import { clearBetaTracingState } from '../../utils/telemetry/betaSessionTracing.js'
+import { clearSpeculativeChecks as clearBashSpeculativeChecks } from '../../tools/BashTool/bashPermissions.js'
+import contextCollapseModule from '../contextCollapse/index.js'
 import { resetMicrocompactState } from './microCompact.js'
 
 function clearSpeculativeChecks(): void {
   try {
-    const requireFn = eval('require') as (id: string) => unknown
-    const module = requireFn('../../tools/BashTool/bashPermissions.js') as {
-      clearSpeculativeChecks?: () => void
-    }
-    module.clearSpeculativeChecks?.()
+    clearBashSpeculativeChecks()
   } catch {
     // BashTool may be absent from a headless Gateway bundle.
   }
@@ -52,11 +50,7 @@ export function runPostCompactCleanup(querySource?: QuerySource): void {
   resetMicrocompactState()
   if (feature('CONTEXT_COLLAPSE')) {
     if (isMainThreadCompact) {
-      /* eslint-disable @typescript-eslint/no-require-imports */
-      ;(
-        require('../contextCollapse/index.js') as typeof import('../contextCollapse/index.js')
-      ).resetContextCollapse()
-      /* eslint-enable @typescript-eslint/no-require-imports */
+      ;(contextCollapseModule as any).resetContextCollapse?.()
     }
   }
   if (isMainThreadCompact) {

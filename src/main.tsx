@@ -2539,7 +2539,9 @@ async function run(): Promise<CommanderCommand> {
     });
 
     // Log context metrics once at initialization
-    void logContextMetrics(regularMcpConfigs, toolPermissionContext);
+    void logContextMetrics(regularMcpConfigs, toolPermissionContext).catch(error => {
+      logForDebugging('Failed to log context metrics during initialization', error);
+    });
     void logPermissionContextForAnts(null, 'initialization');
     logManagedSettings();
 

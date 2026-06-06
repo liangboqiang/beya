@@ -6,6 +6,7 @@ import {
 } from '../../services/mcp/mcpStringUtils.js'
 import type { Tool, ToolPermissionContext, ToolUseContext } from '../../Tool.js'
 import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
+import { shouldUseSandbox as shouldUseBashSandbox } from '../../tools/BashTool/shouldUseSandbox.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 import { POWERSHELL_TOOL_NAME } from '../../tools/PowerShellTool/toolName.js'
 import { REPL_TOOL_NAME } from '../../tools/REPLTool/constants.js'
@@ -52,13 +53,14 @@ import {
   type PermissionRuleFromEditableSettings,
   shouldAllowManagedPermissionRulesOnly,
 } from './permissionsLoader.js'
+import * as classifierDecisionModuleBase from './classifierDecision.js'
+import * as autoModeStateModuleBase from './autoModeState.js'
 
-/* eslint-disable @typescript-eslint/no-require-imports */
 const classifierDecisionModule = feature('TRANSCRIPT_CLASSIFIER')
-  ? (require('./classifierDecision.js') as typeof import('./classifierDecision.js'))
+  ? classifierDecisionModuleBase
   : null
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
-  ? (require('./autoModeState.js') as typeof import('./autoModeState.js'))
+  ? autoModeStateModuleBase
   : null
 
 import {
@@ -113,11 +115,7 @@ type CanUseToolFn = (
 
 function shouldUseSandbox(input: Record<string, unknown>): boolean {
   try {
-    const requireFn = eval('require') as (id: string) => unknown
-    const module = requireFn('../../tools/BashTool/shouldUseSandbox.js') as {
-      shouldUseSandbox?: (input: Record<string, unknown>) => boolean
-    }
-    return module.shouldUseSandbox?.(input) ?? false
+    return shouldUseBashSandbox(input)
   } catch {
     return false
   }

@@ -47,6 +47,7 @@ import {
   logEvent,
 } from '../../services/analytics/index.js'
 import { getAgentContext } from '../../utils/agentContext.js'
+import { getCwd } from '../../utils/cwd.js'
 import { errorMessage } from '../../utils/errors.js'
 import {
   extractResultText,
@@ -88,9 +89,16 @@ async function getAllCommands(context: ToolUseContext): Promise<Command[]> {
     .mcp.commands.filter(
       cmd => cmd.type === 'prompt' && cmd.loadedFrom === 'mcp',
     )
-  if (mcpSkills.length === 0) return getCommands(getProjectRoot())
-  const localCommands = await getCommands(getProjectRoot())
+  const skillRoot = getSkillRoot(context)
+  if (mcpSkills.length === 0) return getCommands(skillRoot)
+  const localCommands = await getCommands(skillRoot)
   return uniqBy([...localCommands, ...mcpSkills], 'name')
+}
+
+function getSkillRoot(context: ToolUseContext): string {
+  return context.options.querySource === 'beya_server'
+    ? getCwd()
+    : getProjectRoot()
 }
 
 // Re-export Progress from centralized types to break import cycles
@@ -98,7 +106,7 @@ export type { SkillToolProgress as Progress } from '../../types/tools.js'
 
 import type { SkillToolProgress as Progress } from '../../types/tools.js'
 
-// Conditional require for remote skill modules — static imports here would
+// Conditional dynamic imports for remote skill modules — static imports here would
 // pull in akiBackend.ts (via remoteSkillLoader → akiBackend), which has
 // module-level memoize()/lazySchema() consts that survive tree-shaking as
 // side-effecting initializers. All usages are inside

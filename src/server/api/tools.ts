@@ -12,6 +12,7 @@ import {
   loadSessionRuntimeSurface,
   runtimeToolInfo,
 } from '../services/sessionRuntimeSurface.js'
+import { runWithCwdOverride } from '../../utils/cwd.js'
 
 export async function handleServerTools(
   req: Request,
@@ -48,84 +49,90 @@ export async function handleServerTools(
   }
 
   if (action === 'execute' && req.method === 'POST') {
-    const body = await optionalJson(req)
-    const input = objectField(body.input) ?? objectField(body.args) ?? {}
-    const runId = stringField(body.run_id) ?? stringField(body.task_id) ?? stringField(body.taskId) ?? randomUUID()
-    const sessionId =
-      stringField(body.session_id) ?? stringField(body.sessionId) ?? runId
-    const metadata = objectField(body.metadata) ?? {}
-    const directAbortController = new AbortController()
-    const executionSurface = await loadSessionRuntimeSurface({
-      sessionId,
-      cwd: requestedCwd,
-      metadata,
-      permissionContext: getEmptyToolPermissionContext(),
-    })
-    const tool = executionSurface.tools.find(candidate => candidate.name === toolName)
-    if (!tool) throw ApiError.notFound(`Tool not found: ${toolName}`)
-    const toolUseId =
-      stringField(body.tool_call_id) ??
-      stringField(body.toolCallId) ??
-      `toolu_server_${randomUUID().replace(/-/g, '')}`
-    const events: unknown[] = []
-    const assistantMessage = createAssistantMessage({
-      content: [{
-        type: 'tool_use',
-        id: toolUseId,
-        name: tool.name,
-        input,
-      } as ToolUseBlock],
-      isVirtual: true,
-    })
-    const toolUseContext = createHeadlessToolUseContext({
-      taskId: runId,
-      sessionId,
-      model: 'beya-server-direct-tool',
-      messages: [assistantMessage],
-      serverTools: [tool],
-      pluginCommands: [],
-      permissionMode: stringField(body.permission_mode) as never ?? 'default',
-      abortController: directAbortController,
-      emit: event => {
-        events.push(event)
-      },
-    })
-    const canUseTool = createHeadlessCanUseTool({
-      taskId: runId,
-      sessionId,
-      emit: event => {
-        events.push(event)
-      },
-    })
+    const execute = async (): Promise<Response> => {
+      const body = await optionalJson(req)
+      const input = objectField(body.input) ?? objectField(body.args) ?? {}
+      const runId = stringField(body.run_id) ?? stringField(body.task_id) ?? stringField(body.taskId) ?? randomUUID()
+      const sessionId =
+        stringField(body.session_id) ?? stringField(body.sessionId) ?? runId
+      const metadata = objectField(body.metadata) ?? {}
+      const directAbortController = new AbortController()
+      const executionSurface = await loadSessionRuntimeSurface({
+        sessionId,
+        cwd: requestedCwd,
+        metadata,
+        permissionContext: getEmptyToolPermissionContext(),
+      })
+      const tool = executionSurface.tools.find(candidate => candidate.name === toolName)
+      if (!tool) throw ApiError.notFound(`Tool not found: ${toolName}`)
+      const toolUseId =
+        stringField(body.tool_call_id) ??
+        stringField(body.toolCallId) ??
+        `toolu_server_${randomUUID().replace(/-/g, '')}`
+      const events: unknown[] = []
+      const assistantMessage = createAssistantMessage({
+        content: [{
+          type: 'tool_use',
+          id: toolUseId,
+          name: tool.name,
+          input,
+        } as ToolUseBlock],
+        isVirtual: true,
+      })
+      const toolUseContext = createHeadlessToolUseContext({
+        taskId: runId,
+        sessionId,
+        model: 'beya-server-direct-tool',
+        messages: [assistantMessage],
+        serverTools: [tool],
+        pluginCommands: [],
+        permissionMode: stringField(body.permission_mode) as never ?? 'default',
+        abortController: directAbortController,
+        emit: event => {
+          events.push(event)
+        },
+      })
+      const canUseTool = createHeadlessCanUseTool({
+        taskId: runId,
+        sessionId,
+        emit: event => {
+          events.push(event)
+        },
+      })
 
-    const messages = []
-    for await (const update of runToolUse(
-      {
-        type: 'tool_use',
-        id: toolUseId,
-        name: tool.name,
-        input,
-      },
-      assistantMessage,
-      canUseTool,
-      toolUseContext,
-    )) {
-      messages.push(update.message)
-      if (update.contextModifier) {
-        update.contextModifier.modifyContext(toolUseContext)
+      const messages = []
+      for await (const update of runToolUse(
+        {
+          type: 'tool_use',
+          id: toolUseId,
+          name: tool.name,
+          input,
+        },
+        assistantMessage,
+        canUseTool,
+        toolUseContext,
+      )) {
+        messages.push(update.message)
+        if (update.contextModifier) {
+          update.contextModifier.modifyContext(toolUseContext)
+        }
       }
+
+      return Response.json({
+        tool_call_id: toolUseId,
+        run_id: runId,
+        session_id: sessionId,
+        tool: tool.name,
+        input,
+        events,
+        messages,
+        result: extractToolExecutionResult(messages, toolUseId),
+      })
     }
 
-    return Response.json({
-      tool_call_id: toolUseId,
-      run_id: runId,
-      session_id: sessionId,
-      tool: tool.name,
-      input,
-      events,
-      messages,
-      result: extractToolExecutionResult(messages, toolUseId),
-    })
+    return requestedCwd
+      ? runWithCwdOverride(requestedCwd, execute)
+      : execute()
   }
 
   throw new ApiError(

@@ -129,4 +129,47 @@ describe('Tools API', () => {
       plugin: true,
     }))
   })
+
+  it('executes workspace skills through the same native Skill tool surface', async () => {
+    const skillDir = path.join(tmpHome, '.beya', 'skills', 'design-report')
+    await fs.mkdir(skillDir, { recursive: true })
+    await fs.writeFile(
+      path.join(skillDir, 'SKILL.md'),
+      `---
+name: design-report
+description: Generate a concise design report from available design information.
+---
+
+# Design Report
+
+Use this skill to prepare a concise design report. Return sections for inputs, calculation basis, risks, and next actions.
+`,
+      'utf8',
+    )
+    setCwdState(originalCwdState)
+
+    const request = makeRequest(
+      'POST',
+      `/api/tools/Skill/execute?cwd=${encodeURIComponent(tmpHome)}`,
+      {
+        input: { skill: 'design-report' },
+        permission_mode: 'bypassPermissions',
+        run_id: 'skill-execute-test',
+        session_id: 'skill-execute-test',
+      },
+    )
+    const response = await Promise.race([
+      handleServerTools(request.req, request.url, request.segments),
+      new Promise<Response>((_, reject) =>
+        setTimeout(() => reject(new Error('Skill execute timed out')), 10_000),
+      ),
+    ])
+
+    expect(response.status).toBe(200)
+    const body = await response.json() as {
+      result?: { is_error?: boolean; content?: unknown }
+    }
+    expect(JSON.stringify(body)).not.toContain('require is not defined')
+    expect(body.result?.is_error).not.toBe(true)
+  })
 })

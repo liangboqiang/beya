@@ -1,5 +1,5 @@
-// Auto mode state functions — lives in its own module so callers can
-// conditionally require() it on feature('TRANSCRIPT_CLASSIFIER').
+// Auto mode state functions live in their own module so callers can import the
+// state surface without pulling classifier policy into unrelated permission paths.
 
 let autoModeActive = false
 let autoModeFlagCli = false

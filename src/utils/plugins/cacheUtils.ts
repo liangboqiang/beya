@@ -1,6 +1,7 @@
 import { readdir, rm, stat, unlink, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { clearAllOutputStylesCache } from '../../constants/outputStyles.js'
+import { clearCommandsCache } from '../../commands.js'
 import { clearAgentDefinitionsCache } from '../../tools/AgentTool/loadAgentsDir.js'
 import { clearPromptCache } from '../../tools/SkillTool/prompt.js'
 import { resetSentSkillNames } from '../attachments.js'
@@ -45,10 +46,7 @@ export function clearAllPluginCaches(): void {
 export function clearAllCaches(): void {
   clearAllPluginCaches()
   try {
-    const runtimeRequire = eval('require') as (specifier: string) => {
-      clearCommandsCache: () => void
-    }
-    runtimeRequire('../..' + '/commands.js').clearCommandsCache()
+    clearCommandsCache()
   } catch {
     // Headless/ESM hosts do not load the CLI command registry.
   }
