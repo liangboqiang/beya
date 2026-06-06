@@ -231,11 +231,17 @@ export function startServer(port = PORT, host = HOST) {
           if (!sessionId || !/^[0-9a-zA-Z_-]{1,64}$/.test(sessionId)) {
             return new Response('Invalid session ID', { status: 400 })
           }
+          const requestedPurpose = url.searchParams.get('purpose')
           const upgraded = server.upgrade(req, {
             data: {
               sessionId,
               connectedAt: Date.now(),
               channel: 'client',
+              purpose: requestedPurpose === 'interaction_response'
+                ? 'interaction_response'
+                : requestedPurpose === 'sdk_chat'
+                  ? 'sdk_chat'
+                  : 'chat',
               sdkToken: null,
               serverPort: port,
               serverHost: localConnectHost,
@@ -508,6 +514,11 @@ if (import.meta.main) {
     startServer()
   })().catch((error) => {
     console.error('[Server] Uncaught exception:', error)
-    process.exit(1)
+    void diagnosticsService.recordEvent({
+      type: 'server_uncaught_exception',
+      severity: 'error',
+      summary: error instanceof Error ? error.message : String(error),
+      details: { error },
+    }).finally(() => process.exit(1))
   })
 }

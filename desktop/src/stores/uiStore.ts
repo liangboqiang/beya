@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { isThemeMode, THEME_MODES, type ThemeMode } from '../types/settings'
+import { DEFAULT_THEME, isDarkThemeMode } from '../theme/themeOptions'
 
 const THEME_STORAGE_KEY = 'beya-theme'
 
@@ -8,13 +9,13 @@ function getStoredTheme(): ThemeMode {
     const stored = localStorage.getItem(THEME_STORAGE_KEY)
     if (isThemeMode(stored)) return stored
   } catch { /* localStorage unavailable */ }
-  return 'white'
+  return DEFAULT_THEME
 }
 
 export function applyTheme(theme: ThemeMode) {
   if (typeof document === 'undefined') return
   document.documentElement.setAttribute('data-theme', theme)
-  document.documentElement.style.colorScheme = theme === 'dark' ? 'dark' : 'light'
+  document.documentElement.style.colorScheme = isDarkThemeMode(theme) ? 'dark' : 'light'
 }
 
 export function initializeTheme() {
@@ -88,7 +89,7 @@ export const useUIStore = create<UIStore>((set) => ({
   toggleTheme: () => {
     set((state) => {
       const currentIndex = THEME_MODES.indexOf(state.theme)
-      const next = THEME_MODES[(currentIndex + 1) % THEME_MODES.length] ?? 'white'
+      const next = THEME_MODES[(currentIndex + 1) % THEME_MODES.length] ?? DEFAULT_THEME
       applyTheme(next)
       try { localStorage.setItem(THEME_STORAGE_KEY, next) } catch { /* noop */ }
       return { theme: next }

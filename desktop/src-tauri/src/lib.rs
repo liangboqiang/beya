@@ -220,6 +220,7 @@ mod macos_notifications {
 mod webview_panel;
 
 const SERVER_STARTUP_LOG_LIMIT: usize = 80;
+const SERVER_STARTUP_TIMEOUT_SECS: u64 = 60;
 const SERVER_BIND_HOST: &str = "0.0.0.0";
 const SERVER_CONTROL_HOST: &str = "127.0.0.1";
 const MAIN_WINDOW_LABEL: &str = "main";
@@ -1334,7 +1335,7 @@ fn wait_for_server(url_host: &str, port: u16) -> Result<(), String> {
     let addr: SocketAddr = format!("{url_host}:{port}")
         .parse()
         .map_err(|err| format!("parse server address: {err}"))?;
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(SERVER_STARTUP_TIMEOUT_SECS);
 
     while Instant::now() < deadline {
         if TcpStream::connect_timeout(&addr, Duration::from_millis(200)).is_ok() {
@@ -1344,7 +1345,7 @@ fn wait_for_server(url_host: &str, port: u16) -> Result<(), String> {
     }
 
     Err(format!(
-        "desktop server did not start listening on {url_host}:{port} within 10 seconds"
+        "desktop server did not start listening on {url_host}:{port} within {SERVER_STARTUP_TIMEOUT_SECS} seconds"
     ))
 }
 
@@ -2008,6 +2009,11 @@ mod tests {
     fn server_sidecar_binds_lan_but_reports_loopback_control_url() {
         assert_eq!(SERVER_BIND_HOST, "0.0.0.0");
         assert_eq!(SERVER_CONTROL_HOST, "127.0.0.1");
+    }
+
+    #[test]
+    fn server_sidecar_startup_timeout_allows_cold_start() {
+        assert_eq!(SERVER_STARTUP_TIMEOUT_SECS, 60);
     }
 
     #[test]

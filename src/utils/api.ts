@@ -27,10 +27,14 @@ import { CLI_SYSPROMPT_PREFIXES } from '../constants/system.js'
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
 import type { Tool, ToolPermissionContext, Tools } from '../Tool.js'
 import { AGENT_TOOL_NAME } from '../tools/AgentTool/constants.js'
+import { getTools } from '../tools.js'
 import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
+import { BashTool } from '../tools/BashTool/BashTool.js'
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '../tools/ExitPlanModeTool/constants.js'
+import { FileEditTool } from '../tools/FileEditTool/FileEditTool.js'
 import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
+import { FileWriteTool } from '../tools/FileWriteTool/FileWriteTool.js'
 import { FILE_WRITE_TOOL_NAME } from '../tools/FileWriteTool/prompt.js'
 import { TASK_OUTPUT_TOOL_NAME } from '../tools/TaskOutputTool/constants.js'
 import type { Message } from '../types/message.js'
@@ -88,35 +92,10 @@ const SWARM_FIELDS_BY_TOOL: Record<string, string[]> = {
   [AGENT_TOOL_NAME]: ['name', 'team_name', 'mode'],
 }
 
-function loadBashTool() {
-  const requireFn = eval('require') as (id: string) => unknown
-  return (requireFn('src/tools/BashTool/BashTool.js') as {
-    BashTool: Tool
-  }).BashTool
-}
-
-function loadFileEditTool() {
-  const requireFn = eval('require') as (id: string) => unknown
-  return (requireFn('src/tools/FileEditTool/FileEditTool.js') as {
-    FileEditTool: Tool
-  }).FileEditTool
-}
-
-function loadFileWriteTool() {
-  const requireFn = eval('require') as (id: string) => unknown
-  return (requireFn('src/tools/FileWriteTool/FileWriteTool.js') as {
-    FileWriteTool: Tool
-  }).FileWriteTool
-}
-
 async function loadAllTools(
   toolPermissionContext: ToolPermissionContext,
 ): Promise<Tools> {
-  const requireFn = eval('require') as (id: string) => unknown
-  const module = requireFn('src/tools.js') as {
-    getTools?: (toolPermissionContext: ToolPermissionContext) => Tools | Promise<Tools>
-  }
-  return await (module.getTools?.(toolPermissionContext) ?? [])
+  return await getTools(toolPermissionContext)
 }
 
 /**
@@ -609,7 +588,6 @@ export function normalizeToolInput<T extends Tool>(
       return plan !== null ? { ...input, plan, planFilePath } : input
     }
     case BASH_TOOL_NAME: {
-      const BashTool = loadBashTool()
       // Validated upstream, won't throw
       const parsed = BashTool.inputSchema.parse(input)
       const { command, timeout, description } = parsed
@@ -651,7 +629,6 @@ export function normalizeToolInput<T extends Tool>(
       } as z.infer<T['inputSchema']>
     }
     case FILE_EDIT_TOOL_NAME: {
-      const FileEditTool = loadFileEditTool()
       // Validated upstream, won't throw
       const parsedInput = FileEditTool.inputSchema.parse(input)
 
@@ -676,7 +653,6 @@ export function normalizeToolInput<T extends Tool>(
       } as z.infer<T['inputSchema']>
     }
     case FILE_WRITE_TOOL_NAME: {
-      const FileWriteTool = loadFileWriteTool()
       // Validated upstream, won't throw
       const parsedInput = FileWriteTool.inputSchema.parse(input)
 

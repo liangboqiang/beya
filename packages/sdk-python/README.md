@@ -40,6 +40,24 @@ for event in client.chat.stream("Explain this repository", work_dir="F:/Document
     print(event.type, event.message)
 ```
 
+Interactive Desktop tools use the same session WebSocket. When a stream yields
+`QUESTION_REQUESTED`, `APPROVAL_REQUESTED`, or `PLAN_ACTION_REQUESTED`, respond
+to the current request instead of creating a new session:
+
+```python
+for event in client.chat.stream("Start the design", session_id=session_id):
+    if event.type == "QUESTION_REQUESTED":
+        event.respond({"answers": {event.questions[0]["question"]: "Conrod"}})
+```
+
+Headless clients can store `event.session_id` and `event.request_id`, then resume
+later:
+
+```python
+for event in client.chat.respond(session_id, request_id, {"answers": answers}):
+    print(event.type, event.message)
+```
+
 ## Product Resources
 
 ```python

@@ -33,6 +33,7 @@ import {
   readStoredAppZoomLevel,
 } from '../lib/appZoom'
 import { useUIStore } from './uiStore'
+import { DEFAULT_THEME } from '../theme/themeOptions'
 
 const LOCALE_STORAGE_KEY = 'beya-locale'
 export const UI_ZOOM_MIN = MIN_APP_ZOOM
@@ -183,7 +184,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         settingsApi.getUser(),
         loadH5AccessSettings(previousH5Access),
       ])
-      const theme = isThemeMode(userSettings.theme) ? userSettings.theme : 'white'
+      const theme = isThemeMode(userSettings.theme) ? userSettings.theme : DEFAULT_THEME
       useUIStore.getState().setTheme(theme)
       set({
         permissionMode: mode,

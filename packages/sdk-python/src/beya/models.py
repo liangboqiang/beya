@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 @dataclass
@@ -13,10 +13,32 @@ class RunEvent:
     result: Optional[str] = None
     error: Optional[str] = None
     raw: Optional[Dict[str, Any]] = None
+    interaction_type: Optional[str] = None
+    request_id: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    tool_name: Optional[str] = None
+    questions: Optional[List[Dict[str, Any]]] = None
+    options: Optional[List[Dict[str, Any]]] = None
+    reason: Optional[str] = None
+    _responder: Optional[Callable[[Optional[Dict[str, Any]]], Any]] = field(default=None, repr=False, compare=False)
 
     @property
     def id(self):
         return str(self.seq)
+
+    def respond(self, response=None, **kwargs):
+        if self._responder is None:
+            raise RuntimeError("This event cannot be responded to")
+        if response is None:
+            payload = {}
+        elif isinstance(response, dict):
+            payload = dict(response)
+        elif isinstance(response, bool):
+            payload = {"allowed": response}
+        else:
+            payload = {"feedback": str(response)}
+        payload.update(kwargs)
+        return self._responder(payload)
 
 
 Event = RunEvent

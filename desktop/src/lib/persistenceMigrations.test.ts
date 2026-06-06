@@ -65,6 +65,15 @@ describe('desktop persistence migrations', () => {
     expect(window.localStorage.getItem('beya-theme')).toBe('white')
   })
 
+  test('preserves new design style themes as valid persisted themes', () => {
+    window.localStorage.setItem('beya-theme', 'opendesign')
+
+    const report = runDesktopPersistenceMigrations()
+
+    expect(report.migratedKeys).not.toContain('beya-theme')
+    expect(window.localStorage.getItem('beya-theme')).toBe('opendesign')
+  })
+
   test('preserves valid app zoom and removes invalid app zoom values', () => {
     window.localStorage.setItem('beya-app-zoom', '1.2')
 

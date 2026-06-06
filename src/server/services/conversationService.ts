@@ -103,6 +103,7 @@ type SessionStartOptions = {
   effort?: string
   thinking?: 'enabled' | 'adaptive' | 'disabled'
   providerId?: string | null
+  metadata?: Record<string, unknown>
 }
 
 export class ConversationStartupError extends Error {
@@ -430,12 +431,14 @@ export class ConversationService {
     allowed: boolean,
     rule?: string,
     updatedInput?: Record<string, unknown>,
+    feedback?: string,
   ): boolean {
     const session = this.sessions.get(sessionId)
     const pendingRequest = session?.pendingPermissionRequests.get(requestId)
-    if (session) {
-      session.pendingPermissionRequests.delete(requestId)
+    if (!session || !pendingRequest) {
+      return false
     }
+    session.pendingPermissionRequests.delete(requestId)
 
     return this.sendSdkMessage(sessionId, {
       type: 'control_response',
@@ -457,7 +460,7 @@ export class ConversationService {
                   }
                 : {}),
             }
-          : { behavior: 'deny', message: 'User denied via UI' },
+          : { behavior: 'deny', message: feedback || 'User denied via UI' },
       },
     })
   }
@@ -1083,9 +1086,25 @@ export class ConversationService {
       ...(explicitProviderEnv
         ? { CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '1' }
         : {}),
+      ...this.buildRuntimeMetadataEnv(options?.metadata),
       ...(explicitProviderEnv ?? {}),
       ...networkEnv,
       ...attributionHeaderEnv,
+    }
+  }
+
+  private buildRuntimeMetadataEnv(
+    metadata: Record<string, unknown> | undefined,
+  ): Record<string, string> {
+    if (!metadata || Object.keys(metadata).length === 0) {
+      return {}
+    }
+    try {
+      return {
+        BEYA_RUNTIME_METADATA_JSON: JSON.stringify(metadata),
+      }
+    } catch {
+      return {}
     }
   }
 

@@ -6,6 +6,7 @@ import { CopyButton } from '../shared/CopyButton'
 import { useUIStore } from '../../stores/uiStore'
 import type { ThemeMode } from '../../types/settings'
 import { useTranslation } from '../../i18n'
+import { isDarkThemeMode } from '../../theme/themeOptions'
 
 type Props = {
   code: string
@@ -75,7 +76,7 @@ function resolveThemeColor(token: string, fallback: string) {
 }
 
 function getMermaidThemeColors(theme: ThemeMode): MermaidThemeColors {
-  const isDark = theme === 'dark'
+  const isDark = isDarkThemeMode(theme)
   return {
     textColor: resolveThemeColor('--color-text-primary', isDark ? '#E5E2E1' : '#1B1C1A'),
     mutedTextColor: resolveThemeColor('--color-text-secondary', isDark ? '#B7AAA5' : '#61514B'),

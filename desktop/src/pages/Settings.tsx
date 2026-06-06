@@ -9,7 +9,7 @@ import { ConfirmDialog } from '../components/shared/ConfirmDialog'
 import { Input } from '../components/shared/Input'
 import { Button } from '../components/shared/Button'
 import { Dropdown } from '../components/shared/Dropdown'
-import type { ThemeMode, UpdateProxyMode, NetworkProxyMode, WebSearchMode, AppMode, ChatSendBehavior } from '../types/settings'
+import type { UpdateProxyMode, NetworkProxyMode, WebSearchMode, AppMode, ChatSendBehavior } from '../types/settings'
 import type { Locale } from '../i18n'
 import type { SavedProvider, UpdateProviderInput, ProviderTestResult, ModelRoles, ApiFormat, ProviderAuthStrategy } from '../types/provider'
 import type { ProviderDefinition } from '../types/providerCatalog'
@@ -54,6 +54,7 @@ import {
   getProviderModelRoles,
   normalizeModelRoles,
 } from '../lib/modelRoles'
+import { THEME_OPTIONS } from '../theme/themeOptions'
 
 const NETWORK_TIMEOUT_MIN_SECONDS = 5
 const NETWORK_TIMEOUT_MAX_SECONDS = 600
@@ -1393,11 +1394,12 @@ function GeneralSettings() {
   const selectedResponseLanguageLabel =
     RESPONSE_LANGUAGES.find(({ value }) => value === responseLanguage)?.label ?? RESPONSE_LANGUAGES[0]!.label
 
-  const THEMES: Array<{ value: ThemeMode; label: string }> = [
-    { value: 'white', label: t('settings.general.appearance.white') },
-    { value: 'light', label: t('settings.general.appearance.light') },
-    { value: 'dark', label: t('settings.general.appearance.dark') },
-  ]
+  const THEMES = THEME_OPTIONS.map((option) => ({
+    ...option,
+    category: t(option.categoryKey),
+    label: t(option.labelKey),
+    description: t(option.descriptionKey),
+  }))
 
   const WEB_SEARCH_MODES: Array<{ value: WebSearchMode; label: string }> = [
     { value: 'auto', label: t('settings.general.webSearch.mode.auto') },
@@ -1738,23 +1740,39 @@ function GeneralSettings() {
   )
 
   return (
-    <div className="max-w-xl">
+    <div className="max-w-3xl">
       {/* Appearance selector */}
       <h2 className="text-base font-semibold text-[var(--color-text-primary)] mb-1">{t('settings.general.appearanceTitle')}</h2>
       <p className="text-sm text-[var(--color-text-tertiary)] mb-3">{t('settings.general.appearanceDescription')}</p>
-      <div className="flex gap-2 mb-8">
-        {THEMES.map(({ value, label }) => (
+      <div className="grid grid-cols-1 gap-2.5 mb-8 sm:grid-cols-2">
+        {THEMES.map(({ value, label, description, category, swatches }) => (
           <button
             key={value}
             onClick={() => void setTheme(value)}
             aria-pressed={theme === value}
-            className={`flex-1 py-2 text-xs font-semibold rounded-lg border transition-all ${
+            className={`min-h-[118px] rounded-[var(--radius-lg)] border px-3.5 py-3 text-left transition-all ${
               theme === value
-                ? 'bg-[image:var(--gradient-btn-primary)] text-[var(--color-btn-primary-fg)] border-transparent shadow-[var(--shadow-button-primary)]'
-                : 'border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
+                ? 'border-[var(--color-border-focus)] bg-[var(--color-surface-selected)] shadow-[var(--shadow-focus-ring)]'
+                : 'border-[var(--color-border)] bg-[var(--color-surface-container-lowest)] hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-hover)]'
             }`}
           >
-            {label}
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-tertiary)]">{category}</div>
+                <div className="text-sm font-semibold text-[var(--color-text-primary)]">{label}</div>
+              </div>
+              <div className="flex flex-shrink-0 overflow-hidden rounded-full border border-[var(--color-border)]">
+                {swatches.map((swatch) => (
+                  <span
+                    key={swatch}
+                    aria-hidden="true"
+                    className="h-5 w-5"
+                    style={{ backgroundColor: swatch }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="text-xs leading-5 text-[var(--color-text-secondary)]">{description}</div>
           </button>
         ))}
       </div>

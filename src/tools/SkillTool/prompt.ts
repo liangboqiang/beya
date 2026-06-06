@@ -1,4 +1,9 @@
 import { memoize } from 'lodash-es'
+import {
+  getCommandName as getRegisteredCommandName,
+  getSkillToolCommands as getRegisteredSkillToolCommands,
+  getSlashCommandToolSkills as getRegisteredSlashCommandToolSkills,
+} from 'src/commands.js'
 import type { Command } from 'src/types/command.js'
 import { COMMAND_NAME_TAG } from '../../constants/xml.js'
 import { stringWidth } from '../../ink/stringWidth.js'
@@ -23,35 +28,16 @@ export const DEFAULT_CHAR_BUDGET = 8_000 // Fallback: 1% of 200k × 4
 // since the cap is generous enough to preserve the core use case.
 export const MAX_LISTING_DESC_CHARS = 250
 
-type CommandsModule = {
-  getCommandName?: (command: Command) => string
-  getSkillToolCommands?: (cwd: string) => Promise<Command[]>
-  getSlashCommandToolSkills?: (cwd: string) => Promise<Command[]>
-}
-
-function loadCommandsModule(): CommandsModule | null {
-  try {
-    const requireFn = eval('require') as (specifier: string) => unknown
-    return requireFn('src' + '/commands.js') as CommandsModule
-  } catch {
-    return null
-  }
-}
-
 function getCommandName(command: Command): string {
-  return loadCommandsModule()?.getCommandName?.(command) ?? command.name
+  return getRegisteredCommandName(command)
 }
 
 async function getSkillToolCommands(cwd: string): Promise<Command[]> {
-  return (
-    (await loadCommandsModule()?.getSkillToolCommands?.(cwd)) ?? []
-  )
+  return getRegisteredSkillToolCommands(cwd)
 }
 
 async function getSlashCommandToolSkills(cwd: string): Promise<Command[]> {
-  return (
-    (await loadCommandsModule()?.getSlashCommandToolSkills?.(cwd)) ?? []
-  )
+  return getRegisteredSlashCommandToolSkills(cwd)
 }
 
 export function getCharBudget(contextWindowTokens?: number): number {

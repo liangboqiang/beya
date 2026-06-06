@@ -3,6 +3,7 @@ import { Highlight, type PrismTheme } from 'prism-react-renderer'
 import { CopyButton } from '../shared/CopyButton'
 import { useUIStore } from '../../stores/uiStore'
 import { useTranslation } from '../../i18n'
+import { isDarkThemeMode } from '../../theme/themeOptions'
 
 type Props = {
   filePath: string
@@ -153,7 +154,7 @@ export function DiffViewer({ filePath, oldString, newString }: Props) {
           renderContent={(str) => highlightSyntax(str, language)}
           hideLineNumbers={false}
           styles={diffStyles}
-          useDarkTheme={theme === 'dark'}
+          useDarkTheme={isDarkThemeMode(theme)}
         />
       </div>
     </div>

@@ -26,6 +26,27 @@ import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
 import { TASK_UPDATE_TOOL_NAME } from '../tools/TaskUpdateTool/constants.js'
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
 import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js'
+import {
+  getMcpSkillCommands,
+  getSkillToolCommands,
+} from '../commands.js'
+import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
+import {
+  FileReadTool,
+  MaxFileReadTokenExceededError,
+  readImageWithTokenBudget,
+} from '../tools/FileReadTool/FileReadTool.js'
+import { removeTeammateFromTeamFile as removeTeammateFromTeamFileImpl } from './swarm/teamHelpers.js'
+import { getViewedTeammateTask as getViewedTeammateTaskImpl } from '../state/selectors.js'
+import {
+  getEffectiveContextWindowSize as getEffectiveContextWindowSizeImpl,
+  isAutoCompactEnabled as isAutoCompactEnabledImpl,
+} from '../services/compact/autoCompact.js'
+import {
+  generateTaskAttachments as generateTaskAttachmentsImpl,
+  applyTaskOffsetsAndEvictions as applyTaskOffsetsAndEvictionsImpl,
+} from './task/framework.js'
+import { drainPendingMessages as drainPendingMessagesImpl } from '../tasks/LocalAgentTask/LocalAgentTask.js'
 import type { TodoList } from './todo/types.js'
 import {
   type Task,
@@ -89,26 +110,24 @@ type FileReadToolModule = {
 }
 
 async function loadFileReadToolModule(): Promise<FileReadToolModule> {
-  const requireFn = eval('require') as (id: string) => unknown
-  return requireFn('../tools/FileReadTool/FileReadTool.js') as FileReadToolModule
+  return {
+    FileReadTool,
+    MaxFileReadTokenExceededError,
+    readImageWithTokenBudget,
+  }
 }
 
 function removeTeammateFromTeamFile(
   teamName: string,
   teammate: { agentId: string; name: string },
 ): void {
-  const requireFn = eval('require') as (id: string) => unknown
-  ;(requireFn('./swarm/teamHelpers.js') as any).removeTeammateFromTeamFile(
-    teamName,
-    teammate,
-  )
+  removeTeammateFromTeamFileImpl(teamName, teammate)
 }
 
 function getViewedTeammateTask(appState: any): any {
   if (!appState?.viewingAgentTaskId) return undefined
   try {
-    const requireFn = eval('require') as (id: string) => unknown
-    return (requireFn('../state/selectors.js') as any).getViewedTeammateTask(appState)
+    return getViewedTeammateTaskImpl(appState)
   } catch {
     return undefined
   }
@@ -123,8 +142,10 @@ let cachedAutoCompactModule: AutoCompactModule | null = null
 
 function autoCompactModule(): AutoCompactModule {
   if (cachedAutoCompactModule) return cachedAutoCompactModule
-  const requireFn = eval('require') as (id: string) => unknown
-  cachedAutoCompactModule = requireFn('../services/compact/autoCompact.js') as AutoCompactModule
+  cachedAutoCompactModule = {
+    getEffectiveContextWindowSize: getEffectiveContextWindowSizeImpl,
+    isAutoCompactEnabled: isAutoCompactEnabledImpl,
+  }
   return cachedAutoCompactModule
 }
 
@@ -150,8 +171,10 @@ type TaskFrameworkModule = {
 }
 
 function loadTaskFramework(): TaskFrameworkModule {
-  const requireFn = eval('require') as (id: string) => unknown
-  return requireFn('./task/framework.js') as TaskFrameworkModule
+  return {
+    generateTaskAttachments: generateTaskAttachmentsImpl,
+    applyTaskOffsetsAndEvictions: applyTaskOffsetsAndEvictionsImpl,
+  }
 }
 
 async function generateTaskAttachments(state: any) {
@@ -180,8 +203,7 @@ function drainPendingMessages(
     return []
   }
   try {
-    const requireFn = eval('require') as (id: string) => unknown
-    return (requireFn('../tasks/LocalAgentTask/LocalAgentTask.js') as any).drainPendingMessages(taskId, getAppState, setAppState)
+    return drainPendingMessagesImpl(taskId, getAppState, setAppState)
   } catch {
     const drained = [...task.pendingMessages]
     setAppState(prev => ({
@@ -206,19 +228,15 @@ import type { DiscoverySignal } from '../services/skillSearch/signals.js'
 // surfaces in THIS file are: the maybe() call (gated via spread below) and
 // the skill_listing suppression check (uses the same skillSearchModules null
 // check). The type-only DiscoverySignal import above is erased at compile time.
-/* eslint-disable @typescript-eslint/no-require-imports */
 const skillSearchModules = feature('EXPERIMENTAL_SKILL_SEARCH')
   ? {
-      featureCheck:
-        require('../services/skillSearch/featureCheck.js') as typeof import('../services/skillSearch/featureCheck.js'),
-      prefetch:
-        require('../services/skillSearch/prefetch.js') as typeof import('../services/skillSearch/prefetch.js'),
+      featureCheck: skillSearchFeatureCheckModule,
+      prefetch: skillSearchPrefetchModule,
     }
   : null
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
-  ? (require('./permissions/autoModeState.js') as typeof import('./permissions/autoModeState.js'))
+  ? autoModeStateModuleImpl
   : null
-/* eslint-enable @typescript-eslint/no-require-imports */
 import {
   MAX_LINES_TO_READ,
   FILE_READ_TOOL_NAME,
@@ -306,17 +324,19 @@ import {
 import { isHumanTurn } from './messagePredicates.js'
 import { isEnvTruthy, getBeyaConfigHomeDir } from './envUtils.js'
 import { feature } from 'bun:bundle'
-/* eslint-disable @typescript-eslint/no-require-imports */
+import * as skillSearchFeatureCheckModule from '../services/skillSearch/featureCheck.js'
+import * as skillSearchPrefetchModule from '../services/skillSearch/prefetch.js'
+import * as autoModeStateModuleImpl from './permissions/autoModeState.js'
+import * as briefToolPromptModule from '../tools/BriefTool/prompt.js'
+import * as sessionTranscriptModuleImpl from '../services/sessionTranscript/sessionTranscript.js'
+import * as snipCompactModule from '../services/compact/snipCompact.js'
 const BRIEF_TOOL_NAME: string | null =
   feature('KAIROS') || feature('KAIROS_BRIEF')
-    ? (
-        require('../tools/BriefTool/prompt.js') as typeof import('../tools/BriefTool/prompt.js')
-      ).BRIEF_TOOL_NAME
+    ? briefToolPromptModule.BRIEF_TOOL_NAME
     : null
 const sessionTranscriptModule = feature('KAIROS')
-  ? (require('../services/sessionTranscript/sessionTranscript.js') as typeof import('../services/sessionTranscript/sessionTranscript.js'))
+  ? sessionTranscriptModuleImpl
   : null
-/* eslint-enable @typescript-eslint/no-require-imports */
 import { hasUltrathinkKeyword, isUltrathinkEnabled } from './thinking.js'
 import {
   tokenCountFromLastAPIResponse,
@@ -2759,17 +2779,9 @@ async function loadSkillCommands(
   mcpCommands: Command[],
 ): Promise<{ localCommands: Command[]; mcpSkills: Command[] }> {
   try {
-    // Keep the full CLI command registry out of headless Gateway bundles.
-    const requireFn = eval('require') as (id: string) => unknown
-    const module = requireFn('..' + '/commands.js') as {
-      getSkillToolCommands?: (cwd: string) => Promise<Command[]>
-      getMcpSkillCommands?: (commands: Command[]) => Command[]
-    }
-    const localCommands = await (module.getSkillToolCommands?.(cwd) ??
-      Promise.resolve([]))
-    const mcpSkills = module.getMcpSkillCommands?.(mcpCommands) ??
-      mcpCommands.filter(cmd => cmd.loadedFrom === 'mcp')
-    return { localCommands, mcpSkills }
+    const localCommands = await getSkillToolCommands(cwd)
+    const mcpSkills = getMcpSkillCommands(mcpCommands)
+    return { localCommands, mcpSkills: [...mcpSkills] }
   } catch {
     return {
       localCommands: [],
@@ -2783,19 +2795,9 @@ async function formatSkillCommandsWithinBudget(
   contextWindowTokens: number,
 ): Promise<string> {
   try {
-    const requireFn = eval('require') as (id: string) => unknown
-    const module = requireFn('..' + '/tools/SkillTool/prompt.js') as {
-      formatCommandsWithinBudget?: (
-        commands: Command[],
-        contextWindowTokens: number,
-      ) => string
-    }
-    if (typeof module.formatCommandsWithinBudget === 'function') {
-      return module.formatCommandsWithinBudget(commands, contextWindowTokens)
-    }
+    return formatCommandsWithinBudget(commands, contextWindowTokens)
   } catch {
-    // Fall through to a simple command listing when the CLI SkillTool prompt
-    // module is intentionally absent from a headless bundle.
+    // Fall through to a simple command listing when formatting fails.
   }
   return commands
     .map(cmd => {
@@ -4115,11 +4117,15 @@ export function getContextEfficiencyAttachment(
   if (!feature('HISTORY_SNIP')) {
     return []
   }
-  // Gate must match SnipTool.isEnabled() â€?don't nudge toward a tool that
-  // isn't in the tool list. Lazy require keeps this file snip-string-free.
-  const { isSnipRuntimeEnabled, shouldNudgeForSnips } =
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('../services/compact/snipCompact.js') as typeof import('../services/compact/snipCompact.js')
+  const snipRuntime = snipCompactModule as Record<string, unknown>
+  const isSnipRuntimeEnabled =
+    typeof snipRuntime.isSnipRuntimeEnabled === 'function'
+      ? (snipRuntime.isSnipRuntimeEnabled as () => boolean)
+      : () => false
+  const shouldNudgeForSnips =
+    typeof snipRuntime.shouldNudgeForSnips === 'function'
+      ? (snipRuntime.shouldNudgeForSnips as (messages: Message[]) => boolean)
+      : () => false
   if (!isSnipRuntimeEnabled()) {
     return []
   }

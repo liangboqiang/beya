@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "desktop/index.html",
+  "entry": "desktop/index.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-06-05T14:31:49.733Z",
+  "updatedAt": "2026-06-05T14:31:49.733Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

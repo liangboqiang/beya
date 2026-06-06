@@ -1,58 +1,68 @@
 import { feature } from 'bun:bundle'
 import { shouldAutoEnableClaudeInChrome } from 'src/utils/claudeInChrome/setup.js'
+import { registerBatchSkill } from './batch.js'
+import { registerClaudeApiSkill } from './claudeApi.js'
+import { registerClaudeInChromeSkill } from './claudeInChrome.js'
+import { registerDebugSkill } from './debug.js'
+import { registerKeybindingsSkill } from './keybindings.js'
+import { registerLoopSkill } from './loop.js'
+import { registerLoremIpsumSkill } from './loremIpsum.js'
+import { registerRememberSkill } from './remember.js'
+import { registerScheduleRemoteAgentsSkill } from './scheduleRemoteAgents.js'
+import { registerSimplifySkill } from './simplify.js'
+import { registerSkillifySkill } from './skillify.js'
+import { registerStuckSkill } from './stuck.js'
+import { registerUpdateConfigSkill } from './updateConfig.js'
+import { registerVerifySkill } from './verify.js'
 
 /**
  * Initialize all bundled skills.
  * Called at startup to register skills that ship with the CLI.
  *
- * To add a new bundled skill:
- * 1. Create a new file in src/skills/bundled/ (e.g., myskill.ts)
- * 2. Export a register function that calls registerBundledSkill()
- * 3. Import and call that function here
+ * Keep this file ESM-only. It runs inside the packaged beya-server executable,
+ * where CommonJS require is not available.
  */
 export function initBundledSkills(): void {
-  /* eslint-disable @typescript-eslint/no-require-imports */
-  require('./updateConfig.js').registerUpdateConfigSkill()
-  require('./keybindings.js').registerKeybindingsSkill()
-  require('./verify.js').registerVerifySkill()
-  require('./debug.js').registerDebugSkill()
-  require('./loremIpsum.js').registerLoremIpsumSkill()
-  require('./skillify.js').registerSkillifySkill()
-  require('./remember.js').registerRememberSkill()
-  require('./simplify.js').registerSimplifySkill()
-  require('./batch.js').registerBatchSkill()
-  require('./stuck.js').registerStuckSkill()
+  registerUpdateConfigSkill()
+  registerKeybindingsSkill()
+  registerVerifySkill()
+  registerDebugSkill()
+  registerLoremIpsumSkill()
+  registerSkillifySkill()
+  registerRememberSkill()
+  registerSimplifySkill()
+  registerBatchSkill()
+  registerStuckSkill()
+
   if (feature('KAIROS') || feature('KAIROS_DREAM')) {
-    const { registerDreamSkill } = require('./dream.js')
-    registerDreamSkill()
+    void import('./dream.js').then(module => {
+      const register = (module as Record<string, unknown>).registerDreamSkill
+      if (typeof register === 'function') register()
+    })
   }
   if (feature('REVIEW_ARTIFACT')) {
-    const { registerHunterSkill } = require('./hunter.js')
-    registerHunterSkill()
+    void import('./hunter.js').then(module => {
+      const register = (module as Record<string, unknown>).registerHunterSkill
+      if (typeof register === 'function') register()
+    })
   }
   if (feature('AGENT_TRIGGERS')) {
-    const { registerLoopSkill } = require('./loop.js')
-    // /loop's isEnabled delegates to isKairosCronEnabled() — same lazy
-    // per-invocation pattern as the cron tools. Registered unconditionally;
-    // the skill's own isEnabled callback decides visibility.
     registerLoopSkill()
   }
   if (feature('AGENT_TRIGGERS_REMOTE')) {
-    const {
-      registerScheduleRemoteAgentsSkill,
-    } = require('./scheduleRemoteAgents.js')
     registerScheduleRemoteAgentsSkill()
   }
   if (feature('BUILDING_CLAUDE_APPS')) {
-    const { registerClaudeApiSkill } = require('./claudeApi.js')
     registerClaudeApiSkill()
   }
   if (shouldAutoEnableClaudeInChrome()) {
-    require('./claudeInChrome.js').registerClaudeInChromeSkill()
+    registerClaudeInChromeSkill()
   }
   if (feature('RUN_SKILL_GENERATOR')) {
-    const { registerRunSkillGeneratorSkill } = require('./runSkillGenerator.js')
-    registerRunSkillGeneratorSkill()
+    void import('./runSkillGenerator.js').then(module => {
+      const register = (module as Record<string, unknown>)
+        .registerRunSkillGeneratorSkill
+      if (typeof register === 'function') register()
+    })
   }
-  /* eslint-enable @typescript-eslint/no-require-imports */
 }

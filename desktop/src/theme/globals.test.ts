@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import css from './globals.css?raw'
+import { THEME_MODES } from '../types/settings'
 
 const normalizedCss = css.replace(/\r\n/g, '\n')
 
-function getThemeBlock(selector: ':root,\n[data-theme="light"]' | '[data-theme="white"]' | '[data-theme="dark"]') {
+function getThemeBlock(selector: string) {
   const start = normalizedCss.indexOf(`${selector} {`)
   expect(start).toBeGreaterThanOrEqual(0)
 
@@ -78,6 +79,19 @@ describe('desktop theme tokens', () => {
         expect(block, `${theme} should define ${token}`).toContain(`${token}:`)
       }
     }
+  })
+
+  it('has a CSS selector for every selectable theme mode', () => {
+    for (const theme of THEME_MODES) {
+      expect(normalizedCss).toContain(`[data-theme="${theme}"]`)
+    }
+  })
+
+  it('defines OpenDesign Studio and Midnight Console design tokens', () => {
+    expect(getThemeBlock('[data-theme="opendesign"]')).toContain('--color-primary: #6C5CE7;')
+    expect(getThemeBlock('[data-theme="opendesign"]')).toContain('--color-surface: #F7F6FB;')
+    expect(getThemeBlock('[data-theme="midnight"]')).toContain('color-scheme: dark;')
+    expect(getThemeBlock('[data-theme="midnight"]')).toContain('--color-primary: #7DD3FC;')
   })
 
   it('keeps activity heatmap colors on the app theme accent instead of the old blue ramp', () => {

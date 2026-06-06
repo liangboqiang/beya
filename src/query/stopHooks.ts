@@ -50,6 +50,7 @@ import {
   createCacheSafeParams,
   saveCacheSafeParams,
 } from '../utils/forkedAgent.js'
+import { getShortcutDisplay as formatShortcutDisplay } from '../keybindings/shortcutFormat.js'
 
 type StopHookResult = {
   blockingErrors: Message[]
@@ -62,15 +63,7 @@ function getShortcutDisplay(
   fallback: string,
 ): string {
   try {
-    const requireFn = eval('require') as (id: string) => unknown
-    const module = requireFn('../keybindings/shortcutFormat.js') as {
-      getShortcutDisplay?: (
-        action: string,
-        context: string,
-        fallback: string,
-      ) => string
-    }
-    return module.getShortcutDisplay?.(action, context, fallback) ?? fallback
+    return formatShortcutDisplay(action, context, fallback)
   } catch {
     return fallback
   }
@@ -82,12 +75,18 @@ const opaqueImport = new Function(
 ) as (specifier: string) => Promise<Record<string, unknown>>
 
 async function executePromptSuggestion(context: REPLHookContext): Promise<void> {
-  const module = await opaqueImport(
-    '../services/PromptSuggestion/promptSuggestion.js',
-  )
-  const fn = module.executePromptSuggestion
-  if (typeof fn === 'function') {
-    await fn(context)
+  try {
+    const module = await opaqueImport(
+      '../services/PromptSuggestion/promptSuggestion.js',
+    )
+    const fn = module.executePromptSuggestion
+    if (typeof fn === 'function') {
+      await fn(context)
+    }
+  } catch (err) {
+    logForDebugging(
+      `[stopHooks] prompt suggestion skipped: ${errorMessage(err)}`,
+    )
   }
 }
 
@@ -121,10 +120,14 @@ async function executeAutoDream(
   context: REPLHookContext,
   appendSystemMessage: ToolUseContext['appendSystemMessage'],
 ): Promise<void> {
-  const module = await opaqueImport('../services/autoDream/autoDream.js')
-  const fn = module.executeAutoDream
-  if (typeof fn === 'function') {
-    await fn(context, appendSystemMessage)
+  try {
+    const module = await opaqueImport('../services/autoDream/autoDream.js')
+    const fn = module.executeAutoDream
+    if (typeof fn === 'function') {
+      await fn(context, appendSystemMessage)
+    }
+  } catch (err) {
+    logForDebugging(`[stopHooks] auto-dream skipped: ${errorMessage(err)}`)
   }
 }
 

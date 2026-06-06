@@ -1,9 +1,10 @@
 param(
   [string]$HostAddress = "127.0.0.1",
   [int]$ServerPort = 3456,
-  [int]$WebPort = 2024,
+  [int]$WebPort = 5173,
   [int]$MaxPortScan = 100,
-  [string]$LogDir = ""
+  [string]$LogDir = "",
+  [switch]$NoOpen
 )
 
 $ErrorActionPreference = "Stop"
@@ -141,9 +142,12 @@ try {
   Wait-Http "$serverUrl/api/health" $serverLog { -not $server.HasExited }
 
   Write-Host "Starting Web UI: http://${HostAddress}:$webPortResolved"
+  $webStartedAt = (Get-Date).ToUniversalTime().ToString("o")
   $webCommand = @(
     "Set-Location -LiteralPath $(Quote-PowerShell $desktopDir)"
     "`$env:VITE_DESKTOP_SERVER_URL='$serverUrl'"
+    "`$env:VITE_BEYA_WEB_STARTED_AT='$webStartedAt'"
+    "`$env:VITE_BEYA_WEB_PORT='$webPortResolved'"
     "& $(Quote-PowerShell $bun) run dev -- --host $(Quote-PowerShell $HostAddress) --port $webPortResolved --strictPort"
   ) -join "; "
   $web = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $webCommand) -RedirectStandardOutput $webLog -RedirectStandardError $webErr -WindowStyle Hidden -PassThru
@@ -153,6 +157,14 @@ try {
   Write-Host ""
   Write-Host "Web UI is ready:"
   Write-Host "  $webUrl"
+  if (-not $NoOpen) {
+    try {
+      Start-Process $webUrl
+      Write-Host "Opened Web UI in your browser."
+    } catch {
+      Write-Warning "Unable to open the browser automatically. Open this URL manually: $webUrl"
+    }
+  }
   Write-Host ""
   Write-Host "Backend:"
   Write-Host "  $serverUrl"

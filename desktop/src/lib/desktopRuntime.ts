@@ -11,6 +11,7 @@ import { zh } from '../i18n/locales/zh'
 
 export const H5_SERVER_URL_STORAGE_KEY = 'beya-h5-server-url'
 export const H5_TOKEN_STORAGE_KEY = 'beya-h5-token'
+const LOOPBACK_DISCOVERY_PORT_COUNT = 100
 
 type H5ConnectionFailureReason =
   | 'missing-token'
@@ -154,11 +155,12 @@ async function initializeBrowserServerUrl(fallbackUrl: string) {
   const queryToken = normalizeToken(query?.get('h5Token') ?? query?.get('token'))
   const stored = readStoredH5Connection()
   const configuredUrl = getConfiguredBrowserServerUrl(fallbackUrl)
-  const requestedUrl =
-    normalizeServerUrl(queryUrl) ??
-    configuredUrl ??
-    stored.serverUrl ??
-    fallbackUrl
+  const requestedUrl = await resolveBrowserServerUrl({
+    queryUrl,
+    configuredUrl,
+    storedUrl: stored.serverUrl,
+    fallbackUrl,
+  })
   const token = queryToken ?? stored.token
   const browserH5Runtime = requiresH5AuthForServerUrl(requestedUrl)
 
@@ -210,40 +212,133 @@ async function initializeBrowserServerUrl(fallbackUrl: string) {
   return requestedUrl
 }
 
+async function resolveBrowserServerUrl({
+  queryUrl,
+  configuredUrl,
+  storedUrl,
+  fallbackUrl,
+}: {
+  queryUrl: string | null
+  configuredUrl: string | null
+  storedUrl: string | null
+  fallbackUrl: string
+}) {
+  const normalizedQueryUrl = normalizeServerUrl(queryUrl)
+  if (normalizedQueryUrl) return normalizedQueryUrl
+
+  if (hasExplicitDefaultBaseUrl()) {
+    return configuredUrl ?? fallbackUrl
+  }
+
+  if (configuredUrl) {
+    if (await isHealthyServer(configuredUrl)) {
+      return configuredUrl
+    }
+
+    if (shouldDiscoverLoopbackServer(configuredUrl, fallbackUrl)) {
+      const discoveredUrl = await discoverLoopbackServerUrl(fallbackUrl)
+      if (discoveredUrl) return discoveredUrl
+      return fallbackUrl
+    }
+
+    return configuredUrl
+  }
+
+  if (storedUrl) return storedUrl
+
+  return await discoverLoopbackServerUrl(fallbackUrl) ?? fallbackUrl
+}
+
 async function waitForHealth(serverUrl: string) {
   let lastError: unknown
-  const healthUrl = `${serverUrl}/api/health`
 
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < 120; attempt++) {
     try {
-      const response = await fetch(healthUrl, {
-        cache: 'no-store',
-      })
-      if (response.ok) {
-        const contentType = response.headers.get('content-type') ?? ''
-        if (!contentType.toLowerCase().includes('application/json')) {
-          lastError = new Error(`healthcheck returned non-JSON response from ${healthUrl}`)
-        } else {
-          const body = await response.json().catch(() => null)
-          if (body && typeof body === 'object' && 'status' in body && body.status === 'ok') {
-            return
-          }
-          lastError = new Error(`healthcheck returned invalid response from ${healthUrl}`)
-        }
-      } else {
-        lastError = new Error(`healthcheck returned ${response.status}`)
-      }
+      await assertHealthyServer(serverUrl)
+      return
     } catch (error) {
       lastError = error
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await new Promise((resolve) => setTimeout(resolve, 500))
   }
 
   throw new Error(
     lastError instanceof Error
       ? `Server healthcheck failed: ${lastError.message}`
       : 'Server healthcheck failed',
+  )
+}
+
+async function isHealthyServer(serverUrl: string) {
+  try {
+    await assertHealthyServer(serverUrl)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function assertHealthyServer(serverUrl: string) {
+  const healthUrl = `${serverUrl}/api/health`
+  const response = await fetch(healthUrl, {
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    throw new Error(`healthcheck returned ${response.status}`)
+  }
+
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(`healthcheck returned non-JSON response from ${healthUrl}`)
+  }
+
+  const body = await response.json().catch(() => null)
+  if (body && typeof body === 'object' && 'status' in body && body.status === 'ok') {
+    return
+  }
+
+  throw new Error(`healthcheck returned invalid response from ${healthUrl}`)
+}
+
+async function discoverLoopbackServerUrl(fallbackUrl: string) {
+  for (const candidate of buildLoopbackServerCandidates(fallbackUrl)) {
+    if (await isHealthyServer(candidate)) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function buildLoopbackServerCandidates(fallbackUrl: string) {
+  const fallback = parseUrl(fallbackUrl)
+  if (!fallback || !isLoopbackHostname(fallback.hostname)) {
+    return []
+  }
+
+  const startPort = Number(fallback.port || '80')
+  const urls: string[] = []
+  for (let offset = 0; offset <= LOOPBACK_DISCOVERY_PORT_COUNT; offset++) {
+    const port = startPort + offset
+    urls.push(`${fallback.protocol}//127.0.0.1:${port}`)
+    if (fallback.hostname !== '127.0.0.1') {
+      urls.push(`${fallback.protocol}//${fallback.hostname}:${port}`)
+    }
+  }
+
+  return Array.from(new Set(urls))
+}
+
+function shouldDiscoverLoopbackServer(configuredUrl: string, fallbackUrl: string) {
+  const configured = parseUrl(configuredUrl)
+  const fallback = parseUrl(fallbackUrl)
+  if (!configured || !fallback) return false
+  return (
+    isLoopbackHostname(configured.hostname) &&
+    isLoopbackHostname(fallback.hostname) &&
+    configured.port !== fallback.port
   )
 }
 
@@ -270,6 +365,14 @@ function normalizeServerUrl(value: string | null | undefined) {
 
   try {
     return new URL(trimmed).toString().replace(/\/$/, '')
+  } catch {
+    return null
+  }
+}
+
+function parseUrl(value: string) {
+  try {
+    return new URL(value)
   } catch {
     return null
   }

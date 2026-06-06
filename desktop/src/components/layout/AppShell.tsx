@@ -22,8 +22,48 @@ import { H5ConnectionView } from './H5ConnectionView'
 import { useMobileViewport } from '../../hooks/useMobileViewport'
 import type { Tab } from '../../stores/tabStore'
 
+const NATIVE_STARTUP_AUTO_RESTART_KEY = 'beya-native-startup-auto-restart-count'
+
 function isChatTab(tab: Tab | undefined) {
   return tab?.type === 'session'
+}
+
+function readNativeStartupAutoRestartCount() {
+  try {
+    return Number(window.localStorage.getItem(NATIVE_STARTUP_AUTO_RESTART_KEY) || '0') || 0
+  } catch {
+    return 0
+  }
+}
+
+function markNativeStartupAutoRestartAttempted() {
+  try {
+    window.localStorage.setItem(NATIVE_STARTUP_AUTO_RESTART_KEY, '1')
+  } catch {
+    // If localStorage is unavailable, still attempt the restart once for this process.
+  }
+}
+
+function clearNativeStartupAutoRestartAttempt() {
+  try {
+    window.localStorage.removeItem(NATIVE_STARTUP_AUTO_RESTART_KEY)
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
+function shouldAutoRestartNativeStartup() {
+  if (typeof window === 'undefined') return false
+  if (readNativeStartupAutoRestartCount() >= 1) return false
+  markNativeStartupAutoRestartAttempted()
+  return true
+}
+
+async function relaunchDesktopApp() {
+  const { invoke } = await import('@tauri-apps/api/core')
+  await invoke('prepare_for_app_mode_restart')
+  const { relaunch } = await import('@tauri-apps/plugin-process')
+  await relaunch()
 }
 
 export function AppShell() {
@@ -73,12 +113,15 @@ export function AppShell() {
         setH5StartupError(null)
       }
 
+      let serverInitialized = false
       try {
         await initializeDesktopServerUrl()
+        serverInitialized = true
         await fetchSettings()
 
         if (!cancelled) {
           setReady(true)
+          clearNativeStartupAutoRestartAttempt()
         }
 
         void (async () => {
@@ -92,6 +135,20 @@ export function AppShell() {
         })().catch(() => {})
       } catch (error) {
         if (!cancelled) {
+          if (tauriRuntime && !serverInitialized && shouldAutoRestartNativeStartup()) {
+            void relaunchDesktopApp().catch((restartError) => {
+              console.error('[desktop] Automatic restart after startup failure failed', restartError)
+              if (!cancelled) {
+                const message = error instanceof Error ? error.message : String(error)
+                const restartMessage = restartError instanceof Error ? restartError.message : String(restartError)
+                setStartupError(`${message}\n\nRestart failed: ${restartMessage}`)
+                setH5StartupError(null)
+                setReady(false)
+              }
+            })
+            return
+          }
+
           if (!tauriRuntime && isH5ConnectionRequiredError(error)) {
             setH5StartupError(error)
             setStartupError(null)
@@ -171,6 +228,21 @@ export function AppShell() {
     toggleSidebar()
   }
 
+  const restartFromStartupError = async () => {
+    if (tauriRuntime) {
+      try {
+        await relaunchDesktopApp()
+        return
+      } catch (error) {
+        console.error('[desktop] Native restart after startup failure failed', error)
+        window.location.reload()
+        return
+      }
+    }
+
+    setBootstrapNonce((value) => value + 1)
+  }
+
   if (!tauriRuntime && h5StartupError) {
     return (
       <H5ConnectionView
@@ -182,7 +254,7 @@ export function AppShell() {
   }
 
   if (startupError) {
-    return <StartupErrorView error={startupError} />
+    return <StartupErrorView error={startupError} onRestart={restartFromStartupError} />
   }
 
   if (!ready) {

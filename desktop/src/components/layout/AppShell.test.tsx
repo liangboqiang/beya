@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   restoreTabs: vi.fn(),
   connectToSession: vi.fn(),
   setActiveTab: vi.fn(),
+  tauriInvoke: vi.fn(),
+  tauriRelaunch: vi.fn(),
   tabState: {
     activeTabId: null as string | null,
     tabs: [] as Array<{ sessionId: string; title: string; type: string; status: string }>,
@@ -23,6 +25,14 @@ vi.mock('../../lib/desktopRuntime', () => ({
   isTauriRuntime: () => mocks.isTauriRuntime,
   isH5ConnectionRequiredError: (error: unknown) =>
     error instanceof Error && error.name === 'H5ConnectionRequiredError',
+}))
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: mocks.tauriInvoke,
+}))
+
+vi.mock('@tauri-apps/plugin-process', () => ({
+  relaunch: mocks.tauriRelaunch,
 }))
 
 vi.mock('../../stores/settingsStore', () => ({
@@ -116,11 +126,14 @@ describe('AppShell boot flow', () => {
     mocks.initializeDesktopServerUrl.mockResolvedValue('http://127.0.0.1:3456')
     mocks.fetchAll.mockResolvedValue(undefined)
     mocks.restoreTabs.mockResolvedValue(undefined)
+    mocks.tauriInvoke.mockResolvedValue(undefined)
+    mocks.tauriRelaunch.mockResolvedValue(undefined)
     mocks.setActiveTab.mockImplementation((sessionId: string) => {
       mocks.tabState.activeTabId = sessionId
     })
     mocks.tabState.activeTabId = null
     mocks.tabState.tabs = []
+    window.localStorage.removeItem('beya-native-startup-auto-restart-count')
     useSessionStore.setState({ sessions: [], activeSessionId: null, isLoading: false, error: null })
     useUIStore.setState({ sidebarOpen: true })
   })
@@ -142,8 +155,25 @@ describe('AppShell boot flow', () => {
     render(<AppShell />)
 
     expect(await screen.findByText('app.serverFailed')).toBeInTheDocument()
-    expect(screen.getByText('settings file could not be read')).toBeInTheDocument()
+    expect(screen.getAllByText('settings file could not be read')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'app.restart' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'app.copyDiagnostics' })).not.toBeInTheDocument()
     expect(screen.queryByText('sidebar loaded')).not.toBeInTheDocument()
+  })
+
+  it('retries browser bootstrap from the startup restart button', async () => {
+    mocks.fetchAll
+      .mockRejectedValueOnce(new Error('settings file could not be read'))
+      .mockResolvedValueOnce(undefined)
+
+    render(<AppShell />)
+
+    expect(await screen.findByText('app.serverFailed')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'app.restart' }))
+
+    expect(await screen.findByText('sidebar loaded')).toBeInTheDocument()
+    expect(mocks.initializeDesktopServerUrl).toHaveBeenCalledTimes(2)
+    expect(mocks.fetchAll).toHaveBeenCalledTimes(2)
   })
 
   it('keeps the app usable when persisted tab restore fails', async () => {
@@ -227,8 +257,24 @@ describe('AppShell boot flow', () => {
     expect(mocks.fetchAll).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps the Tauri startup error path unchanged', async () => {
+  it('automatically restarts the Tauri app once when local server startup fails', async () => {
     mocks.isTauriRuntime = true
+    mocks.initializeDesktopServerUrl.mockRejectedValueOnce(
+      new Error('desktop server startup failed'),
+    )
+
+    render(<AppShell />)
+
+    await waitFor(() => {
+      expect(mocks.tauriInvoke).toHaveBeenCalledWith('prepare_for_app_mode_restart')
+    })
+    expect(mocks.tauriRelaunch).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('app.serverFailed')).not.toBeInTheDocument()
+  })
+
+  it('shows the Tauri startup error after the one automatic restart has already been used', async () => {
+    mocks.isTauriRuntime = true
+    window.localStorage.setItem('beya-native-startup-auto-restart-count', '1')
     mocks.initializeDesktopServerUrl.mockRejectedValueOnce(
       Object.assign(new Error('desktop server startup failed'), {
         name: 'H5ConnectionRequiredError',
@@ -240,6 +286,7 @@ describe('AppShell boot flow', () => {
 
     expect(await screen.findByText('app.serverFailed')).toBeInTheDocument()
     expect(screen.queryByText('h5 connection view')).not.toBeInTheDocument()
+    expect(mocks.tauriRelaunch).not.toHaveBeenCalled()
   })
 
   it('renders a mobile drawer toggle and backdrop in browser H5 mode', async () => {

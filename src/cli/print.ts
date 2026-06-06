@@ -19,6 +19,10 @@ import { installStreamJsonStdoutGuard } from 'src/utils/streamJsonStdoutGuard.js
 import type { ToolPermissionContext } from 'src/Tool.js'
 import type { ThinkingConfig } from 'src/utils/thinking.js'
 import { assembleToolPool, filterToolsByDenyRules } from 'src/tools.js'
+import {
+  loadRuntimePluginTools,
+  parseRuntimeMetadata,
+} from 'src/services/runtimePluginTools.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { uniq } from 'src/utils/array.js'
 import { mergeAndFilterTools } from 'src/utils/toolPool.js'
@@ -1467,6 +1471,16 @@ function runHeadlessStreaming(
     tools: [],
     configs: {},
   }
+  const runtimePluginMetadata = parseRuntimeMetadata()
+  let runtimePluginTools: Tools = []
+  const runtimePluginToolsReady = loadRuntimePluginTools({
+    sessionId: getSessionId(),
+    metadata: runtimePluginMetadata,
+  }).then(tools => {
+    runtimePluginTools = tools
+  }).catch(error => {
+    logError(error)
+  })
 
   // Shared tool assembly for ask() and the get_context_usage control request.
   // Closes over the mutable sdkTools/dynamicMcpState bindings so both call
@@ -1478,7 +1492,7 @@ function runHeadlessStreaming(
     )
     let allTools = uniqBy(
       mergeAndFilterTools(
-        [...tools, ...sdkTools, ...dynamicMcpState.tools],
+        [...tools, ...runtimePluginTools, ...sdkTools, ...dynamicMcpState.tools],
         assembledTools,
         appState.toolPermissionContext.mode,
       ),
@@ -2139,6 +2153,7 @@ function runHeadlessStreaming(
             ? Date.now()
             : undefined
 
+          await runtimePluginToolsReady
           headlessProfilerCheckpoint('before_ask')
           startQueryProfile()
           // Per-iteration ALS context so bg agents spawned inside ask()
@@ -3094,10 +3109,14 @@ function runHeadlessStreaming(
             // read failure doesn't mask the successful state change.
             // allSettled so one failure doesn't discard the others.
             let plugins: SDKControlReloadPluginsResponse['plugins'] = []
-            const [cmdsR, mcpR, pluginsR] = await Promise.allSettled([
+            const [cmdsR, mcpR, pluginsR, toolsR] = await Promise.allSettled([
               getCommands(cwd()),
               applyPluginMcpDiff(),
               loadAllPluginsCacheOnly(),
+              loadRuntimePluginTools({
+                sessionId: getSessionId(),
+                metadata: runtimePluginMetadata,
+              }),
             ])
             if (cmdsR.status === 'fulfilled') {
               currentCommands = cmdsR.value
@@ -3115,6 +3134,11 @@ function runHeadlessStreaming(
               }))
             } else {
               logError(pluginsR.reason)
+            }
+            if (toolsR.status === 'fulfilled') {
+              runtimePluginTools = toolsR.value
+            } else {
+              logError(toolsR.reason)
             }
 
             sendControlResponseSuccess(message, {

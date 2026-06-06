@@ -829,7 +829,7 @@ describe('settingsStore theme persistence', () => {
     document.documentElement.style.colorScheme = ''
   })
 
-  it('falls back to the pure white theme when user settings have no theme', async () => {
+  it('falls back to the project design style when user settings have no theme', async () => {
     vi.doMock('../api/settings', () => ({
       settingsApi: {
         getUser: vi.fn().mockResolvedValue({}),
@@ -870,16 +870,16 @@ describe('settingsStore theme persistence', () => {
 
     await useSettingsStore.getState().fetchAll()
 
-    expect(useSettingsStore.getState().theme).toBe('white')
-    expect(useUIStore.getState().theme).toBe('white')
-    expect(document.documentElement.getAttribute('data-theme')).toBe('white')
+    expect(useSettingsStore.getState().theme).toBe('opendesign')
+    expect(useUIStore.getState().theme).toBe('opendesign')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('opendesign')
     expect(document.documentElement.style.colorScheme).toBe('light')
   })
 
-  it('hydrates the pure white theme from user settings', async () => {
+  it('hydrates a design style from user settings', async () => {
     vi.doMock('../api/settings', () => ({
       settingsApi: {
-        getUser: vi.fn().mockResolvedValue({ theme: 'white' }),
+        getUser: vi.fn().mockResolvedValue({ theme: 'midnight' }),
         updateUser: vi.fn(),
         getPermissionMode: vi.fn().mockResolvedValue({ mode: 'default' }),
         setPermissionMode: vi.fn(),
@@ -917,10 +917,10 @@ describe('settingsStore theme persistence', () => {
 
     await useSettingsStore.getState().fetchAll()
 
-    expect(useSettingsStore.getState().theme).toBe('white')
-    expect(useUIStore.getState().theme).toBe('white')
-    expect(document.documentElement.getAttribute('data-theme')).toBe('white')
-    expect(document.documentElement.style.colorScheme).toBe('light')
+    expect(useSettingsStore.getState().theme).toBe('midnight')
+    expect(useUIStore.getState().theme).toBe('midnight')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('midnight')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
   })
 })
 

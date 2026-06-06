@@ -1,9 +1,7 @@
-import { Copy, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useTranslation } from '../../i18n'
 import { Button } from '../shared/Button'
-import { DoctorPanel } from '../doctor/DoctorPanel'
-import { copyTextToClipboard } from '../chat/clipboard'
 
 const LOG_MARKER = '\n\nRecent server logs:\n'
 
@@ -28,19 +26,26 @@ export function splitStartupError(error: string) {
 
 type StartupErrorViewProps = {
   error: string
+  onRestart?: () => Promise<void> | void
 }
 
-export function StartupErrorView({ error }: StartupErrorViewProps) {
+export function StartupErrorView({ error, onRestart }: StartupErrorViewProps) {
   const t = useTranslation()
   const { message, logs, diagnostics } = useMemo(() => splitStartupError(error), [error])
-  const [copied, setCopied] = useState(false)
+  const [restarting, setRestarting] = useState(false)
 
-  const handleCopy = async () => {
-    const ok = await copyTextToClipboard(diagnostics)
-    if (!ok) return
-
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1600)
+  const handleRestart = async () => {
+    setRestarting(true)
+    try {
+      if (onRestart) {
+        await onRestart()
+        return
+      }
+      window.location.reload()
+    } catch (error) {
+      console.error('[desktop] Restart from startup error view failed', error)
+      setRestarting(false)
+    }
   }
 
   return (
@@ -65,39 +70,27 @@ export function StartupErrorView({ error }: StartupErrorViewProps) {
             </pre>
           </div>
 
-          {logs ? (
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-              <div className="text-xs font-medium uppercase text-[var(--color-text-tertiary)]">
-                {t('app.serverLogs')}
-              </div>
-              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-[var(--color-text-secondary)]">
-                {logs}
-              </pre>
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap items-center gap-2">
+          <div>
             <Button
               type="button"
-              variant="secondary"
-              size="sm"
-              icon={<Copy className="h-4 w-4" aria-hidden="true" />}
-              onClick={handleCopy}
-            >
-              {copied ? t('app.copiedDiagnostics') : t('app.copyDiagnostics')}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
+              variant="primary"
+              size="md"
+              loading={restarting}
               icon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
-              onClick={() => window.location.reload()}
+              onClick={handleRestart}
             >
-              {t('common.retry')}
+              {restarting ? t('app.restarting') : t('app.restart')}
             </Button>
           </div>
 
-          <DoctorPanel compact />
+          <details className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+            <summary className="cursor-pointer text-xs font-medium uppercase text-[var(--color-text-tertiary)]">
+              {t('app.diagnostics')}
+            </summary>
+            <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-[var(--color-text-secondary)]">
+              {logs ? diagnostics : message}
+            </pre>
+          </details>
         </div>
       </section>
     </div>

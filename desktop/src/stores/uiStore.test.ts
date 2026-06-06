@@ -8,12 +8,12 @@ describe('uiStore theme handling', () => {
     document.documentElement.style.colorScheme = ''
   })
 
-  it('defaults new installs to the pure white theme', async () => {
+  it('defaults new installs to the project design style', async () => {
     const { initializeTheme, useUIStore } = await import('./uiStore')
 
-    expect(useUIStore.getState().theme).toBe('white')
+    expect(useUIStore.getState().theme).toBe('opendesign')
     initializeTheme()
-    expect(document.documentElement.getAttribute('data-theme')).toBe('white')
+    expect(document.documentElement.getAttribute('data-theme')).toBe('opendesign')
     expect(document.documentElement.style.colorScheme).toBe('light')
   })
 
@@ -28,11 +28,23 @@ describe('uiStore theme handling', () => {
     expect(document.documentElement.style.colorScheme).toBe('light')
   })
 
-  it('cycles through pure white, warm classic, and dark themes', async () => {
+  it('cycles through the available design styles and uses dark scheme for dark styles', async () => {
     const { useUIStore } = await import('./uiStore')
 
     useUIStore.getState().toggleTheme()
+    expect(useUIStore.getState().theme).toBe('white')
+    expect(document.documentElement.style.colorScheme).toBe('light')
+
+    useUIStore.getState().toggleTheme()
     expect(useUIStore.getState().theme).toBe('light')
+    expect(document.documentElement.style.colorScheme).toBe('light')
+
+    useUIStore.getState().toggleTheme()
+    expect(useUIStore.getState().theme).toBe('graphite')
+    expect(document.documentElement.style.colorScheme).toBe('light')
+
+    useUIStore.getState().toggleTheme()
+    expect(useUIStore.getState().theme).toBe('forest')
     expect(document.documentElement.style.colorScheme).toBe('light')
 
     useUIStore.getState().toggleTheme()
@@ -40,7 +52,11 @@ describe('uiStore theme handling', () => {
     expect(document.documentElement.style.colorScheme).toBe('dark')
 
     useUIStore.getState().toggleTheme()
-    expect(useUIStore.getState().theme).toBe('white')
+    expect(useUIStore.getState().theme).toBe('midnight')
+    expect(document.documentElement.style.colorScheme).toBe('dark')
+
+    useUIStore.getState().toggleTheme()
+    expect(useUIStore.getState().theme).toBe('opendesign')
     expect(document.documentElement.style.colorScheme).toBe('light')
   })
 })

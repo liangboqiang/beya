@@ -8,6 +8,7 @@ declare global {
   interface Window {
     __BEYA_BOOTSTRAPPED__?: boolean
     __BEYA_SHOW_STARTUP_ERROR__?: (reason: unknown) => void
+    __BEYA_CLEAR_STARTUP_RETRY__?: () => void
   }
 }
 
@@ -48,6 +49,7 @@ export async function bootstrapDesktopApp(
       </React.StrictMode>,
     )
     window.__BEYA_BOOTSTRAPPED__ = true
+    window.__BEYA_CLEAR_STARTUP_RETRY__?.()
   } catch (error) {
     console.error('[desktop] Failed to bootstrap app', error)
     if (root) {

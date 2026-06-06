@@ -10,13 +10,20 @@
 
 export type ClientMessage =
   | { type: 'prewarm_session' }
-  | { type: 'user_message'; content: string; attachments?: AttachmentRef[] }
+  | {
+      type: 'user_message'
+      content: string
+      attachments?: AttachmentRef[]
+      metadata?: Record<string, unknown>
+    }
   | {
       type: 'permission_response'
       requestId: string
       allowed: boolean
       rule?: string
       updatedInput?: Record<string, unknown>
+      feedback?: string
+      contentBlocks?: unknown[]
     }
   | {
       type: 'computer_use_permission_response'

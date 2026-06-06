@@ -72,6 +72,7 @@ const runtimeOverrides = new Map<string, {
   modelId: string
   effort?: string
 }>()
+const runtimeMetadataOverrides = new Map<string, Record<string, unknown>>()
 
 const runtimeTransitionPromises = new Map<string, Promise<void>>()
 const sessionStartupPromises = new Map<string, Promise<void>>()
@@ -108,9 +109,14 @@ export type WebSocketData = {
   sessionId: string
   connectedAt: number
   channel: 'client' | 'sdk'
+  purpose?: 'chat' | 'sdk_chat' | 'interaction_response'
   sdkToken: string | null
   serverPort: number
   serverHost: string
+}
+
+function isSdkManagedClientPurpose(purpose: WebSocketData['purpose']): boolean {
+  return purpose === 'sdk_chat' || purpose === 'interaction_response'
 }
 
 // Active WebSocket clients, grouped by session. Desktop, H5, and IM adapters can
@@ -126,7 +132,7 @@ const clientOutputCallbacks = new Map<
 
 export const handleWebSocket = {
   open(ws: ServerWebSocket<WebSocketData>) {
-    const { sessionId, channel, sdkToken } = ws.data
+    const { sessionId, channel, sdkToken, purpose } = ws.data
 
     if (channel === 'sdk') {
       if (!conversationService.authorizeSdkConnection(sessionId, sdkToken)) {
@@ -158,7 +164,9 @@ export const handleWebSocket = {
 
     const msg: ServerMessage = { type: 'connected', sessionId }
     ws.send(JSON.stringify(msg))
-    replayPendingPermissionRequests(ws, sessionId)
+    if (!isSdkManagedClientPurpose(purpose)) {
+      replayPendingPermissionRequests(ws, sessionId)
+    }
   },
 
   message(ws: ServerWebSocket<WebSocketData>, rawMessage: string | Buffer) {
@@ -243,6 +251,11 @@ export const handleWebSocket = {
       return
     }
 
+    if (isSdkManagedClientPurpose(ws.data.purpose)) {
+      console.log(`[WS] SDK-managed session socket disconnected for session: ${sessionId}; runtime cleanup is left to the session owner`)
+      return
+    }
+
     computerUseApprovalService.cancelSession(sessionId)
 
     // Schedule delayed cleanup. Sessions waiting on user input need a longer
@@ -277,6 +290,7 @@ async function handleUserMessage(
   // Clear any stale stop flag from a previous turn
   sessionStopRequested.delete(sessionId)
   clearPrewarmState(sessionId)
+  setSessionRuntimeMetadata(sessionId, message.metadata)
 
   const desktopSlashCommand = getDesktopSlashCommand(message.content)
   if (desktopSlashCommand?.commandName === 'clear' && desktopSlashCommand.args.trim()) {
@@ -457,13 +471,23 @@ function handlePermissionResponse(
   message: Extract<ClientMessage, { type: 'permission_response' }>
 ) {
   const { sessionId } = ws.data
-  conversationService.respondToPermission(
+  const ok = conversationService.respondToPermission(
     sessionId,
     message.requestId,
     message.allowed,
     message.rule,
     message.updatedInput,
+    message.feedback,
   )
+  if (!ok) {
+    ws.send(JSON.stringify({
+      type: 'error',
+      code: 'PERMISSION_RESPONSE_NOT_PENDING',
+      message: `No pending permission request ${message.requestId} is active for session ${sessionId}`,
+      retryable: false,
+    } satisfies ServerMessage))
+    return
+  }
   console.log(`[WS] Permission response for ${message.requestId}: ${message.allowed}`)
 }
 
@@ -888,6 +912,7 @@ function cleanupSessionRuntimeState(sessionId: string) {
   sessionSlashCommands.delete(sessionId)
   sessionTitleState.delete(sessionId)
   runtimeOverrides.delete(sessionId)
+  runtimeMetadataOverrides.delete(sessionId)
   runtimeTransitionPromises.delete(sessionId)
   sessionStartupPromises.delete(sessionId)
   lastResolvedStartupWorkDirs.delete(sessionId)
@@ -980,10 +1005,13 @@ function isDuplicateOfLastApiError(
   resultMessage: string,
 ): boolean {
   if (!lastApiError?.message) return false
+  if (/(CLI|Agent runtime) (?:process )?(?:exited unexpectedly|exited during startup)/i.test(resultMessage)) {
+    return true
+  }
   if (resultMessage === lastApiError.message) return true
   return (
     resultMessage.includes(lastApiError.message) &&
-    /(CLI|Agent runtime) (?:process exited unexpectedly|exited during startup)/i.test(resultMessage)
+    /(CLI|Agent runtime) (?:process )?(?:exited unexpectedly|exited during startup)/i.test(resultMessage)
   )
 }
 
@@ -1904,6 +1932,24 @@ type RuntimeSettings = {
   effort?: string
   thinking?: 'disabled'
   providerId?: string | null
+  metadata?: Record<string, unknown>
+}
+
+function setSessionRuntimeMetadata(
+  sessionId: string,
+  metadata: unknown,
+): void {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return
+  }
+  runtimeMetadataOverrides.set(sessionId, metadata as Record<string, unknown>)
+}
+
+function getSessionRuntimeMetadata(
+  sessionId: string | undefined,
+): Record<string, unknown> | undefined {
+  if (!sessionId) return undefined
+  return runtimeMetadataOverrides.get(sessionId)
 }
 
 function isKnownRuntimeProviderId(
@@ -1947,6 +1993,7 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
         return {
           ...defaults,
           permissionMode: sessionPermissionMode ?? defaults.permissionMode,
+          metadata: getSessionRuntimeMetadata(sessionId),
         }
       }
     }
@@ -1960,6 +2007,7 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
       effort: runtimeOverride.effort,
       thinking,
       providerId: runtimeOverride.providerId,
+      metadata: getSessionRuntimeMetadata(sessionId),
     }
   }
 
@@ -1968,6 +2016,7 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
     ...defaults,
     permissionMode: sessionPermissionMode ?? defaults.permissionMode,
     effort: launchInfo?.effortLevel ?? defaults.effort,
+    metadata: getSessionRuntimeMetadata(sessionId),
   }
 }
 

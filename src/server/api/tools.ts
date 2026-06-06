@@ -9,47 +9,41 @@ import {
   createHeadlessToolUseContext,
 } from '../services/headlessRuntime.js'
 import {
-  getHeadlessBuiltInTools,
-  type HeadlessBuiltInTool,
-} from '../services/headlessBuiltInTools.js'
-import { loadInstalledBeyaPlugins } from '../services/beyaPluginRuntime.js'
-import { isExecutableToolDefinition, toolDefinitionToBeyaTool } from '../services/beyaToolDefinitions.js'
-import type { ToolDefinition } from '../types/serverRuntime.js'
+  loadSessionRuntimeSurface,
+  runtimeToolInfo,
+} from '../services/sessionRuntimeSurface.js'
 
 export async function handleServerTools(
   req: Request,
-  _url: URL,
+  url: URL,
   segments: string[],
 ): Promise<Response> {
   const toolName = segments[2]
   const action = segments[3]
-  const toolPermissionContext = getEmptyToolPermissionContext()
-  const builtInTools = getHeadlessBuiltInTools(toolPermissionContext)
-  const pluginToolDefinitions = (await loadInstalledBeyaPlugins())
-    .flatMap(plugin => plugin.tools)
+  const requestedSessionId =
+    url.searchParams.get('session_id') ||
+    url.searchParams.get('sessionId') ||
+    undefined
+  const requestedCwd = url.searchParams.get('cwd') || undefined
+  const surface = await loadSessionRuntimeSurface({
+    sessionId: requestedSessionId,
+    cwd: requestedCwd,
+    permissionContext: getEmptyToolPermissionContext(),
+  })
 
   if (!toolName && req.method === 'GET') {
     return Response.json({
-      tools: [
-        ...await Promise.all(builtInTools.map(tool =>
-          serverToolInfo(tool, builtInTools, toolPermissionContext),
-        )),
-        ...pluginToolDefinitions.map(pluginToolInfo),
-      ],
+      tools: await Promise.all(surface.tools.map(tool =>
+        runtimeToolInfo(tool, surface),
+      )),
     })
   }
 
   if (!action && req.method === 'GET') {
-    const tool = builtInTools.find(candidate => candidate.name === toolName)
-    if (tool) {
-      return Response.json({
-        tool: await serverToolInfo(tool, builtInTools, toolPermissionContext),
-      })
-    }
-    const pluginTool = pluginToolDefinitions.find(candidate => candidate.name === toolName)
-    if (!pluginTool) throw ApiError.notFound(`Tool not found: ${toolName}`)
+    const tool = surface.tools.find(candidate => candidate.name === toolName)
+    if (!tool) throw ApiError.notFound(`Tool not found: ${toolName}`)
     return Response.json({
-      tool: pluginToolInfo(pluginTool),
+      tool: await runtimeToolInfo(tool, surface),
     })
   }
 
@@ -61,15 +55,14 @@ export async function handleServerTools(
       stringField(body.session_id) ?? stringField(body.sessionId) ?? runId
     const metadata = objectField(body.metadata) ?? {}
     const directAbortController = new AbortController()
-    const builtInTool = builtInTools.find(candidate => candidate.name === toolName)
-    const pluginTool = pluginToolDefinitions.find(candidate => candidate.name === toolName)
-    if (!builtInTool && !pluginTool) throw ApiError.notFound(`Tool not found: ${toolName}`)
-    const tool = builtInTool ?? toolDefinitionToBeyaTool(pluginTool!, {
-      taskId: runId,
+    const executionSurface = await loadSessionRuntimeSurface({
       sessionId,
-      signal: directAbortController.signal,
+      cwd: requestedCwd,
       metadata,
+      permissionContext: getEmptyToolPermissionContext(),
     })
+    const tool = executionSurface.tools.find(candidate => candidate.name === toolName)
+    if (!tool) throw ApiError.notFound(`Tool not found: ${toolName}`)
     const toolUseId =
       stringField(body.tool_call_id) ??
       stringField(body.toolCallId) ??
@@ -142,20 +135,6 @@ export async function handleServerTools(
   )
 }
 
-function pluginToolInfo(tool: ToolDefinition) {
-  const annotations = tool.annotations ?? {}
-  return {
-    name: tool.name,
-    description: tool.description,
-    parameters: tool.inputSchema ?? {},
-    read_only: annotations.readOnlyHint === true || annotations.readOnly === true,
-    destructive: annotations.destructiveHint === true || annotations.destructive === true,
-    open_world: annotations.openWorldHint === true || annotations.openWorld === true,
-    plugin: true,
-    executable: isExecutableToolDefinition(tool),
-  }
-}
-
 function extractToolExecutionResult(
   messages: unknown[],
   toolUseId: string,
@@ -179,39 +158,6 @@ function extractToolExecutionResult(
     }
   }
   return null
-}
-
-async function serverToolInfo(
-  tool: HeadlessBuiltInTool,
-  tools: readonly HeadlessBuiltInTool[],
-  toolPermissionContext: ReturnType<typeof getEmptyToolPermissionContext>,
-) {
-  const emptyInput = {}
-  return {
-    name: tool.name,
-    description: await tool.description(emptyInput, {
-      isNonInteractiveSession: true,
-      toolPermissionContext,
-      tools,
-    }),
-    parameters: tool.inputJSONSchema ?? {},
-    read_only: toolFlag(tool, 'isReadOnly'),
-    destructive: toolFlag(tool, 'isDestructive'),
-    open_world: toolFlag(tool, 'isOpenWorld'),
-  }
-}
-
-function toolFlag(
-  tool: HeadlessBuiltInTool,
-  key: 'isReadOnly' | 'isDestructive' | 'isOpenWorld',
-): boolean {
-  const fn = tool[key]
-  if (typeof fn !== 'function') return false
-  try {
-    return Boolean(fn.call(tool, {}))
-  } catch {
-    return false
-  }
 }
 
 async function optionalJson(req: Request): Promise<Record<string, unknown>> {

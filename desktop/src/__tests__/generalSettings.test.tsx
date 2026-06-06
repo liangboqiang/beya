@@ -330,29 +330,33 @@ describe('Settings > General tab', () => {
     expect(toggle).toBeChecked()
   })
 
-  it('offers the pure white appearance theme', () => {
+  it('offers selectable design style cards', () => {
     render(<Settings />)
 
     fireEvent.click(screen.getByText('General'))
-    const pureWhite = screen.getByRole('button', { name: 'Pure White' })
-    const warmClassic = screen.getByRole('button', { name: 'Warm Classic' })
-    const dark = screen.getByRole('button', { name: 'Dark' })
+    const openDesign = screen.getByRole('button', { name: /OpenDesign Studio/i })
+    const pureWhite = screen.getByRole('button', { name: /Pure White/i })
+    const warmClassic = screen.getByRole('button', { name: /Warm Classic/i })
+    const graphite = screen.getByRole('button', { name: /Graphite Workbench/i })
+    const midnight = screen.getByRole('button', { name: /Midnight Console/i })
 
+    expect((openDesign.compareDocumentPosition(pureWhite) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true)
     expect((pureWhite.compareDocumentPosition(warmClassic) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true)
-    expect((warmClassic.compareDocumentPosition(dark) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Pure White' }))
+    expect(graphite).toBeInTheDocument()
+    expect(midnight).toBeInTheDocument()
+    fireEvent.click(openDesign)
 
-    expect(useSettingsStore.getState().setTheme).toHaveBeenCalledWith('white')
+    expect(useSettingsStore.getState().setTheme).toHaveBeenCalledWith('opendesign')
   })
 
-  it('marks the pure white appearance theme as selected', () => {
-    useSettingsStore.setState({ theme: 'white' })
+  it('marks the selected design style card', () => {
+    useSettingsStore.setState({ theme: 'midnight' })
     render(<Settings />)
 
     fireEvent.click(screen.getByText('General'))
 
-    expect(screen.getByRole('button', { name: 'Pure White' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: 'Warm Classic' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: /Midnight Console/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /OpenDesign Studio/i })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('keeps UI zoom below system notifications because it is a secondary setting', () => {

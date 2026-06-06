@@ -197,7 +197,7 @@ class BeyaClient:
         except URLError as exc:
             raise errors.BeyaServerUnavailableError(str(exc.reason), code="BEYA_SERVER_UNAVAILABLE")
 
-    def _open_session_websocket(self, session_id, timeout=None):
+    def _open_session_websocket(self, session_id, timeout=None, purpose=None):
         headers = {}
         if self.bearer_token:
             headers["Authorization"] = "Bearer %s" % self.bearer_token
@@ -205,14 +205,14 @@ class BeyaClient:
             headers["X-API-Key"] = self.api_key
         try:
             return WebSocketClient(
-                self._session_websocket_url(session_id),
+                self._session_websocket_url(session_id, purpose=purpose),
                 headers=headers,
                 timeout=timeout or self.default_timeout,
             )
         except WebSocketProtocolError as exc:
             raise errors.BeyaServerUnavailableError(str(exc), code="WEBSOCKET_UNAVAILABLE")
 
-    def _session_websocket_url(self, session_id):
+    def _session_websocket_url(self, session_id, purpose=None):
         parsed = urlsplit(self.base_url)
         scheme = "wss" if parsed.scheme == "https" else "ws"
         base_path = parsed.path.rstrip("/")
@@ -221,6 +221,9 @@ class BeyaClient:
         token = self.bearer_token or self.api_key
         if token:
             extra = urlencode({"token": token})
+            query = "%s&%s" % (query, extra) if query else extra
+        if purpose:
+            extra = urlencode({"purpose": purpose})
             query = "%s&%s" % (query, extra) if query else extra
         return urlunsplit((scheme, parsed.netloc, path, query, ""))
 
@@ -288,6 +291,8 @@ class ChatResource:
         effort=None,
         effort_level=None,
         attachments=None,
+        metadata=None,
+        on_interaction=None,
         timeout=None,
         **_ignored,
     ):
@@ -299,7 +304,11 @@ class ChatResource:
         seq = 0
         accumulated = []
         try:
-            with self._client._open_session_websocket(session_id, timeout=timeout) as ws:
+            with self._client._open_session_websocket(
+                session_id,
+                timeout=timeout,
+                purpose="sdk_chat",
+            ) as ws:
                 if permission_mode:
                     ws.send_json({"type": "set_permission_mode", "mode": permission_mode})
                 selected_model = model_override or model
@@ -314,6 +323,7 @@ class ChatResource:
                     "type": "user_message",
                     "content": input,
                     "attachments": attachments,
+                    "metadata": metadata,
                 }))
                 while True:
                     raw = ws.recv_json()
@@ -323,6 +333,53 @@ class ChatResource:
                     event = _chat_frame_to_event(raw, session_id, seq, accumulated)
                     if event is None:
                         continue
+                    if _is_interaction_event(event) and event.request_id:
+                        def responder(response=None, _request_id=event.request_id):
+                            return ws.send_json(_permission_response_payload(
+                                _request_id,
+                                response,
+                                original_input=_permission_event_input(event),
+                            ))
+
+                        event._responder = responder
+                        if on_interaction is not None:
+                            response = on_interaction(event)
+                            if response is not None:
+                                event.respond(response)
+                    yield event
+                    if event.type in ("WORKFLOW_COMPLETED", "WORKFLOW_FAILED"):
+                        break
+        except WebSocketProtocolError as exc:
+            raise errors.BeyaServerUnavailableError(str(exc), code="WEBSOCKET_UNAVAILABLE")
+
+    def respond(self, session_id, request_id, response=None, timeout=None, **kwargs):
+        seq = 0
+        accumulated = []
+        payload = _permission_response_payload(request_id, response, **kwargs)
+        try:
+            with self._client._open_session_websocket(
+                session_id,
+                timeout=timeout,
+                purpose="interaction_response",
+            ) as ws:
+                ws.send_json(payload)
+                while True:
+                    raw = ws.recv_json()
+                    if raw is None:
+                        break
+                    seq += 1
+                    event = _chat_frame_to_event(raw, session_id, seq, accumulated)
+                    if event is None:
+                        continue
+                    if _is_interaction_event(event) and event.request_id:
+                        def responder(response=None, _request_id=event.request_id):
+                            return ws.send_json(_permission_response_payload(
+                                _request_id,
+                                response,
+                                original_input=_permission_event_input(event),
+                            ))
+
+                        event._responder = responder
                     yield event
                     if event.type in ("WORKFLOW_COMPLETED", "WORKFLOW_FAILED"):
                         break
@@ -466,11 +523,19 @@ class ToolsResource:
     def __init__(self, client):
         self._client = client
 
-    def list(self, timeout=None):
-        return self._client._request("GET", "/api/tools", timeout=timeout)
+    def list(self, session_id=None, cwd=None, timeout=None):
+        return self._client._request(
+            "GET",
+            _append_query("/api/tools", _drop_none({"session_id": session_id, "cwd": cwd})),
+            timeout=timeout,
+        )
 
-    def get(self, name, timeout=None):
-        return self._client._request("GET", "/api/tools/%s" % _path(name), timeout=timeout)
+    def get(self, name, session_id=None, cwd=None, timeout=None):
+        return self._client._request(
+            "GET",
+            _append_query("/api/tools/%s" % _path(name), _drop_none({"session_id": session_id, "cwd": cwd})),
+            timeout=timeout,
+        )
 
     def execute(self, name, arguments=None, session_id=None, permission_mode=None, timeout=None):
         return self._client._request(
@@ -958,21 +1023,44 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
         )
 
     if typ == "permission_request":
+        tool_name = str(raw.get("toolName") or "")
+        event_type = _permission_request_event_type(tool_name)
+        interaction_type = _permission_request_interaction_type(event_type)
+        questions = None
+        options = None
+        input_payload = raw.get("input")
+        if isinstance(input_payload, dict):
+            raw_questions = input_payload.get("questions")
+            if isinstance(raw_questions, list):
+                questions = [item for item in raw_questions if isinstance(item, dict)]
+                if len(questions) == 1 and isinstance(questions[0].get("options"), list):
+                    options = questions[0].get("options")
         payload = {
             "approval_id": raw.get("requestId"),
             "tool_call_id": raw.get("toolUseId"),
-            "name": raw.get("toolName"),
-            "input": raw.get("input"),
+            "name": tool_name,
+            "input": input_payload,
             "reason": raw.get("description"),
         }
+        if questions is not None:
+            payload["questions"] = questions
+        if options is not None:
+            payload["options"] = options
         return RunEvent(
-            type="APPROVAL_REQUESTED",
+            type=event_type,
             session_id=session_id,
-            message=str(raw.get("description") or raw.get("toolName") or ""),
+            message=_permission_request_message(event_type, raw),
             timestamp=timestamp,
             seq=seq,
             payload=payload,
             raw=raw,
+            interaction_type=interaction_type,
+            request_id=str(raw.get("requestId") or ""),
+            tool_call_id=str(raw.get("toolUseId") or "") if raw.get("toolUseId") is not None else None,
+            tool_name=tool_name,
+            questions=questions,
+            options=options,
+            reason=str(raw.get("description") or "") or None,
         )
 
     if typ == "message_complete":
@@ -1021,6 +1109,88 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
         payload={key: value for key, value in raw.items() if key != "type"},
         raw=raw,
     )
+
+
+def _permission_request_event_type(tool_name):
+    if tool_name == "AskUserQuestion":
+        return "QUESTION_REQUESTED"
+    if tool_name in ("EnterPlanMode", "ExitPlanMode"):
+        return "PLAN_ACTION_REQUESTED"
+    return "APPROVAL_REQUESTED"
+
+
+def _permission_request_interaction_type(event_type):
+    if event_type == "QUESTION_REQUESTED":
+        return "question"
+    if event_type == "PLAN_ACTION_REQUESTED":
+        return "plan"
+    return "approval"
+
+
+def _is_interaction_event(event):
+    return event.type in ("QUESTION_REQUESTED", "PLAN_ACTION_REQUESTED", "APPROVAL_REQUESTED")
+
+
+def _permission_response_payload(request_id, response=None, original_input=None, **kwargs):
+    if not request_id:
+        raise ValueError("request_id is required")
+    data = _normalize_permission_response(response)
+    data.update(kwargs)
+
+    updated_input = data.get("updatedInput")
+    if updated_input is None:
+        updated_input = data.get("updated_input")
+    answers = data.get("answers")
+    if updated_input is None and isinstance(answers, dict):
+        updated_input = dict(original_input) if isinstance(original_input, dict) else {}
+        updated_input["answers"] = answers
+
+    payload = {
+        "type": "permission_response",
+        "requestId": request_id,
+        "allowed": bool(data.get("allowed", True)),
+    }
+    if data.get("rule") is not None:
+        payload["rule"] = data.get("rule")
+    if updated_input is not None:
+        payload["updatedInput"] = updated_input
+    if data.get("feedback") is not None:
+        payload["feedback"] = data.get("feedback")
+    content_blocks = data.get("contentBlocks")
+    if content_blocks is None:
+        content_blocks = data.get("content_blocks")
+    if content_blocks is not None:
+        payload["contentBlocks"] = content_blocks
+    return payload
+
+
+def _normalize_permission_response(response):
+    if response is None:
+        return {}
+    if isinstance(response, dict):
+        return dict(response)
+    if isinstance(response, bool):
+        return {"allowed": response}
+    return {"feedback": str(response)}
+
+
+def _permission_event_input(event):
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    value = payload.get("input")
+    return value if isinstance(value, dict) else None
+
+
+def _permission_request_message(event_type, raw):
+    description = str(raw.get("description") or "")
+    tool_name = str(raw.get("toolName") or "")
+    input_payload = raw.get("input")
+    if event_type == "QUESTION_REQUESTED" and isinstance(input_payload, dict):
+        questions = input_payload.get("questions")
+        if isinstance(questions, list) and questions:
+            first = questions[0]
+            if isinstance(first, dict):
+                return str(first.get("question") or description or tool_name)
+    return description or tool_name
 
 
 def _now_iso():

@@ -493,6 +493,27 @@ describe('ConversationService', () => {
     expect(env.BEYA_DESKTOP_AWAIT_MCP_TIMEOUT_MS).toBe('5000')
   })
 
+  test('buildChildEnv forwards structured runtime metadata to CLI sessions', async () => {
+    const service = new ConversationService() as any
+    const env = (await service.buildChildEnv(
+      '/tmp',
+      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+      {
+        metadata: {
+          user_id: 'u1',
+          user_name: 'User',
+          conversation_id: 'conv-1',
+        },
+      },
+    )) as Record<string, string>
+
+    expect(JSON.parse(env.BEYA_RUNTIME_METADATA_JSON)).toEqual({
+      user_id: 'u1',
+      user_name: 'User',
+      conversation_id: 'conv-1',
+    })
+  })
+
   test('buildChildEnv enables stream idle watchdog for desktop CLI sessions', async () => {
     const service = new ConversationService() as any
     const env = (await service.buildChildEnv(

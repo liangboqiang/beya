@@ -42,6 +42,7 @@ const optionalExternals = [
   '@opentelemetry/exporter-trace-otlp-grpc',
   '@opentelemetry/exporter-trace-otlp-http',
   '@opentelemetry/exporter-trace-otlp-proto',
+  'audio-capture-napi',
   'fflate',
   'sharp',
 ]

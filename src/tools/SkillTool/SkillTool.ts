@@ -104,16 +104,36 @@ import type { SkillToolProgress as Progress } from '../../types/tools.js'
 // side-effecting initializers. All usages are inside
 // feature('EXPERIMENTAL_SKILL_SEARCH') guards, so remoteSkillModules is
 // non-null at every call site.
-/* eslint-disable @typescript-eslint/no-require-imports */
-const remoteSkillModules = feature('EXPERIMENTAL_SKILL_SEARCH')
-  ? {
-      ...(require('../../services/skillSearch/remoteSkillState.js') as typeof import('../../services/skillSearch/remoteSkillState.js')),
-      ...(require('../../services/skillSearch/remoteSkillLoader.js') as typeof import('../../services/skillSearch/remoteSkillLoader.js')),
-      ...(require('../../services/skillSearch/telemetry.js') as typeof import('../../services/skillSearch/telemetry.js')),
-      ...(require('../../services/skillSearch/featureCheck.js') as typeof import('../../services/skillSearch/featureCheck.js')),
-    }
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
+type RemoteSkillModules =
+  typeof import('../../services/skillSearch/remoteSkillState.js') &
+    typeof import('../../services/skillSearch/remoteSkillLoader.js') &
+    typeof import('../../services/skillSearch/telemetry.js') &
+    typeof import('../../services/skillSearch/featureCheck.js')
+
+let remoteSkillModulesPromise: Promise<RemoteSkillModules> | null = null
+
+function getRemoteSkillModules(): Promise<RemoteSkillModules> {
+  remoteSkillModulesPromise ??= Promise.all([
+    import('../../services/skillSearch/remoteSkillState.js'),
+    import('../../services/skillSearch/remoteSkillLoader.js'),
+    import('../../services/skillSearch/telemetry.js'),
+    import('../../services/skillSearch/featureCheck.js'),
+  ]).then(
+    ([
+      remoteSkillState,
+      remoteSkillLoader,
+      telemetry,
+      featureCheck,
+    ]) =>
+      ({
+        ...remoteSkillState,
+        ...remoteSkillLoader,
+        ...telemetry,
+        ...featureCheck,
+      }) as RemoteSkillModules,
+  )
+  return remoteSkillModulesPromise
+}
 
 /**
  * Executes a skill in a forked sub-agent context.
@@ -138,7 +158,7 @@ async function executeForkedSkill(
 
   const wasDiscoveredField =
     feature('EXPERIMENTAL_SKILL_SEARCH') &&
-    remoteSkillModules!.isSkillSearchEnabled()
+    (await getRemoteSkillModules()).isSkillSearchEnabled()
       ? {
           was_discovered:
             context.discoveredSkillNames?.has(commandName) ?? false,
@@ -282,6 +302,16 @@ async function executeForkedSkill(
         result: resultText,
       },
     }
+  } catch (error) {
+    logForDebugging(
+      `SkillTool forked skill ${commandName} failed: ${
+        error instanceof Error && error.stack
+          ? error.stack
+          : errorMessage(error)
+      }`,
+      { level: 'error' },
+    )
+    throw error
   } finally {
     // Release skill content from invokedSkills state
     clearInvokedSkillsForAgent(agentId)
@@ -378,11 +408,10 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
       feature('EXPERIMENTAL_SKILL_SEARCH') &&
       process.env.USER_TYPE === 'ant'
     ) {
-      const slug = remoteSkillModules!.stripCanonicalPrefix(
-        normalizedCommandName,
-      )
+      const remoteSkillModules = await getRemoteSkillModules()
+      const slug = remoteSkillModules.stripCanonicalPrefix(normalizedCommandName)
       if (slug !== null) {
-        const meta = remoteSkillModules!.getDiscoveredRemoteSkill(slug)
+        const meta = remoteSkillModules.getDiscoveredRemoteSkill(slug)
         if (!meta) {
           return {
             result: false,
@@ -493,7 +522,8 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
       feature('EXPERIMENTAL_SKILL_SEARCH') &&
       process.env.USER_TYPE === 'ant'
     ) {
-      const slug = remoteSkillModules!.stripCanonicalPrefix(commandName)
+      const remoteSkillModules = await getRemoteSkillModules()
+      const slug = remoteSkillModules.stripCanonicalPrefix(commandName)
       if (slug !== null) {
         return {
           behavior: 'allow',
@@ -606,7 +636,8 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
       feature('EXPERIMENTAL_SKILL_SEARCH') &&
       process.env.USER_TYPE === 'ant'
     ) {
-      const slug = remoteSkillModules!.stripCanonicalPrefix(commandName)
+      const remoteSkillModules = await getRemoteSkillModules()
+      const slug = remoteSkillModules.stripCanonicalPrefix(commandName)
       if (slug !== null) {
         return executeRemoteSkill(slug, commandName, parentMessage, context)
       }
@@ -660,7 +691,7 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
 
     const wasDiscoveredField =
       feature('EXPERIMENTAL_SKILL_SEARCH') &&
-      remoteSkillModules!.isSkillSearchEnabled()
+      (await getRemoteSkillModules()).isSkillSearchEnabled()
         ? {
             was_discovered:
               context.discoveredSkillNames?.has(commandName) ?? false,
@@ -973,7 +1004,7 @@ async function executeRemoteSkill(
   context: ToolUseContext,
 ): Promise<ToolResult<Output>> {
   const { getDiscoveredRemoteSkill, loadRemoteSkill, logRemoteSkillLoaded } =
-    remoteSkillModules!
+    await getRemoteSkillModules()
 
   // validateInput already confirmed this slug is in session state, but we
   // re-fetch here to get the URL. If it's somehow gone (e.g., state cleared

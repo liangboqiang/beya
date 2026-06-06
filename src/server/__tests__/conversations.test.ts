@@ -74,6 +74,31 @@ describe('ConversationService', () => {
     expect(result).toBe(false)
   })
 
+  it('should return false when responding to permission without a pending request', () => {
+    const svc = new ConversationService()
+    const sent: unknown[] = []
+    ;(svc as any).sessions.set('session-1', {
+      proc: null,
+      outputCallbacks: [],
+      workDir: process.cwd(),
+      sdkToken: 'token',
+      sdkSocket: {
+        send(data: string) {
+          sent.push(JSON.parse(data))
+        },
+      },
+      pendingOutbound: [],
+      stderrLines: [],
+      sdkMessages: [],
+      pendingPermissionRequests: new Map(),
+    })
+
+    const result = svc.respondToPermission('session-1', 'req-1', true)
+
+    expect(result).toBe(false)
+    expect(sent).toHaveLength(0)
+  })
+
   it('should not queue control requests before the SDK socket connects', async () => {
     const svc = new ConversationService()
     const sid = crypto.randomUUID()
@@ -161,7 +186,13 @@ describe('ConversationService', () => {
       ]),
     })
 
-    const result = svc.respondToPermission('session-1', 'req-1', true, 'always')
+    const result = svc.respondToPermission(
+      'session-1',
+      'req-1',
+      true,
+      'always',
+      { answers: { 'Which task?': 'Conrod' } },
+    )
 
     expect(result).toBe(true)
     expect(sent).toHaveLength(1)
@@ -170,6 +201,7 @@ describe('ConversationService', () => {
       response: {
         response: {
           behavior: 'allow',
+          updatedInput: { answers: { 'Which task?': 'Conrod' } },
           updatedPermissions: [
             {
               type: 'addRules',
@@ -1455,7 +1487,7 @@ describe('WebSocket Chat Integration', () => {
     expect(messages.at(-1)?.type).toBe('message_complete')
   }, 15_000)
 
-  it('should handle permission_response without error', async () => {
+  it('should report permission_response without pending request', async () => {
     const messages: any[] = []
     const ws = new WebSocket(`${wsUrl}/ws/chat-test-4`)
 
@@ -1472,7 +1504,6 @@ describe('WebSocket Chat Integration', () => {
               allowed: true,
             })
           )
-          // Give a moment then close
           setTimeout(() => {
             ws.close()
             resolve()
@@ -1489,9 +1520,13 @@ describe('WebSocket Chat Integration', () => {
       }, 3000)
     })
 
-    // Should have received connected and no error
     expect(messages[0].type).toBe('connected')
-    expect(messages.some((m) => m.type === 'error')).toBe(false)
+    expect(messages).toContainEqual({
+      type: 'error',
+      code: 'PERMISSION_RESPONSE_NOT_PENDING',
+      message: 'No pending permission request test-req-1 is active for session chat-test-4',
+      retryable: false,
+    })
   })
 
   it('should handle ping/pong', async () => {

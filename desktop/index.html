@@ -12,10 +12,56 @@
     </style>
     <script>
       (function () {
-        var bootDeadlineMs = 8000
+        var bootDeadlineMs = 60000
+        var loopbackHost = '127.0.0.1'
+        var discoveryRanges = [
+          { start: 5173, count: 120 },
+          { start: 2024, count: 120 },
+          { start: 1420, count: 120 }
+        ]
+        var statusEndpointPath = '/__beya_web_ui_status'
+        var probeTimeoutMs = 700
+        var launcherRelativePath = '../start-beya.cmd'
+        var bridgeRendered = false
+        var bootTimer = null
+
+        var copy = {
+          unknownError: '\u672a\u77e5\u542f\u52a8\u9519\u8bef',
+          findingWebUi: '\u6b63\u5728\u67e5\u627e\u672c\u5730 Web UI...',
+          openingBeya: '\u6b63\u5728\u6253\u5f00 Beya...',
+          foundWebUi: '\u5df2\u627e\u5230\u672c\u5730 Web UI\uff0c\u6b63\u5728\u663e\u793a...',
+          noWebUiAuto: '\u6ca1\u6709\u68c0\u6d4b\u5230\u6b63\u5728\u8fd0\u884c\u7684\u672c\u5730 Web UI\u3002\u8bf7\u70b9\u51fb\u4e3b\u6309\u94ae\u3002',
+          noWebUiManual: '\u8fd8\u6ca1\u6709\u68c0\u6d4b\u5230\u672c\u5730 Web UI\u3002\u8bf7\u5148\u901a\u8fc7\u9879\u76ee\u542f\u52a8\u5668\u542f\u52a8 Beya\uff0c\u542f\u52a8\u540e\u518d\u70b9\u51fb\u6253\u5f00\u3002',
+          stillNoWebUi: '\u4ecd\u672a\u68c0\u6d4b\u5230\u672c\u5730 Web UI\u3002\u8bf7\u786e\u8ba4\u9879\u76ee\u542f\u52a8\u5668\u5df2\u7ecf\u8fd0\u884c\uff0c\u518d\u70b9\u51fb\u4e3b\u6309\u94ae\u91cd\u65b0\u68c0\u6d4b\u3002',
+          webUiStarted: '\u672c\u5730 Web UI \u5df2\u542f\u52a8\uff0c\u6b63\u5728\u663e\u793a...',
+          openingLauncher: '\u6b63\u5728\u6253\u5f00\u9879\u76ee\u542f\u52a8\u5668\u3002\u5982\u679c\u7cfb\u7edf\u8be2\u95ee\uff0c\u8bf7\u5141\u8bb8\u6253\u5f00\u3002',
+          waitingWebUi: '\u6b63\u5728\u7b49\u5f85\u672c\u5730 Web UI \u542f\u52a8...',
+          launcherMissing: '\u65e0\u6cd5\u5b9a\u4f4d\u9879\u76ee\u542f\u52a8\u5668\u3002\u8bf7\u5728\u9879\u76ee\u6839\u76ee\u5f55\u53cc\u51fb start-beya.cmd\u3002',
+          starting: '\u6b63\u5728\u542f\u52a8...',
+          restarting: '\u6b63\u5728\u91cd\u65b0\u542f\u52a8...',
+          startingBeya: '\u6b63\u5728\u542f\u52a8 Beya...',
+          reloadingUi: '\u6b63\u5728\u91cd\u65b0\u52a0\u8f7d\u754c\u9762...',
+          restartFailed: '\u81ea\u52a8\u91cd\u542f\u5931\u8d25\uff0c\u6b63\u5728\u91cd\u65b0\u52a0\u8f7d\u754c\u9762...',
+          fileSummary: '\u5f53\u524d\u6253\u5f00\u7684\u662f desktop/index.html \u6e90\u5165\u53e3\u3002\u5b83\u4e0d\u80fd\u76f4\u63a5\u8fd0\u884c\u684c\u9762\u5e94\u7528\u4ee3\u7801\uff1b\u5982\u679c\u672c\u5730 Web UI \u5df2\u7ecf\u542f\u52a8\uff0cBeya \u4f1a\u81ea\u52a8\u663e\u793a\u5b83\u3002',
+          staticSummary: '\u5f53\u524d\u6253\u5f00\u7684\u662f desktop/index.html \u9759\u6001\u9884\u89c8\u3002\u5b83\u4e0d\u80fd\u542f\u52a8\u672c\u673a\u8fdb\u7a0b\uff0c\u53ea\u80fd\u6253\u5f00\u5df2\u7ecf\u8fd0\u884c\u7684\u672c\u5730 Web UI\u3002',
+          extendedSummary: 'Beya \u5df2\u5ef6\u957f\u542f\u52a8\u7b49\u5f85\u65f6\u95f4\uff1b\u5982\u679c\u4ecd\u5931\u8d25\uff0c\u8bf7\u70b9\u51fb\u91cd\u65b0\u542f\u52a8\u3002',
+          restartTitle: 'Beya \u542f\u52a8\u5931\u8d25',
+          restartLabel: '\u91cd\u65b0\u542f\u52a8 Beya',
+          restartStatus: '\u8bf7\u70b9\u51fb\u91cd\u65b0\u542f\u52a8\u3002',
+          openTitle: '\u6253\u5f00 Beya',
+          openLabel: '\u6253\u5f00 Beya',
+          startLabel: '\u542f\u52a8 Beya',
+          diagnosticLabel: '\u8bca\u65ad\u4fe1\u606f',
+          resourceLoadFailed: '\u542f\u52a8\u8d44\u6e90\u52a0\u8f7d\u5931\u8d25\uff1a',
+          scriptError: '\u542f\u52a8\u811a\u672c\u9519\u8bef',
+          unhandledRejection: '\u542f\u52a8\u8fc7\u7a0b\u4e2d\u51fa\u73b0\u672a\u5904\u7406\u7684 Promise \u62d2\u7edd',
+          bridgeReason: '\u901a\u8fc7\u6e90\u7801\u5165\u53e3\u6216\u9759\u6001\u9884\u89c8\u6253\u5f00 desktop/index.html',
+          bootTimeoutPrefix: '\u684c\u9762\u5e94\u7528\u672a\u80fd\u5728 ',
+          bootTimeoutSuffix: 'ms \u5185\u5b8c\u6210\u542f\u52a8\u3002\u8fd9\u901a\u5e38\u8868\u793a WebView \u65e0\u6cd5\u6267\u884c\u5e94\u7528\u5305\uff0c\u6216\u542f\u52a8\u4ee3\u7801\u5728 React \u6302\u8f7d\u524d\u505c\u6b62\u3002'
+        }
 
         function summarize(value) {
-          if (!value) return '未知启动错误'
+          if (!value) return copy.unknownError
           if (typeof value === 'string') return value
           if (value.message) return value.message
           try {
@@ -25,16 +71,340 @@
           }
         }
 
-        function renderStartupError(reason) {
-          if (window.__BEYA_BOOTSTRAPPED__) return
-          var root = document.getElementById('root')
-          if (!root) return
+        function parsePort(origin) {
+          try {
+            return Number(new URL(origin).port || '80')
+          } catch (_) {
+            return 0
+          }
+        }
 
-          var summary = summarize(reason)
+        function isFileUrl() {
+          return window.location.protocol === 'file:'
+        }
+
+        function isLoopbackHostname(hostname) {
+          return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1'
+        }
+
+        function isLoopbackHttpUrl() {
+          if (window.location.protocol !== 'http:' && window.location.protocol !== 'https:') return false
+          return isLoopbackHostname(window.location.hostname)
+        }
+
+        function isTauriRuntime() {
+          return Boolean(getTauriInvoke()) || window.location.protocol === 'tauri:'
+        }
+
+        function getTauriInvoke() {
+          var internals = window.__TAURI_INTERNALS__
+          return internals && typeof internals.invoke === 'function' ? internals.invoke.bind(internals) : null
+        }
+
+        function clearRetryState() {
+          try {
+            window.sessionStorage.removeItem('beya-startup-auto-retry-count')
+          } catch (_) {
+            // Ignore storage failures.
+          }
+        }
+
+        function localWebOrigin(port) {
+          return 'http://' + loopbackHost + ':' + port
+        }
+
+        function webUrlFor(candidate) {
+          var webOrigin = typeof candidate === 'string' ? candidate : candidate.origin
+          var serverUrl = typeof candidate === 'string' ? null : candidate.serverUrl
+          var url = webOrigin.replace(/\/$/, '') + '/'
+          return serverUrl ? url + '?serverUrl=' + encodeURIComponent(serverUrl) : url
+        }
+
+        function mountLocalWebUi(candidate) {
+          var root = document.getElementById('root')
+          if (!root) {
+            window.location.href = webUrlFor(candidate)
+            return
+          }
+
+          if (bootTimer !== null) {
+            window.clearTimeout(bootTimer)
+            bootTimer = null
+          }
+          clearRetryState()
+          window.__BEYA_BOOTSTRAPPED__ = true
+
+          root.innerHTML = ''
+          document.documentElement.style.background = '#fff'
+          document.body.style.margin = '0'
+          document.body.style.minHeight = '100vh'
+          document.body.style.background = '#fff'
+          document.body.style.overflow = 'hidden'
+
+          var iframe = document.createElement('iframe')
+          iframe.title = 'Beya Web UI'
+          iframe.src = webUrlFor(candidate)
+          iframe.setAttribute('allow', 'clipboard-read; clipboard-write')
+          iframe.setAttribute('referrerpolicy', 'no-referrer')
+          iframe.style.cssText = [
+            'position:fixed',
+            'inset:0',
+            'width:100vw',
+            'height:100vh',
+            'border:0',
+            'background:#fff'
+          ].join(';')
+          root.appendChild(iframe)
+        }
+
+        function buildWebCandidates() {
+          var seen = Object.create(null)
+          var origins = []
+
+          for (var i = 0; i < discoveryRanges.length; i++) {
+            var range = discoveryRanges[i]
+            for (var offset = 0; offset <= range.count; offset++) {
+              var origin = localWebOrigin(range.start + offset)
+              if (!seen[origin]) {
+                seen[origin] = true
+                origins.push(origin)
+              }
+            }
+          }
+
+          return origins
+        }
+
+        function isCandidateWebPort(port) {
+          var numericPort = Number(port)
+          if (!Number.isFinite(numericPort)) return false
+
+          for (var i = 0; i < discoveryRanges.length; i++) {
+            var range = discoveryRanges[i]
+            if (numericPort >= range.start && numericPort <= range.start + range.count) {
+              return true
+            }
+          }
+
+          return false
+        }
+
+        function isRunnableAppHost() {
+          if (isTauriRuntime()) return true
+          if (!isLoopbackHttpUrl()) return false
+          return isCandidateWebPort(window.location.port)
+        }
+
+        function shouldUseLauncherBridge() {
+          return isFileUrl() || !isRunnableAppHost()
+        }
+
+        function fetchWithTimeout(url, options) {
+          var controller = typeof AbortController === 'function' ? new AbortController() : null
+          var timeout = controller
+            ? window.setTimeout(function () { controller.abort() }, probeTimeoutMs)
+            : null
+          var fetchOptions = Object.assign({}, options || {})
+          if (controller) fetchOptions.signal = controller.signal
+
+          return fetch(url, fetchOptions).finally(function () {
+            if (timeout !== null) window.clearTimeout(timeout)
+          })
+        }
+
+        function probeWebStatus(webOrigin) {
+          return fetchWithTimeout(webOrigin + statusEndpointPath, { cache: 'no-store' })
+            .then(function (response) {
+              if (!response.ok) return null
+              return response.json()
+            })
+            .then(function (status) {
+              if (!status || status.app !== 'beya-desktop-web-ui') return null
+              return {
+                origin: webOrigin,
+                statusKnown: true,
+                serverUrl: status.serverUrl || null,
+                startedAtMs: Number(status.startedAtMs || Date.parse(status.startedAt || '')) || 0,
+                launchedByStartScript: status.launchedByStartScript === true,
+                port: Number(status.webPort || parsePort(webOrigin)) || parsePort(webOrigin)
+              }
+            })
+            .catch(function () { return null })
+        }
+
+        function probeLegacyWebOrigin(webOrigin) {
+          return fetchWithTimeout(webOrigin + '/', {
+              cache: 'no-store',
+              mode: 'no-cors'
+            })
+            .then(function () {
+              return {
+                origin: webOrigin,
+                statusKnown: false,
+                serverUrl: null,
+                startedAtMs: 0,
+                launchedByStartScript: false,
+                port: parsePort(webOrigin)
+              }
+            })
+            .catch(function () { return null })
+        }
+
+        function compareCandidates(a, b) {
+          if (a.statusKnown !== b.statusKnown) return a.statusKnown ? -1 : 1
+          if (a.launchedByStartScript !== b.launchedByStartScript) return a.launchedByStartScript ? -1 : 1
+          if (a.startedAtMs !== b.startedAtMs) return b.startedAtMs - a.startedAtMs
+          return b.port - a.port
+        }
+
+        function selectBestCandidate(candidates) {
+          var available = candidates.filter(Boolean)
+          if (!available.length) return null
+          available.sort(compareCandidates)
+          return available[0]
+        }
+
+        function discoverWebOrigin() {
+          var origins = buildWebCandidates()
+          return Promise.all(origins.map(probeWebStatus)).then(function (statusCandidates) {
+            var bestStatus = selectBestCandidate(statusCandidates)
+            if (bestStatus) return bestStatus
+
+            return Promise.all(origins.map(probeLegacyWebOrigin)).then(selectBestCandidate)
+          })
+        }
+
+        function currentWebOriginOrDiscovery() {
+          if (isLoopbackHttpUrl() && isCandidateWebPort(window.location.port)) {
+            return Promise.resolve({
+              origin: window.location.origin,
+              statusKnown: false,
+              serverUrl: null,
+              startedAtMs: 0,
+              launchedByStartScript: false,
+              port: Number(window.location.port)
+            })
+          }
+          return discoverWebOrigin()
+        }
+
+        function openLocalWebUi(status, options) {
+          var auto = Boolean(options && options.auto)
+          status.textContent = auto ? copy.findingWebUi : copy.openingBeya
+
+          currentWebOriginOrDiscovery()
+            .then(function (candidate) {
+              if (!candidate) {
+                throw new Error('local Web UI not found')
+              }
+              status.textContent = copy.foundWebUi
+              mountLocalWebUi(candidate)
+            })
+            .catch(function () {
+              status.textContent = auto ? copy.noWebUiAuto : copy.noWebUiManual
+            })
+        }
+
+        function pollForLocalWebUi(status, attempt) {
+          if (attempt > 90) {
+            status.textContent = copy.stillNoWebUi
+            return
+          }
+
+          discoverWebOrigin()
+            .then(function (candidate) {
+              if (candidate) {
+                status.textContent = copy.webUiStarted
+                mountLocalWebUi(candidate)
+                return
+              }
+              window.setTimeout(function () { pollForLocalWebUi(status, attempt + 1) }, 1000)
+            })
+            .catch(function () {
+              window.setTimeout(function () { pollForLocalWebUi(status, attempt + 1) }, 1000)
+            })
+        }
+
+        function openLocalLauncher(status) {
+          clearRetryState()
+          try {
+            var launcherUrl = new URL(launcherRelativePath, window.location.href).href
+            status.textContent = copy.openingLauncher
+            var launcherWindow = window.open(launcherUrl, '_blank', 'noopener,noreferrer')
+            if (!launcherWindow) {
+              var launcherLink = document.createElement('a')
+              launcherLink.href = launcherUrl
+              launcherLink.target = '_blank'
+              launcherLink.rel = 'noopener noreferrer'
+              document.body.appendChild(launcherLink)
+              launcherLink.click()
+              document.body.removeChild(launcherLink)
+            }
+            window.setTimeout(function () {
+              status.textContent = copy.waitingWebUi
+              pollForLocalWebUi(status, 0)
+            }, 1500)
+          } catch (_) {
+            status.textContent = copy.launcherMissing
+          }
+        }
+
+        function restartOrOpen(status, button) {
+          if (button) {
+            button.disabled = true
+            button.textContent = shouldUseLauncherBridge() ? copy.starting : copy.restarting
+          }
+          status.textContent = shouldUseLauncherBridge() ? copy.startingBeya : copy.reloadingUi
+          clearRetryState()
+
+          var invoke = getTauriInvoke()
+          if (invoke) {
+            Promise.resolve(invoke('prepare_for_app_mode_restart'))
+              .catch(function () {})
+              .then(function () { return invoke('plugin:process|restart') })
+              .catch(function () {
+                status.textContent = copy.restartFailed
+                window.setTimeout(function () { window.location.reload() }, 600)
+              })
+            return
+          }
+
+          if (shouldUseLauncherBridge()) {
+            if (isFileUrl()) {
+              openLocalLauncher(status)
+            } else {
+              openLocalWebUi(status, { auto: false })
+            }
+            return
+          }
+
+          window.location.reload()
+        }
+
+        function launcherSummary() {
+          return isFileUrl() ? copy.fileSummary : copy.staticSummary
+        }
+
+        function startupSummary(reason) {
+          if (shouldUseLauncherBridge()) return launcherSummary()
+          return summarize(reason) + '\u3002' + copy.extendedSummary
+        }
+
+        function renderFrame(titleText, bodyText, reason, options) {
+          if (window.__BEYA_BOOTSTRAPPED__) return null
+          var root = document.getElementById('root')
+          if (!root) return null
+
+          if (bootTimer !== null) {
+            window.clearTimeout(bootTimer)
+            bootTimer = null
+          }
+
           var details = [
-            summary,
+            summarize(reason),
             '',
             'URL: ' + window.location.href,
+            'Launcher: ' + (isFileUrl() ? new URL(launcherRelativePath, window.location.href).href : 'n/a'),
             'User Agent: ' + navigator.userAgent,
             'Time: ' + new Date().toISOString()
           ].join('\n')
@@ -54,47 +424,115 @@
           ].join(';')
 
           var panel = document.createElement('section')
-          panel.style.cssText = 'width:min(760px,100%);border:1px solid #d8d8d8;border-radius:8px;padding:24px;background:#fff'
+          panel.style.cssText = 'width:min(820px,100%);border:1px solid #d8d8d8;border-radius:8px;padding:24px;background:#fff'
 
           var title = document.createElement('h1')
-          title.textContent = 'Beya 启动失败'
+          title.textContent = titleText
           title.style.cssText = 'margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700;color:#111'
 
           var body = document.createElement('p')
-          body.textContent = 'Beya 未能完成启动。反馈问题时请保留这段诊断信息。'
+          body.textContent = bodyText
           body.style.cssText = 'margin:0 0 16px;font-size:14px;line-height:1.6;color:#555'
+
+          var status = document.createElement('p')
+          status.textContent = options && options.status ? options.status : ''
+          status.style.cssText = 'min-height:20px;margin:0 0 14px;font-size:13px;line-height:1.5;color:#666'
+
+          var primaryButton = null
+          if (options && options.showPrimaryButton) {
+            primaryButton = document.createElement('button')
+            primaryButton.type = 'button'
+            primaryButton.textContent = options.primaryLabel || copy.restartLabel
+            primaryButton.style.cssText = 'height:42px;margin:0 0 14px;padding:0 16px;border:1px solid #111;border-radius:6px;background:#151515;color:#fff;font:13px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer'
+            primaryButton.addEventListener('click', function () {
+              restartOrOpen(status, primaryButton)
+            })
+          }
+
+          var diagnosticDetails = document.createElement('details')
+          diagnosticDetails.style.cssText = 'margin:0'
+
+          var detailsLabel = document.createElement('summary')
+          detailsLabel.textContent = copy.diagnosticLabel
+          detailsLabel.style.cssText = 'cursor:pointer;margin:0 0 8px;font-size:12px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.04em'
 
           var pre = document.createElement('pre')
           pre.textContent = details
           pre.style.cssText = 'box-sizing:border-box;max-height:360px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0;padding:14px;border-radius:6px;background:#f6f6f6;color:#222;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace'
 
+          diagnosticDetails.appendChild(detailsLabel)
+          diagnosticDetails.appendChild(pre)
+
           panel.appendChild(title)
           panel.appendChild(body)
-          panel.appendChild(pre)
+          panel.appendChild(status)
+          if (primaryButton) {
+            panel.appendChild(primaryButton)
+          }
+          panel.appendChild(diagnosticDetails)
           shell.appendChild(panel)
           root.appendChild(shell)
+          return { status: status, primaryButton: primaryButton }
         }
 
-        window.__BEYA_SHOW_STARTUP_ERROR__ = renderStartupError
+        function renderStartupError(reason) {
+          return renderFrame(copy.restartTitle, startupSummary(reason), reason, {
+            showPrimaryButton: true,
+            primaryLabel: copy.restartLabel,
+            status: copy.restartStatus
+          })
+        }
+
+        function renderLauncherBridge(reason) {
+          return renderFrame(copy.openTitle, startupSummary(reason), reason, {
+            showPrimaryButton: true,
+            primaryLabel: isFileUrl() ? copy.startLabel : copy.openLabel,
+            status: copy.findingWebUi
+          })
+        }
+
+        function handleStartupFailure(reason) {
+          if (window.__BEYA_BOOTSTRAPPED__) return
+          if (shouldUseLauncherBridge()) {
+            if (bridgeRendered) return
+            bridgeRendered = true
+            var launcherFrame = renderLauncherBridge(reason)
+            if (launcherFrame) {
+              openLocalWebUi(launcherFrame.status, { auto: true })
+            }
+            return
+          }
+
+          renderStartupError(reason)
+        }
+
+        window.__BEYA_SHOW_STARTUP_ERROR__ = handleStartupFailure
+        window.__BEYA_CLEAR_STARTUP_RETRY__ = clearRetryState
 
         window.addEventListener('error', function (event) {
           var target = event.target
           if (target && target !== window) {
             var tagName = target.tagName
             if (tagName === 'SCRIPT' || tagName === 'LINK') {
-              renderStartupError('启动资源加载失败：' + (target.src || target.href || tagName))
+              handleStartupFailure(copy.resourceLoadFailed + ' ' + (target.src || target.href || tagName))
             }
             return
           }
-          renderStartupError(event.message || event.error || '启动脚本错误')
+          handleStartupFailure(event.message || event.error || copy.scriptError)
         }, true)
 
         window.addEventListener('unhandledrejection', function (event) {
-          renderStartupError(event.reason || '启动过程中出现未处理的 Promise 拒绝')
+          handleStartupFailure(event.reason || copy.unhandledRejection)
         })
 
-        window.setTimeout(function () {
-          renderStartupError('桌面应用未能在 ' + bootDeadlineMs + 'ms 内完成启动。这通常表示 WebView 无法执行应用包，或启动代码在 React 挂载前停止。')
+        window.addEventListener('DOMContentLoaded', function () {
+          if (shouldUseLauncherBridge()) {
+            handleStartupFailure(copy.bridgeReason)
+          }
+        })
+
+        bootTimer = window.setTimeout(function () {
+          handleStartupFailure(copy.bootTimeoutPrefix + bootDeadlineMs + copy.bootTimeoutSuffix)
         }, bootDeadlineMs)
       })()
     </script>

@@ -48,8 +48,8 @@ class RecordingClient(BeyaClient):
             return {"session_id": "session-1"}
         return {"ok": True, "path": path}
 
-    def _open_session_websocket(self, session_id, timeout=None):
-        self.calls.append(("WS", self._session_websocket_url(session_id), None))
+    def _open_session_websocket(self, session_id, timeout=None, purpose=None):
+        self.calls.append(("WS", self._session_websocket_url(session_id, purpose=purpose), None))
         return self.fake_ws
 
 
@@ -62,12 +62,18 @@ class ProductClientTest(unittest.TestCase):
             work_dir="F:/Documents/beya",
             permission_mode="bypassPermissions",
             model_override="doubao-seed-2.0-pro",
-            provider_override="mc-design-llm",
+            provider_override="custom",
+            metadata={"user_id": "u1", "conversation_id": "conv-1"},
         )
         self.assertEqual(result.result, "hello")
         self.assertEqual(client.fake_ws.sent[0], {"type": "set_permission_mode", "mode": "bypassPermissions"})
         self.assertEqual(client.fake_ws.sent[1]["type"], "set_runtime_config")
-        self.assertEqual(client.fake_ws.sent[2], {"type": "user_message", "content": "hello"})
+        self.assertEqual(client.fake_ws.sent[2], {
+            "type": "user_message",
+            "content": "hello",
+            "metadata": {"user_id": "u1", "conversation_id": "conv-1"},
+        })
+        self.assertIn(("WS", "ws://beya.test/api/sessions/session-1/ws?purpose=sdk_chat", None), client.calls)
 
         client.tasks.list()
         client.tasks.lists()
@@ -77,6 +83,7 @@ class ProductClientTest(unittest.TestCase):
         client.providers.catalog()
         client.providers.activate("openai")
         client.models.current()
+        client.tools.list(session_id="session-1", cwd="F:/Documents/beya")
         client.tools.execute("Read", {"file_path": "package.json"})
         client.plugins.enable("plugin-a", scope="project")
         client.plugins.reload(session_id="session-1")
@@ -102,7 +109,8 @@ class ProductClientTest(unittest.TestCase):
         self.assertIn("/api/scheduled-tasks", paths)
         self.assertIn("/api/health", paths)
         self.assertIn("/api/readiness", paths)
-        self.assertTrue(any(path == "ws://beya.test/api/sessions/session-1/ws" for path in paths))
+        self.assertTrue(any(path.startswith("/api/tools?") and "session_id=session-1" in path and "cwd=F%3A%2FDocuments%2Fbeya" in path for path in paths))
+        self.assertTrue(any(path == "ws://beya.test/api/sessions/session-1/ws?purpose=sdk_chat" for path in paths))
         self.assertFalse(any(path.startswith("/v1/") for path in paths))
         self.assertFalse(any("/api/stream" in path for path in paths))
         self.assertFalse(any("/api/openai" in path for path in paths))
@@ -137,6 +145,136 @@ class ProductClientTest(unittest.TestCase):
         self.assertEqual(events[3].payload["tool_call_id"], "call-1")
         self.assertEqual(events[-1].result, "你好")
 
+    def test_chat_stream_maps_interactive_desktop_tools_to_structured_events(self):
+        client = RecordingClient(frames=[
+            {
+                "type": "permission_request",
+                "requestId": "ask-1",
+                "toolName": "AskUserQuestion",
+                "toolUseId": "tool-ask-1",
+                "description": "Answer questions?",
+                "input": {
+                    "questions": [
+                        {
+                            "header": "Task",
+                            "question": "请选择要设计的任务？",
+                            "options": [
+                                {"label": "连杆", "description": "连杆设计"},
+                                {"label": "BOM", "description": "BOM 搭建"},
+                            ],
+                        }
+                    ]
+                },
+            },
+            {
+                "type": "permission_request",
+                "requestId": "plan-1",
+                "toolName": "EnterPlanMode",
+                "toolUseId": "tool-plan-1",
+                "description": "Enter plan mode?",
+                "input": {},
+            },
+        ])
+
+        events = list(client.chat.stream("继续设计", session_id="session-1"))
+
+        self.assertEqual([event.type for event in events], ["QUESTION_REQUESTED", "PLAN_ACTION_REQUESTED"])
+        self.assertEqual(events[0].message, "请选择要设计的任务？")
+        self.assertEqual(events[0].payload["questions"][0]["header"], "Task")
+        self.assertEqual(events[0].payload["tool_call_id"], "tool-ask-1")
+        self.assertEqual(events[0].interaction_type, "question")
+        self.assertEqual(events[0].request_id, "ask-1")
+        self.assertEqual(events[0].tool_call_id, "tool-ask-1")
+        self.assertEqual(events[0].tool_name, "AskUserQuestion")
+        self.assertEqual(events[0].questions[0]["header"], "Task")
+        self.assertEqual(events[1].payload["name"], "EnterPlanMode")
+        self.assertEqual(events[1].interaction_type, "plan")
+        self.assertEqual(events[1].request_id, "plan-1")
+
+    def test_chat_stream_auto_responds_to_interaction_and_continues(self):
+        client = RecordingClient(frames=[
+            {
+                "type": "permission_request",
+                "requestId": "ask-1",
+                "toolName": "AskUserQuestion",
+                "toolUseId": "tool-ask-1",
+                "description": "Choose a path",
+                "input": {
+                    "questions": [
+                        {
+                            "header": "Task",
+                            "question": "Which task?",
+                            "options": [
+                                {"label": "Conrod", "description": "Design conrod"},
+                            ],
+                        }
+                    ]
+                },
+            },
+            {"type": "content_delta", "text": "continued"},
+            {"type": "message_complete", "usage": {"input_tokens": 1, "output_tokens": 1}},
+        ])
+
+        events = list(client.chat.stream(
+            "start",
+            session_id="session-1",
+            on_interaction=lambda event: {"answers": {event.questions[0]["question"]: "Conrod"}},
+        ))
+
+        self.assertEqual([event.type for event in events], [
+            "QUESTION_REQUESTED",
+            "LLM_PARTIAL",
+            "WORKFLOW_COMPLETED",
+        ])
+        self.assertEqual(client.fake_ws.sent[0], {
+            "type": "user_message",
+            "content": "start",
+        })
+        self.assertEqual(client.fake_ws.sent[1], {
+            "type": "permission_response",
+            "requestId": "ask-1",
+            "allowed": True,
+            "updatedInput": {
+                "questions": [
+                    {
+                        "header": "Task",
+                        "question": "Which task?",
+                        "options": [
+                            {"label": "Conrod", "description": "Design conrod"},
+                        ],
+                    }
+                ],
+                "answers": {"Which task?": "Conrod"},
+            },
+        })
+
+    def test_chat_respond_sends_permission_response_and_streams_result(self):
+        client = RecordingClient(frames=[
+            {"type": "connected", "sessionId": "session-1"},
+            {"type": "content_delta", "text": "done"},
+            {"type": "message_complete", "usage": {"input_tokens": 1, "output_tokens": 1}},
+        ])
+
+        events = list(client.chat.respond(
+            "session-1",
+            "ask-1",
+            {"answers": {"Which task?": "Conrod"}, "feedback": "selected"},
+        ))
+
+        self.assertEqual(client.fake_ws.sent[0], {
+            "type": "permission_response",
+            "requestId": "ask-1",
+            "allowed": True,
+            "updatedInput": {"answers": {"Which task?": "Conrod"}},
+            "feedback": "selected",
+        })
+        self.assertEqual([event.type for event in events], ["LLM_PARTIAL", "WORKFLOW_COMPLETED"])
+        self.assertEqual(events[-1].result, "done")
+        self.assertEqual(
+            client.calls[0],
+            ("WS", "ws://beya.test/api/sessions/session-1/ws?purpose=interaction_response", None),
+        )
+
     def test_plugin_helpers_generate_installable_plugin_payload(self):
         client = RecordingClient()
         tool = define_tool(
@@ -168,13 +306,13 @@ class ProductClientTest(unittest.TestCase):
     def test_connector_tool_executor_uses_standard_remote_tool_payload(self):
         client = RecordingClient()
         tool = define_tool(
-            name="query_ipm_list",
-            description="Query IPM tasks",
+            name="query_business_records",
+            description="Query business records",
             input_schema={"type": "object", "properties": {"projectName": {"type": "string"}}},
             executor=ConnectorToolExecutor(
-                url="http://127.0.0.1:8000/api/mc-design/connectors/execute",
-                connector_id="tool.external",
-                action="query_ipm_list",
+                url="http://127.0.0.1:8000/api/connectors/execute",
+                connector_id="connector.fixture",
+                action="query_business_records",
                 headers={"x-api-key": "runtime-key"},
             ),
             annotations={"readOnlyHint": True},
@@ -188,17 +326,17 @@ class ProductClientTest(unittest.TestCase):
         self.assertEqual(path, "/api/plugins")
         executor = payload["definition"]["tools"][0]["executor"]
         self.assertEqual(executor["type"], "http")
-        self.assertEqual(executor["toolName"], "query_ipm_list")
-        self.assertEqual(executor["namespace"], "tool.external")
-        self.assertEqual(executor["url"], "http://127.0.0.1:8000/api/mc-design/connectors/execute")
+        self.assertEqual(executor["toolName"], "query_business_records")
+        self.assertEqual(executor["namespace"], "connector.fixture")
+        self.assertEqual(executor["url"], "http://127.0.0.1:8000/api/connectors/execute")
 
     def test_provider_upsert_creates_missing_provider(self):
         client = RecordingClient()
 
-        client.providers.upsert({"providerId": "mc-design-llm", "apiFormat": "openai_chat"})
+        client.providers.upsert({"providerId": "custom", "apiFormat": "openai_chat"})
 
         self.assertEqual(client.calls[-2][1], "/api/providers")
-        self.assertEqual(client.calls[-1], ("POST", "/api/providers", {"providerId": "mc-design-llm", "apiFormat": "openai_chat"}))
+        self.assertEqual(client.calls[-1], ("POST", "/api/providers", {"providerId": "custom", "apiFormat": "openai_chat"}))
 
     def test_plugin_helpers_write_beya_plugin_layout(self):
         plugin = define_plugin(

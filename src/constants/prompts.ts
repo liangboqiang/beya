@@ -46,6 +46,12 @@ import { isEnvTruthy } from '../utils/envUtils.js'
 import { isReplModeEnabled } from '../tools/REPLTool/constants.js'
 import { feature } from 'bun:bundle'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
+import * as cachedMCConfigModule from '../services/compact/cachedMCConfig.js'
+import * as proactiveModuleImpl from '../proactive/index.js'
+import * as briefToolPromptModule from '../tools/BriefTool/prompt.js'
+import * as briefToolRuntimeModule from '../tools/BriefTool/BriefTool.js'
+import * as discoverSkillsPromptModule from '../tools/DiscoverSkillsTool/prompt.js'
+import * as skillSearchFeatureCheckImpl from '../services/skillSearch/featureCheck.js'
 import { shouldUseGlobalCacheScope } from '../utils/betas.js'
 import { isForkSubagentEnabled } from '../tools/AgentTool/forkSubagent.js'
 import {
@@ -67,49 +73,36 @@ const ISSUES_EXPLAINER =
     ? MACRO.ISSUES_EXPLAINER
     : 'use the configured support channel'
 
-// Dead code elimination: conditional imports for feature-gated modules
-/* eslint-disable @typescript-eslint/no-require-imports */
 const getCachedMCConfigForFRC = feature('CACHED_MICROCOMPACT')
-  ? (
-      require('../services/compact/cachedMCConfig.js') as typeof import('../services/compact/cachedMCConfig.js')
-    ).getCachedMCConfig
+  ? cachedMCConfigModule.getCachedMCConfig
   : null
 
 const proactiveModule =
   feature('PROACTIVE') || feature('KAIROS')
-    ? require('../proactive/index.js')
+    ? proactiveModuleImpl
     : null
 const BRIEF_PROACTIVE_SECTION: string | null =
   feature('KAIROS') || feature('KAIROS_BRIEF')
-    ? (
-        require('../tools/BriefTool/prompt.js') as typeof import('../tools/BriefTool/prompt.js')
-      ).BRIEF_PROACTIVE_SECTION
+    ? briefToolPromptModule.BRIEF_PROACTIVE_SECTION
     : null
 const briefToolModule =
   feature('KAIROS') || feature('KAIROS_BRIEF')
     ? {
         isBriefEnabled(): boolean {
-          const requireFn = eval('require') as (id: string) => unknown
-          const module = requireFn('../tools/BriefTool/BriefTool.js') as {
-            isBriefEnabled?: () => boolean
-          }
-          return module.isBriefEnabled?.() ?? false
+          return briefToolRuntimeModule.isBriefEnabled?.() ?? false
         },
       }
     : null
 const DISCOVER_SKILLS_TOOL_NAME: string | null = feature(
   'EXPERIMENTAL_SKILL_SEARCH',
 )
-  ? (
-      require('../tools/DiscoverSkillsTool/prompt.js') as typeof import('../tools/DiscoverSkillsTool/prompt.js')
-    ).DISCOVER_SKILLS_TOOL_NAME
+  ? discoverSkillsPromptModule.DISCOVER_SKILLS_TOOL_NAME
   : null
 // Capture the module (not .isSkillSearchEnabled directly) so spyOn() in tests
 // patches what we actually call — a captured function ref would point past the spy.
 const skillSearchFeatureCheck = feature('EXPERIMENTAL_SKILL_SEARCH')
-  ? (require('../services/skillSearch/featureCheck.js') as typeof import('../services/skillSearch/featureCheck.js'))
+  ? skillSearchFeatureCheckImpl
   : null
-/* eslint-enable @typescript-eslint/no-require-imports */
 import type { OutputStyleConfig } from './outputStyles.js'
 import { CYBER_RISK_INSTRUCTION } from './cyberRiskInstruction.js'
 
@@ -460,8 +453,7 @@ async function loadSkillToolCommands(cwd: string): Promise<Command[]> {
     // Avoid pulling the full CLI command registry into headless Gateway bundles.
     // The registry imports TUI components for slash-command dialogs; Gateway only
     // needs it when SkillTool itself is enabled in the tool surface.
-    const requireFn = eval('require') as (id: string) => unknown
-    const module = requireFn('..' + '/commands.js') as {
+    const module = (await import('../commands.js')) as {
       getSkillToolCommands?: (cwd: string) => Promise<Command[]>
     }
     return await (module.getSkillToolCommands?.(cwd) ?? Promise.resolve([]))
