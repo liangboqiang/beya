@@ -315,25 +315,42 @@ export class ProviderService {
   async rescanProviders(): Promise<{ providers: SavedProvider[]; activeId: string | null }> {
     const index = await this.readIndex()
     let changed = false
+    const networkSettings = await loadNetworkSettings()
 
-    for (let i = 0; i < index.providers.length; i += 1) {
-      const provider = index.providers[i]
-      const apiFormat = provider.apiFormat ?? 'anthropic'
-      const authStrategy = provider.authStrategy ?? getProviderAuthStrategy(provider.providerId)
-      const apiKey = this.resolveProviderApiKey(provider, authStrategy)
-      if (!provider.baseUrl || !apiKey) continue
+    const scans = await Promise.allSettled(
+      index.providers.map(async (provider, providerIndex) => {
+        const apiFormat = provider.apiFormat ?? 'anthropic'
+        const authStrategy = provider.authStrategy ?? getProviderAuthStrategy(provider.providerId)
+        const apiKey = this.resolveProviderApiKey(provider, authStrategy)
+        if (!provider.baseUrl || !apiKey) {
+          return { providerIndex, updated: null as SavedProvider | null }
+        }
 
-      const models = await this.scanProviderModels(
-        provider.baseUrl,
-        apiKey,
-        apiFormat,
-        authStrategy,
-        await loadNetworkSettings(),
-      )
-      if (models.length === 0) continue
+        const models = await this.scanProviderModels(
+          provider.baseUrl,
+          apiKey,
+          apiFormat,
+          authStrategy,
+          networkSettings,
+        )
+        if (models.length === 0) {
+          return { providerIndex, updated: null as SavedProvider | null }
+        }
 
-      const updated = applyDetectedModelsToProvider(provider, models)
-      index.providers[i] = updated
+        const updated = applyDetectedModelsToProvider(provider, models)
+        return { providerIndex, updated }
+      }),
+    )
+
+    for (const result of scans) {
+      if (result.status === 'rejected') {
+        console.error('[ProviderService] Provider scan failed:', result.reason)
+        continue
+      }
+
+      const { providerIndex, updated } = result.value
+      if (!updated) continue
+      index.providers[providerIndex] = updated
       changed = true
     }
 

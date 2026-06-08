@@ -325,10 +325,15 @@ function defaultModelOptions(definition: KnownCliDefinition): LocalCliModelOptio
   return definition.fallbackModels ?? []
 }
 
-function normalizeModelOptions(models: LocalCliModelOption[]): LocalCliModelOption[] {
+function normalizeModelOptions(
+  models: LocalCliModelOption[],
+  options: { includeDefault?: boolean } = {},
+): LocalCliModelOption[] {
+  const { includeDefault = false } = options
   const seen = new Set<string>()
   const result: LocalCliModelOption[] = []
-  for (const model of [DEFAULT_LOCAL_CLI_MODEL, ...models]) {
+  const source = includeDefault ? [DEFAULT_LOCAL_CLI_MODEL, ...models] : models
+  for (const model of source) {
     const id = model.id.trim()
     if (!id || seen.has(id)) continue
     seen.add(id)
@@ -340,8 +345,9 @@ function normalizeModelOptions(models: LocalCliModelOption[]): LocalCliModelOpti
   return result
 }
 
-function createDefaultModelRoles(_definition: KnownCliDefinition): LocalCliModelRoles {
-  const primary = DEFAULT_LOCAL_CLI_MODEL.id
+function createDefaultModelRoles(definition: KnownCliDefinition): LocalCliModelRoles {
+  const fallbackModels = defaultModelOptions(definition)
+  const primary = fallbackModels[0]?.id.trim() || DEFAULT_LOCAL_CLI_MODEL.id
   return {
     primary,
     fast: primary,
@@ -875,7 +881,8 @@ async function scanCliModels(
   launchPath: string | null,
 ): Promise<LocalCliModelOption[]> {
   if (!launchPath || !definition.listModels) {
-    return normalizeModelOptions(defaultModelOptions(definition))
+    const fallbacks = defaultModelOptions(definition)
+    return normalizeModelOptions(fallbacks, { includeDefault: fallbacks.length > 0 })
   }
 
   try {
@@ -887,9 +894,12 @@ async function scanCliModels(
     })
     const output = `${result.stdout || ''}\n${result.stderr || ''}`
     const models = normalizeModelOptions(definition.listModels.parse(output))
-    return models.length > 0 ? models : normalizeModelOptions(defaultModelOptions(definition))
+    if (models.length > 0) return models
+    const fallbacks = defaultModelOptions(definition)
+    return normalizeModelOptions(fallbacks, { includeDefault: fallbacks.length > 0 })
   } catch {
-    return normalizeModelOptions(defaultModelOptions(definition))
+    const fallbacks = defaultModelOptions(definition)
+    return normalizeModelOptions(fallbacks, { includeDefault: fallbacks.length > 0 })
   }
 }
 
@@ -1131,9 +1141,23 @@ export class LocalCliRuntimeService {
 
   async listLocalClis(): Promise<LocalCliRuntimeList> {
     const settings = await this.readRuntimeSettings()
-    const clis = await Promise.all(
+    const detected = await Promise.allSettled(
       KNOWN_CLIS.map((definition) => this.detectCli(definition, settings)),
     )
+    const clis = [] as LocalCliRuntimeInfo[]
+    for (const [index, entry] of detected.entries()) {
+      if (entry.status === 'fulfilled') {
+        clis.push(entry.value)
+        continue
+      }
+      const definition = KNOWN_CLIS[index]
+      if (definition) {
+        console.warn(
+          `[LocalCli] Failed to detect ${definition.id} cli`,
+          entry.reason,
+        )
+      }
+    }
     const activeId = settings.activeId && clis.some((cli) => cli.id === settings.activeId && cli.available)
       ? settings.activeId
       : null
@@ -1279,9 +1303,12 @@ export class LocalCliRuntimeService {
     const available = Boolean(candidate && launch.launchPath)
     const models = available
       ? await scanCliModels(definition, launch.launchPath)
-      : normalizeModelOptions(defaultModelOptions(definition))
+      : []
     const modelRoles = settings.modelRoles[definition.id] ?? createDefaultModelRoles(definition)
-    const enabledModels = [...new Set(Object.values(modelRoles).filter(Boolean))]
+    const enabledModels = [...new Set([
+      ...Object.values(modelRoles).filter(Boolean),
+      ...models.map((model) => model.id),
+    ])]
     return {
       id: definition.id,
       displayName: definition.displayName,

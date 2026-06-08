@@ -1,0 +1,82 @@
+﻿[2026-06-08 15:02:37.191] 信息 | Logger.Initialize: 日志初始化完成，LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-08 15:02:37.221] 信息 | Program.InitializeLoggingSafe: NXServer.Startup: logging initialized. RootDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin, LogDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log
+[2026-06-08 15:02:37.222] 信息 | Program.Startup: NXServer.Startup entered.
+[2026-06-08 15:02:37.223] 信息 | Logger.Initialize: 日志初始化完成，LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-08 15:02:37.224] 信息 | Program.InitializeLoggingSafe: Program.ctor: logging initialized. RootDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin, LogDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log
+[2026-06-08 15:02:37.225] 信息 | Program..ctor: NXServer constructor started.
+[2026-06-08 15:02:37.227] 信息 | Program.SafeStep: Initialize NX Session: start.
+[2026-06-08 15:02:37.611] 信息 | Program.InitializeNXSession: NX Session acquired.
+[2026-06-08 15:02:37.613] 信息 | Program.SafeStep: Initialize NX Session: done.
+[2026-06-08 15:02:37.613] 信息 | Program.SafeStep: Initialize components: start.
+[2026-06-08 15:02:37.952] 信息 | Program.InitializeComponents: Dispatcher initialized.
+[2026-06-08 15:02:37.955] 信息 | Program..ctor: ToolManager 工具目录: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\tools
+[2026-06-08 15:02:37.957] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 跳过基础程序集: Newtonsoft.Json.dll
+[2026-06-08 15:02:37.957] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 跳过基础程序集: NXSDK.dll
+[2026-06-08 15:02:37.973] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 已加载工具程序集: NXTools.dll
+[2026-06-08 15:02:37.987] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: ExitAnimation
+[2026-06-08 15:02:37.994] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetOptimizationToolGuide
+[2026-06-08 15:02:37.995] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: ValidateOptimizationStudy
+[2026-06-08 15:02:37.998] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: BuildOptimizationObjectiveExpression
+[2026-06-08 15:02:37.999] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: RunOptimizationStudy
+[2026-06-08 15:02:38.000] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetAllParamsList
+[2026-06-08 15:02:38.001] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetDriveParamsList
+[2026-06-08 15:02:38.002] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: FindParams
+[2026-06-08 15:02:38.003] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateParam
+[2026-06-08 15:02:38.003] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: UpdateParam
+[2026-06-08 15:02:38.004] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: HighLightDim
+[2026-06-08 15:02:38.005] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: BatchUpdateParams
+[2026-06-08 15:02:38.006] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateNewPart
+[2026-06-08 15:02:38.006] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenTCPart
+[2026-06-08 15:02:38.007] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenTcDrawing
+[2026-06-08 15:02:38.007] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenPart
+[2026-06-08 15:02:38.007] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateImage
+[2026-06-08 15:02:38.009] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetWorkPartInfo
+[2026-06-08 15:02:38.009] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetDrawingSheetNameList
+[2026-06-08 15:02:38.010] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenDrawingSheet
+[2026-06-08 15:02:38.010] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: Updatedrawings
+[2026-06-08 15:02:38.011] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_read_bytes
+[2026-06-08 15:02:38.011] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_write_bytes
+[2026-06-08 15:02:38.012] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_copy
+[2026-06-08 15:02:38.013] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_exists
+[2026-06-08 15:02:38.013] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: Test
+[2026-06-08 15:02:38.014] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: FitView
+[2026-06-08 15:02:38.015] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: SetViewStyle
+[2026-06-08 15:02:38.015] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetViewStyle
+[2026-06-08 15:02:38.016] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: SwitchView
+[2026-06-08 15:02:38.017] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetAllViewNames
+[2026-06-08 15:02:38.017] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: RotateAndScaleView
+[2026-06-08 15:02:38.018] 信息 | ToolManager.ScanToolMethods: ToolManager.ScanToolMethods: 扫描完成，已注册 32 个工具入口（含别名）
+[2026-06-08 15:02:38.019] 信息 | Program.Initialize: 工具管理器初始化完成，已注册 32 个工具方法
+[2026-06-08 15:02:38.023] 信息 | SettingConfig.Load: Loading mc-design-client.config: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\configure\mc-design-client.config
+[2026-06-08 15:02:38.023] 警告 | SettingConfig.Load: mc-design-client.config not found; using local defaults: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\configure\mc-design-client.config
+[2026-06-08 15:02:38.025] 信息 | Program.InitializeComponents: HTTP service object created: 127.0.0.1:8088, Base_Path=/api
+[2026-06-08 15:02:38.027] 信息 | Program.SafeStep: Initialize components: done.
+[2026-06-08 15:02:38.028] 信息 | Program.SafeStep: Start local HTTP service: start.
+[2026-06-08 15:02:38.093] 信息 | HttpServer.Start: Loopback NX tool server started on 127.0.0.1:8088
+[2026-06-08 15:02:38.099] 信息 | Program.SafeStep: Start local HTTP service: done.
+[2026-06-08 15:02:38.100] 信息 | Program.SafeStep: Check user-side Python client: start.
+[2026-06-08 15:02:39.478] 警告 | Program.Probe: User-side Python client is not running. Start it manually with start-client.bat before using the agent.
+[2026-06-08 15:02:39.479] 信息 | Program.SafeStep: Check user-side Python client: done.
+[2026-06-08 15:02:39.479] 信息 | Program..ctor: NXServer constructor finished. LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-08 15:02:39.480] 信息 | Program.Startup: NXServer.Startup finished.
+[2026-06-08 15:02:45.299] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenPart - 缺少必要参数: path
+[2026-06-08 15:02:48.639] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenPart - 缺少必要参数: path
+[2026-06-08 15:02:51.512] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenPart - 缺少必要参数: path
+[2026-06-08 15:02:54.221] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: fs_exists - 缺少必要参数: path
+[2026-06-08 15:02:59.848] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: fs_exists - 缺少必要参数: path
+[2026-06-08 15:04:51.551] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenTCPart - 缺少必要参数: itemID
+[2026-06-08 15:04:54.819] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: CreateNewPart - 缺少必要参数: folder_path
+[2026-06-08 15:05:05.588] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenTCPart - 缺少必要参数: itemID
+[2026-06-08 15:07:47.420] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenTCPart - 缺少必要参数: itemID
+[2026-06-08 15:07:53.649] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenTCPart - 缺少必要参数: itemID
+[2026-06-08 15:07:57.628] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenPart - 缺少必要参数: path
+[2026-06-08 15:55:10.395] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenPart - 缺少必要参数: path
+[2026-06-08 15:55:14.443] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenPart - 缺少必要参数: path
+[2026-06-08 15:55:22.617] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: OpenPart - 缺少必要参数: path
+[2026-06-08 15:55:31.143] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: BatchUpdateParams - 缺少必要参数: expressions
+[2026-06-08 15:55:35.354] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: BatchUpdateParams - 缺少必要参数: expressions
+[2026-06-08 15:55:38.310] 警告 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 参数错误: CreateParam - 缺少必要参数: std_id
+[2026-06-08 15:56:40.397] 错误 | ToolManager.ExecuteTool: ToolManager.ExecuteTool: 执行工具失败: OpenPart
+Newtonsoft.Json.JsonReaderException: Bad JSON escape sequence: \U. Path 'path', line 1, position 13.
+   在 NXServer.Dispatcher.Invoke[T](Func`1 func) 位置 F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\Dispatcher.cs:行号 40
+   在 NXServer.ToolManager.ExecuteTool(String toolName, String requestBody) 位置 F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\ToolManager.cs:行号 0

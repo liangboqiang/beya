@@ -1,5 +1,6 @@
 import { cp, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
-import { basename, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
@@ -44,6 +45,9 @@ type WorkflowIntent =
   | 'nx_session_management'
 
 const execFileAsync = promisify(execFile)
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url))
+const PROJECT_ROOT = resolve(MODULE_DIR, '../../..')
 
 const TOOL_NAMES = [
   'mc_design_query_tasks',
@@ -278,11 +282,15 @@ export function recommendTemplates(args: JsonObject): JsonObject {
     .sort((a, b) => b.score - a.score)
     .slice(0, positiveInteger(args.limit) ?? 5)
 
+  const topPick = candidates[0]
+
   return {
     ok: true,
     data_source: MC_DESIGN_LOCAL_SOURCE,
     component,
     query_parameters: parameters,
+    algorithm: 'weighted_normalized_euclidean_similarity',
+    best_template_id: topPick?.template.id,
     recommendations: candidates,
     confirmation_required: true,
   }
@@ -329,6 +337,39 @@ function planWorkflow(args: JsonObject): JsonObject {
   const missingInputs = Array.isArray(classified.missing_inputs)
     ? classified.missing_inputs as string[]
     : []
+  const text = stringValue(args.request_text) || stringValue(args.text) || ''
+  const normalized = normalizedText(text)
+
+  const requiresGuidance =
+    intent === 'guided_design' ||
+    intent === 'optimization' ||
+    intent === 'template_recommendation' ||
+    intent === 'nx_session_management' ||
+    (intent === 'performance_design' && missingInputs.length > 0) ||
+    (intent === 'parameter_modeling' && missingInputs.length > 0) ||
+    (intent === 'drawing_template_update' && component === 'conrod')
+  const sideEffectsAllowed = false
+
+  const recommendedTools = recommendedToolsForIntent(intent, component, missingInputs)
+  const nextTool = nextToolForIntent(intent, component, missingInputs)
+
+  const pluginToolHints: string[] = []
+  if (intent === 'optimization') {
+    pluginToolHints.push('nx_get_optimization_tool_guide', 'nx_validate_optimization_study')
+  }
+
+  const blockers: string[] = []
+  if (intent === 'drawing_template_update' && component !== 'conrod') {
+    blockers.push('drawing_template_only_conrod_supported')
+  }
+
+  const guardrails: string[] = []
+  if (containsAny(normalized, ['nx', '开', 'ugraf']) || intent === 'nx_session_management') {
+    guardrails.push('reuse_running_nx_before_launch')
+  }
+
+  const shouldQueryTasks = intent === 'task_execution' || intent === 'retrieval_comparison' || intent === 'report_generation'
+
   return {
     ok: true,
     data_source: MC_DESIGN_LOCAL_SOURCE,
@@ -336,14 +377,20 @@ function planWorkflow(args: JsonObject): JsonObject {
     component,
     task_id: classified.task_id,
     missing_inputs: missingInputs,
-    should_query_tasks: intent === 'task_execution' || intent === 'retrieval_comparison',
+    requires_guidance: requiresGuidance,
+    side_effects_allowed: sideEffectsAllowed,
+    should_query_tasks: shouldQueryTasks,
     should_estimate: intent === 'parameter_modeling' || intent === 'performance_design',
     should_recommend: intent === 'template_recommendation' || intent === 'parameter_modeling',
-    recommended_tools: recommendedToolsForIntent(intent, component, missingInputs),
+    recommended_tools: recommendedTools,
+    recommended_next_tools: recommendedTools,
+    next_recommended_tool: nextTool,
+    plugin_tool_hints: pluginToolHints,
+    blockers,
+    guardrails,
     side_effects: intent === 'guided_design' || intent === 'retrieval_comparison' || intent === 'template_recommendation'
       ? []
       : ['requires explicit confirmation before writing files, launching NX, or generating artifacts'],
-    next_recommended_tool: nextToolForIntent(intent, component, missingInputs),
   }
 }
 
@@ -367,7 +414,7 @@ async function prepareTemplateWorkspace(args: JsonObject, extra: ToolCallExtra):
   await mkdir(workspaceFolder, { recursive: true })
 
   const sourceFolder = template.localFolderPath
-    ? resolve(process.cwd(), template.localFolderPath)
+    ? resolve(PROJECT_ROOT, template.localFolderPath)
     : undefined
   let copied = false
   if (sourceFolder) {
@@ -397,6 +444,7 @@ async function prepareTemplateWorkspace(args: JsonObject, extra: ToolCallExtra):
     ok: true,
     data_source: MC_DESIGN_LOCAL_SOURCE,
     template_id: template.id,
+    source_folder: sourceFolder,
     workspace_folder: workspaceFolder,
     manifest_path: manifestPath,
     source_copied: copied,
@@ -412,7 +460,7 @@ async function prepareTemplateWorkspace(args: JsonObject, extra: ToolCallExtra):
 
 async function listLocalAssetsTool(args: JsonObject): Promise<JsonObject> {
   const includeDependencies = args.include_dependencies !== false
-  const runtimeRoot = resolve(process.cwd(), MC_DESIGN_RUNTIME_ROOT)
+  const runtimeRoot = resolve(PROJECT_ROOT, MC_DESIGN_RUNTIME_ROOT)
   const assets: JsonObject[] = []
   await collectAssetEntries(runtimeRoot, runtimeRoot, assets, includeDependencies ? 300 : 80)
   return {
@@ -454,6 +502,7 @@ async function generateReportArtifacts(args: JsonObject, extra: ToolCallExtra): 
   if (args.confirmed !== true) {
     return { ok: false, error: 'confirmation_required', message: 'Report generation requires confirmed: true.' }
   }
+  const allowConfirmedMissing = args.allow_confirmed_missing_images === true
   const task = getMcDesignTask(stringValue(args.task_id) || stringValue(args.taskId))
   const template = getMcDesignTemplate(stringValue(args.template_id))
   const component = normalizeComponent(args.component) || template?.component || task?.component || 'conrod'
@@ -462,6 +511,14 @@ async function generateReportArtifacts(args: JsonObject, extra: ToolCallExtra): 
     ...(task?.explicitParameters ?? {}),
     ...(template?.nominalParameters ?? {}),
     ...(jsonObjectValue(args.parameters) ?? {}),
+  }
+
+  if (!allowConfirmedMissing) {
+    return {
+      ok: false,
+      error: 'report_image_evidence_required',
+      message: 'Design report generation requires image slots (NX screenshots, drawing exports). Set allow_confirmed_missing_images: true to proceed without images.',
+    }
   }
 
   const pyResult = await tryDocxGeneration(artifactDir, component, parameters, task, template)
@@ -501,11 +558,9 @@ async function tryDocxGeneration(
   task: McDesignTask | undefined,
   template: McDesignTemplate | undefined,
 ): Promise<JsonObject | undefined> {
-  const projectRoot = resolve(import.meta.dir, '../../..')
-  const pyExe = join(projectRoot, 'runtime', 'mc-design', 'dependencies', 'python', 'python.exe')
-  const pyScript = join(projectRoot, 'runtime', 'mc-design', 'dependencies', 'skills', 'design-report', 'scripts', 'design_report.py')
-  const docxTemplate = join(projectRoot, 'runtime', 'mc-design', 'dependencies', 'skills', 'design-report', 'templates', 'conrod_design_report_template.docx')
-  const dfmeaTemplate = join(projectRoot, 'runtime', 'mc-design', 'dependencies', 'skills', 'dfmea-risk-review', 'templates', 'dfmea_template.xlsx')
+  const pyExe = join(PROJECT_ROOT, 'runtime', 'mc-design', 'dependencies', 'python', 'python.exe')
+  const pyScript = join(PROJECT_ROOT, 'runtime', 'mc-design', 'dependencies', 'skills', 'design-report', 'scripts', 'design_report.py')
+  const docxTemplate = join(PROJECT_ROOT, 'runtime', 'mc-design', 'dependencies', 'skills', 'design-report', 'templates', 'conrod_design_report_template.docx')
 
   try {
     await stat(pyExe)
@@ -518,45 +573,62 @@ async function tryDocxGeneration(
   const workspace = artifactDir
   const reportFileName = `design_report_${timestampSegment()}.docx`
   const outputPath = join(workspace, reportFileName)
-  const slots: Record<string, string | number> = {}
-  for (const [key, value] of Object.entries(parameters)) {
-    if (value !== undefined && value !== null) slots[key] = typeof value === 'number' ? value : String(value)
-  }
-  if (task) {
-    slots.task_id = task.id
-    slots.task_title = task.title ?? ''
-    slots.task_source = task.source ?? ''
-    slots.project_code = task.projectCode ?? ''
-  }
-  if (template) {
-    slots.template_id = template.id
-    slots.template_name = template.name ?? ''
-    slots.template_variant = template.variantName ?? ''
-  }
-
-  const payload = {
-    output_path: outputPath,
-    slots,
-    slot_values: slots,
-  }
-  const payloadPath = join(workspace, `report_payload_${timestampSegment()}.json`)
   await mkdir(workspace, { recursive: true })
-  await writeFile(payloadPath, JSON.stringify(payload, null, 2), 'utf8')
 
   try {
-    const validateResult = await execFileAsync(pyExe, [
-      pyScript, 'validate',
-      '--workspace', workspace,
-      '--input', payloadPath,
-    ], { timeout: 30_000 })
-    const validationResult = JSON.parse(validateResult.stdout.trim()) as { ok: boolean }
-    if (!validationResult.ok) return undefined
+    const inspectResult = await execFileAsync(pyExe, [
+      pyScript, 'inspect-template',
+      '--template', docxTemplate,
+    ], { timeout: 15_000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
+    const templateInfo = JSON.parse(inspectResult.stdout.trim()) as {
+      ok: boolean; slot_count: number
+      slots: Array<{ type: string; name: string; section: string }>
+    }
+    if (!templateInfo.ok || !Array.isArray(templateInfo.slots)) return undefined
+
+    const slotValues: Record<string, unknown> = {}
+    for (const slot of templateInfo.slots) {
+      const key = slot.name
+      if (coreReportSlots[key]) {
+        slotValues[key] = {
+          value: String(coreReportSlots[key]),
+          source: 'local_fixture',
+          status: 'auto',
+        }
+      } else if (parameters[key] !== undefined) {
+        slotValues[key] = {
+          value: String(parameters[key]),
+          source: 'calculated_parameters',
+          status: 'auto',
+        }
+      } else if (slot.type === 'image') {
+        slotValues[key] = {
+          status: 'confirmed_missing',
+          confirmation_source: 'user',
+          reason: '未提供 NX 截图，用户确认在本地演示中暂缺',
+        }
+      } else {
+        slotValues[key] = {
+          value: filledFromContext(slot, component, task, template),
+          source: 'local_fixture',
+          status: 'auto',
+        }
+      }
+    }
+
+    const payload = {
+      output_path: outputPath,
+      slots: slotValues,
+      slot_values: slotValues,
+    }
+    const payloadPath = join(workspace, `report_payload_${timestampSegment()}.json`)
+    await writeFile(payloadPath, JSON.stringify(payload, null, 2), 'utf8')
 
     const generateResult = await execFileAsync(pyExe, [
       pyScript, 'generate',
       '--workspace', workspace,
       '--input', payloadPath,
-    ], { timeout: 60_000 })
+    ], { timeout: 60_000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
     const genResult = JSON.parse(generateResult.stdout.trim()) as { ok: boolean; remaining_raw_slot_count?: number }
 
     return {
@@ -569,12 +641,53 @@ async function tryDocxGeneration(
       template_id: template?.id,
       template_path: docxTemplate,
       generator_script: pyScript,
-      validation_result: validationResult,
       generation_result: genResult,
     }
   } catch {
     return undefined
   }
+}
+
+const coreReportSlots: Record<string, string> = {
+  '设计员': 'local-engineer',
+  '当前日期': new Date().toISOString().split('T')[0],
+  '当前时间': new Date().toISOString().split('T')[1]?.split('.')[0] ?? '',
+  '版本号': 'A',
+  '更改原因': '本地演示验证',
+  '设计原型图号': 'N/A',
+  '新图号/版本号': 'B',
+  '方案说明': '基于本地知识库和经验公式的参数化设计方案。',
+}
+
+function filledFromContext(
+  slot: { type: string; name: string; section: string },
+  component: string,
+  task: McDesignTask | undefined,
+  template: McDesignTemplate | undefined,
+): string {
+  const name = slot.name.toLowerCase()
+  if (name.includes('编号') || name.includes('图号') || name.includes('文件')) {
+    return template?.itemId ?? task?.id ?? 'N/A'
+  }
+  if (name.includes('名称') || name.includes('标题')) {
+    return template?.name ?? task?.title ?? `${component} design report`
+  }
+  if (name.includes('目的')) {
+    return task?.requirementText ?? '参数化零部件设计'
+  }
+  if (name.includes('原型')) {
+    return task?.id ?? 'N/A'
+  }
+  if (name.includes('整机')) {
+    return 'N/A'
+  }
+  if (name.includes('审核')) {
+    return 'local-reviewer'
+  }
+  if (name.includes('批准')) {
+    return 'local-approver'
+  }
+  return '本地验证数据'
 }
 
 async function generateConrodDrawing(args: JsonObject, extra: ToolCallExtra): Promise<JsonObject> {
@@ -965,8 +1078,10 @@ async function executeLocalTool(
       return jsonResult(await listLocalAssetsTool(args))
     case 'mc_design_generate_nx_artifact':
       return jsonResult(await generateNxArtifact(args, extra), args.confirmed !== true)
-    case 'mc_design_generate_report_artifacts':
-      return jsonResult(await generateReportArtifacts(args, extra), args.confirmed !== true)
+    case 'mc_design_generate_report_artifacts': {
+      const reportResult = await generateReportArtifacts(args, extra)
+      return jsonResult(reportResult, !reportResult.ok)
+    }
     case 'mc_design_generate_conrod_drawing':
       return jsonResult(await generateConrodDrawing(args, extra), args.confirmed !== true)
     case 'mc_design_run_local_chain_check':
@@ -1051,11 +1166,12 @@ function inferIntent(
   if (containsAny(normalized, ['drawing', 'draw', 'print', '图纸', '出图', '打印'])) return 'drawing_template_update'
   if (containsAny(normalized, ['optimize', 'optimization', '优化'])) return 'optimization'
   if (containsAny(normalized, ['compare', 'comparison', '对比', '比较'])) return 'retrieval_comparison'
+  if (containsAny(normalized, ['nx', 'open', 'close', 'reuse', 'ugraf', '开'])) return 'nx_session_management'
   if (containsAny(normalized, ['query', 'task', 'ipm', 'ecs', 'ecr', 'qpp', '任务', '查询']) || task) return 'task_execution'
+  if (containsAny(normalized, ['参数化'])) return 'parameter_modeling'
   if (containsAny(normalized, ['template', 'recommend', '模板', '推荐'])) return 'template_recommendation'
-  if (containsAny(normalized, ['nx', 'open', 'close', 'reuse', 'ugraf'])) return 'nx_session_management'
   if (containsAny(normalized, ['performance', 'torque', 'efficiency', 'pressure', '性能', '扭矩', '压力'])) return 'performance_design'
-  if (Object.keys(jsonObjectValue(args.parameters) ?? {}).length > 0) return 'direct_parameter_update'
+  if (containsAny(normalized, ['改成', '修改', '更新', '调整', 'modify', 'update', 'set', 'change', '改到', '设为', '变更为']) && Object.keys(jsonObjectValue(args.parameters) ?? {}).length > 0) return 'direct_parameter_update'
   if (component && missingInputs.length === 0) return 'parameter_modeling'
   return 'guided_design'
 }
@@ -1069,7 +1185,10 @@ function recommendedToolsForIntent(
   component: McDesignComponent | undefined,
   missingInputs: string[],
 ): string[] {
-  if (missingInputs.length > 0 || !component) return ['mc_design_classify_requirement', 'AskUserQuestion']
+  const hasMissing = missingInputs.length > 0 || !component
+  if (hasMissing && !toolIntentCanProceedWithoutInputs(intent)) {
+    return ['mc_design_classify_requirement', 'AskUserQuestion']
+  }
   switch (intent) {
     case 'task_execution': return ['mc_design_query_tasks', 'mc_design_recommend_templates', 'mc_design_estimate_parameters']
     case 'retrieval_comparison': return ['mc_design_query_tasks', 'mc_design_lookup_knowledge']
@@ -1082,9 +1201,13 @@ function recommendedToolsForIntent(
       ? ['mc_design_prepare_template_workspace', 'mc_design_generate_conrod_drawing']
       : ['AskUserQuestion']
     case 'optimization': return ['mc_design_nx_health', 'mc_design_nx_call_tool']
-    case 'nx_session_management': return ['mc_design_find_nx', 'mc_design_nx_health']
+    case 'nx_session_management': return ['mc_design_find_nx', 'mc_design_nx_health', 'mc_design_open_nx']
     default: return ['mc_design_classify_requirement']
   }
+}
+
+function toolIntentCanProceedWithoutInputs(intent: WorkflowIntent): boolean {
+  return ['task_execution', 'retrieval_comparison', 'report_generation', 'drawing_template_update', 'direct_parameter_update', 'optimization', 'template_recommendation', 'nx_session_management', 'parameter_modeling'].includes(intent)
 }
 
 function nextToolForIntent(
@@ -1302,8 +1425,9 @@ function evalRule(
 }
 
 async function ensureArtifactDir(extra: ToolCallExtra): Promise<string> {
-  const root = process.env.BEYA_MC_DESIGN_ARTIFACT_DIR || join(process.cwd(), '.beya', 'mc-design-artifacts')
-  const dir = join(root, safeSegment(extra.sessionId || extra.taskId || 'session'))
+  const configDir = process.env.BEYA_CONFIG_DIR
+  const cwdRoot = process.env.BEYA_MC_DESIGN_ARTIFACT_DIR || join(configDir || process.cwd(), 'mc-design-artifacts')
+  const dir = join(cwdRoot, safeSegment(extra.sessionId || extra.taskId || 'session'))
   await mkdir(dir, { recursive: true })
   return dir
 }

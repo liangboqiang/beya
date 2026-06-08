@@ -52,7 +52,7 @@ describe('E2E: Full Flow', () => {
   // =============================================
 
   it('should return healthy status', async () => {
-    const res = await fetch(`${baseUrl}/health`)
+    const res = await fetch(`${baseUrl}/api/health`)
     const data = await res.json()
     expect(data.status).toBe('ok')
   })
@@ -65,7 +65,7 @@ describe('E2E: Full Flow', () => {
 
   it('should return diagnostics', async () => {
     const { data } = await api('GET', '/api/status/diagnostics')
-    expect(data.platform).toBe('darwin')
+    expect(data.platform).toBe(process.platform)
     expect(data.configDir).toBe(tmpDir)
   })
 

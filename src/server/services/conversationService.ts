@@ -123,6 +123,25 @@ type SessionStartOptions = {
   metadata?: Record<string, unknown>
 }
 
+function sanitizeModelArgument(value: string | undefined | null): string | null {
+  const trimmed = value?.trim()
+  if (!trimmed) return null
+  if (trimmed.length > 200) return null
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(trimmed)) return null
+  return trimmed
+}
+
+function resolveLocalCliStartupModel(
+  runtime: SelectedLocalCliRuntime,
+  requestedModel?: string | null,
+): string | undefined {
+  const requested = sanitizeModelArgument(requestedModel)
+  if (requested) return requested
+  const roleModel = runtime.modelRoles?.primary?.trim()
+  if (roleModel) return roleModel
+  return undefined
+}
+
 export class ConversationStartupError extends Error {
   constructor(
     message: string,
@@ -432,7 +451,7 @@ export class ConversationService {
     const session: SessionProcess = {
       runtimeKind: 'local_cli',
       localCliRuntime: selectedLocalCliRuntime,
-      localCliModel: options?.model?.trim() || selectedLocalCliRuntime.modelRoles.primary,
+      localCliModel: resolveLocalCliStartupModel(selectedLocalCliRuntime, options?.model),
       outputCallbacks: [],
       workDir: launchWorkDir,
       permissionMode: options?.permissionMode || 'default',
@@ -464,7 +483,9 @@ export class ConversationService {
         runtimeKind: 'local_cli',
         runtimeProviderId: null,
         runtimeLocalCliId: selectedLocalCliRuntime.id,
-        runtimeModelId: options?.model?.trim() || selectedLocalCliRuntime.modelRoles.primary,
+        ...(resolveLocalCliStartupModel(selectedLocalCliRuntime, options?.model)
+          ? { runtimeModelId: resolveLocalCliStartupModel(selectedLocalCliRuntime, options?.model) }
+          : {}),
         ...(options?.effort ? { effortLevel: options.effort } : {}),
       })
     }
@@ -1456,7 +1477,8 @@ export class ConversationService {
     const args: string[] = []
 
     if (options?.model) {
-      args.push('--model', options.model)
+      const sanitizedModel = sanitizeModelArgument(options.model)
+      if (sanitizedModel) args.push('--model', sanitizedModel)
     }
 
     if (options?.effort) {

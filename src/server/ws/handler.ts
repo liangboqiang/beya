@@ -22,8 +22,13 @@ import {
   normalizeExecutionMode,
   type ExecutionMode,
 } from '../services/executionModeService.js'
-import { localCliRuntimeService } from '../services/localCliRuntimeService.js'
+import {
+  localCliRuntimeService,
+  type LocalCliRuntimeInfo,
+  type LocalCliRuntimeList,
+} from '../services/localCliRuntimeService.js'
 import { deriveTitle, generateTitle, saveAiTitle } from '../services/titleService.js'
+import type { SavedProvider } from '../types/provider.js'
 import { parseSlashCommand } from '../../utils/slashCommandParsing.js'
 import {
   COMMAND_NAME_TAG,
@@ -92,6 +97,178 @@ const prewarmedSessions = new Set<string>()
 const prewarmIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const DEFAULT_PREWARM_IDLE_TIMEOUT_MS = 5 * 60_000
 const VALID_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'max'])
+
+function sanitizeRuntimeModelId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.length > 200) return null
+  if (!/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(trimmed)) return null
+  return trimmed
+}
+
+function splitRuntimeModelContext(modelId: string): { base: string; contextSuffix: string } {
+  const colon = modelId.indexOf(':')
+  if (colon === -1) return { base: modelId, contextSuffix: '' }
+  return {
+    base: modelId.slice(0, colon),
+    contextSuffix: modelId.slice(colon),
+  }
+}
+
+function uniqueModelIds(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const value of values) {
+    const trimmed = value?.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+  }
+  return out
+}
+
+function getProviderModelCandidates(provider: SavedProvider): string[] {
+  const roleModels = [
+    provider.modelRoles?.primary,
+    provider.modelRoles?.fast,
+    provider.modelRoles?.balanced,
+    provider.modelRoles?.powerful,
+  ]
+  return uniqueModelIds([...(provider.enabledModels ?? []), ...roleModels])
+}
+
+function resolveProviderRuntimeModel(
+  provider: SavedProvider,
+  requestedModelId?: string | null,
+): string | null {
+  const candidates = getProviderModelCandidates(provider)
+  const candidateSet = new Set(candidates)
+  const requested = sanitizeRuntimeModelId(requestedModelId)
+  if (requested) {
+    const { base, contextSuffix } = splitRuntimeModelContext(requested)
+    if (candidateSet.has(base)) return `${base}${contextSuffix}`
+  }
+
+  const fallback = uniqueModelIds([
+    provider.modelRoles?.primary,
+    provider.modelRoles?.fast,
+    provider.modelRoles?.balanced,
+    provider.modelRoles?.powerful,
+  ])[0]
+  if (fallback && candidateSet.has(fallback)) {
+    const requestedContext = requested ? splitRuntimeModelContext(requested).contextSuffix : ''
+    return `${fallback}${requestedContext}`
+  }
+
+  if (candidates.length > 0) {
+    const requestedContext = requested ? splitRuntimeModelContext(requested).contextSuffix : ''
+    return `${candidates[0]}${requestedContext}`
+  }
+
+  return requested
+}
+
+function getLocalCliModelCandidates(cli: LocalCliRuntimeInfo): string[] {
+  const roleModels = [
+    cli.modelRoles?.primary,
+    cli.modelRoles?.fast,
+    cli.modelRoles?.balanced,
+    cli.modelRoles?.powerful,
+  ]
+  return uniqueModelIds([...(cli.models ?? []).map((model) => model.id), ...roleModels])
+}
+
+function resolveLocalCliRuntimeModel(
+  cli: LocalCliRuntimeInfo,
+  requestedModelId?: string | null,
+): string | null {
+  const candidates = getLocalCliModelCandidates(cli)
+  const candidateSet = new Set(candidates)
+  const requested = sanitizeRuntimeModelId(requestedModelId)
+  if (requested) {
+    const { base } = splitRuntimeModelContext(requested)
+    if (candidateSet.has(base) || requested === 'default') return requested
+  }
+  const fallback = uniqueModelIds([
+    cli.modelRoles?.primary,
+    cli.modelRoles?.fast,
+    cli.modelRoles?.balanced,
+    cli.modelRoles?.powerful,
+  ]).find((id) => candidateSet.has(id))
+  if (fallback) return fallback
+  return candidates[0] ?? null
+}
+
+async function resolveRuntimeOverrideFromMessage(
+  message: Extract<ClientMessage, { type: 'set_runtime_config' }>,
+): Promise<RuntimeOverride | null> {
+  const requestedKind = message.kind === 'local_cli' || message.localCliId ? 'local_cli' : 'provider'
+  const effortLevel =
+    typeof message.effortLevel === 'string' ? message.effortLevel.trim() : undefined
+  if (effortLevel !== undefined && !VALID_EFFORT_LEVELS.has(effortLevel)) return null
+
+  if (requestedKind === 'local_cli') {
+    const localCliId = typeof message.localCliId === 'string' && message.localCliId.trim()
+      ? message.localCliId.trim()
+      : null
+    if (!localCliId) return null
+    const { clis } = await localCliRuntimeService.listLocalClis()
+    const cli = clis.find((candidate) => candidate.id === localCliId && candidate.available)
+    if (!cli) return null
+    const modelId = resolveLocalCliRuntimeModel(cli, sanitizeRuntimeModelId(message.modelId))
+    if (!modelId) return null
+
+    return {
+      kind: 'local_cli',
+      providerId: null,
+      localCliId,
+      modelId,
+      ...(effortLevel ? { effort: effortLevel } : {}),
+    }
+  }
+
+  const { providers, activeId } = await providerService.listProviders()
+  const requestedProviderId =
+    typeof message.providerId === 'string' && message.providerId.trim()
+      ? message.providerId.trim()
+      : activeId
+  const provider = requestedProviderId
+    ? providers.find((entry) => entry.providerId === requestedProviderId)
+    : null
+  if (!provider) return null
+  const modelId = resolveProviderRuntimeModel(provider, sanitizeRuntimeModelId(message.modelId))
+  if (!modelId) return null
+
+  return {
+    kind: 'provider',
+    providerId: provider.providerId,
+    localCliId: null,
+    modelId,
+    ...(effortLevel ? { effort: effortLevel } : {}),
+  }
+}
+
+async function getResolvedRuntimeFromProviderList(
+  input: RuntimeOverride,
+): Promise<RuntimeOverride | null> {
+  if (input.kind === 'local_cli') {
+    const { clis } = await localCliRuntimeService.listLocalClis()
+    const cli = clis.find((candidate) => candidate.id === input.localCliId && candidate.available)
+    if (!cli) return null
+    const modelId = resolveLocalCliRuntimeModel(cli, input.modelId)
+    if (!modelId) return null
+    return { ...input, localCliId: cli.id, modelId }
+  }
+
+  const { providers, activeId } = await providerService.listProviders()
+  const providerId = input.providerId ?? activeId
+  if (!providerId) return null
+  const provider = providers.find((entry) => entry.providerId === providerId)
+  if (!provider) return null
+  const modelId = resolveProviderRuntimeModel(provider, input.modelId)
+  if (!modelId) return null
+  return { ...input, providerId: provider.providerId, localCliId: null, modelId }
+}
 
 async function sendRepositoryStartupStatus(
   ws: ServerWebSocket<WebSocketData>,
@@ -622,11 +799,18 @@ async function handleSetRuntimeConfig(
     }
   }
 
+  const resolvedOverride = await resolveRuntimeOverrideFromMessage(message)
+  if (!resolvedOverride) {
+    sendMessage(ws, {
+      type: 'error',
+      message: 'Runtime selection is invalid.',
+      code: 'RUNTIME_CONFIG_INVALID',
+    })
+    return
+  }
+
   const nextOverride: RuntimeOverride = {
-    kind,
-    providerId: kind === 'provider' ? message.providerId ?? null : null,
-    localCliId: kind === 'local_cli' ? localCliId : null,
-    modelId,
+    ...resolvedOverride,
     ...(effortLevel ? { effort: effortLevel } : {}),
   }
   const prevOverride = runtimeOverrides.get(sessionId)
@@ -750,6 +934,19 @@ async function persistSessionRuntimeConfig(
   sessionId: string,
   runtime: RuntimeOverride,
 ): Promise<void> {
+  const resolvedRuntime = await getResolvedRuntimeFromProviderList(runtime).catch((error) => {
+    console.warn(
+      `[WS] Failed to resolve runtime override for persistence ${sessionId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    )
+    return null
+  })
+
+  if (!resolvedRuntime) return
+
+  runtimeOverrides.set(sessionId, resolvedRuntime)
+
   const workDir =
     conversationService.getSessionWorkDir(sessionId) ||
     await sessionService.getSessionWorkDir(sessionId).catch(() => null)
@@ -758,11 +955,11 @@ async function persistSessionRuntimeConfig(
 
   await sessionService.appendSessionMetadata(sessionId, {
     workDir,
-    runtimeKind: runtime.kind,
-    runtimeProviderId: runtime.providerId,
-    runtimeLocalCliId: runtime.localCliId ?? null,
-    runtimeModelId: runtime.modelId,
-    ...(runtime.effort ? { effortLevel: runtime.effort } : {}),
+    runtimeKind: resolvedRuntime.kind,
+    runtimeProviderId: resolvedRuntime.providerId,
+    runtimeLocalCliId: resolvedRuntime.localCliId ?? null,
+    runtimeModelId: resolvedRuntime.modelId,
+    ...(resolvedRuntime.effort ? { effortLevel: resolvedRuntime.effort } : {}),
   })
 }
 
@@ -2028,68 +2225,27 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
     ? runtimeOverrides.get(sessionId) ?? persistedRuntimeOverride
     : undefined
   if (runtimeOverride) {
-    const userSettings = await settingsService.getUserSettings()
-    if (runtimeOverride.kind === 'local_cli') {
-      if (!runtimeOverride.localCliId) {
-        runtimeOverrides.delete(sessionId!)
-        const defaults = await getDefaultRuntimeSettings()
-        return {
-          ...defaults,
-          permissionMode: sessionPermissionMode ?? defaults.permissionMode,
-          metadata: getSessionRuntimeMetadata(sessionId),
-        }
-      }
-      const { clis } = await localCliRuntimeService.listLocalClis()
-      const cliExists = clis.some((cli) => cli.id === runtimeOverride.localCliId && cli.available)
-      if (!cliExists) {
-        console.warn(
-          `[WS] Ignoring stale local CLI id for ${sessionId}: ${runtimeOverride.localCliId}`,
-        )
-        runtimeOverrides.delete(sessionId!)
-        const defaults = await getDefaultRuntimeSettings()
-        return {
-          ...defaults,
-          permissionMode: sessionPermissionMode ?? defaults.permissionMode,
-          metadata: getSessionRuntimeMetadata(sessionId),
-        }
-      }
+    const resolvedRuntime = await getResolvedRuntimeFromProviderList(runtimeOverride)
+    if (!resolvedRuntime) {
+      runtimeOverrides.delete(sessionId!)
+      const defaults = await getDefaultRuntimeSettings()
       return {
-        permissionMode: sessionPermissionMode ?? await settingsService.getPermissionMode().catch(() => undefined),
-        model: runtimeOverride.modelId,
-        effort: runtimeOverride.effort,
-        thinking: resolveDesktopThinkingMode(userSettings),
-        providerId: null,
-        localCliId: runtimeOverride.localCliId,
-        executionMode: 'local_cli',
+        ...defaults,
+        permissionMode: sessionPermissionMode ?? defaults.permissionMode,
         metadata: getSessionRuntimeMetadata(sessionId),
       }
     }
 
-    if (typeof runtimeOverride.providerId === 'string') {
-      const { providers } = await providerService.listProviders()
-      const providerExists = isKnownRuntimeProviderId(runtimeOverride.providerId, providers)
-      if (!providerExists) {
-        console.warn(
-          `[WS] Ignoring stale runtime provider id for ${sessionId}: ${runtimeOverride.providerId}`,
-        )
-        runtimeOverrides.delete(sessionId!)
-        const defaults = await getDefaultRuntimeSettings()
-        return {
-          ...defaults,
-          permissionMode: sessionPermissionMode ?? defaults.permissionMode,
-          metadata: getSessionRuntimeMetadata(sessionId),
-        }
-      }
-    }
-
+    runtimeOverrides.set(sessionId!, resolvedRuntime)
+    const userSettings = await settingsService.getUserSettings()
     const thinking = resolveDesktopThinkingMode(userSettings)
 
     return {
       permissionMode: sessionPermissionMode ?? await settingsService.getPermissionMode().catch(() => undefined),
-      model: runtimeOverride.modelId,
-      effort: runtimeOverride.effort,
+      model: resolvedRuntime.modelId,
+      effort: resolvedRuntime.effort,
       thinking,
-      providerId: runtimeOverride.providerId,
+      providerId: resolvedRuntime.providerId,
       localCliId: null,
       executionMode: 'provider',
       metadata: getSessionRuntimeMetadata(sessionId),
