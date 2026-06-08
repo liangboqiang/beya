@@ -3,7 +3,6 @@ import * as os from 'os'
 import * as path from 'path'
 import { randomBytes } from 'node:crypto'
 import { normalizeLegacyDeepSeekManagedEnv } from '../../utils/providerManagedEnvCompat.js'
-import { isOpenAIOfficialProviderId } from './openaiOfficialProvider.js'
 
 export const CURRENT_PROVIDER_INDEX_SCHEMA_VERSION = 3
 
@@ -132,10 +131,7 @@ function migrateProvidersIndex(value: unknown): JsonObject {
     })
   const rawActiveId =
     typeof value.activeId === 'string' ? value.activeId : null
-  const activeId = rawActiveId && (
-    providers.some((provider) => provider.providerId === rawActiveId) ||
-    isOpenAIOfficialProviderId(rawActiveId)
-  )
+  const activeId = rawActiveId && providers.some((provider) => provider.providerId === rawActiveId)
     ? rawActiveId
     : null
 

@@ -17,8 +17,12 @@ import { computerUseApprovalService } from '../services/computerUseApprovalServi
 import { sessionService } from '../services/sessionService.js'
 import { SettingsService } from '../services/settingsService.js'
 import { ProviderService } from '../services/providerService.js'
-import { isOpenAIOfficialProviderId } from '../services/openaiOfficialProvider.js'
 import { diagnosticsService } from '../services/diagnosticsService.js'
+import {
+  normalizeExecutionMode,
+  type ExecutionMode,
+} from '../services/executionModeService.js'
+import { localCliRuntimeService } from '../services/localCliRuntimeService.js'
 import { deriveTitle, generateTitle, saveAiTitle } from '../services/titleService.js'
 import { parseSlashCommand } from '../../utils/slashCommandParsing.js'
 import {
@@ -67,11 +71,15 @@ const sessionTitleState = new Map<string, {
   startedGenerationCounts: Set<number>
 }>()
 
-const runtimeOverrides = new Map<string, {
+type RuntimeOverride = {
+  kind: 'provider' | 'local_cli'
   providerId: string | null
+  localCliId?: string | null
   modelId: string
   effort?: string
-}>()
+}
+
+const runtimeOverrides = new Map<string, RuntimeOverride>()
 const runtimeMetadataOverrides = new Map<string, Record<string, unknown>>()
 
 const runtimeTransitionPromises = new Map<string, Promise<void>>()
@@ -587,16 +595,46 @@ async function handleSetRuntimeConfig(
     })
     return
   }
+  const kind = message.kind === 'local_cli' || message.localCliId
+    ? 'local_cli'
+    : 'provider'
+  const localCliId = typeof message.localCliId === 'string' && message.localCliId.trim()
+    ? message.localCliId.trim()
+    : null
+  if (kind === 'local_cli') {
+    if (!localCliId) {
+      sendMessage(ws, {
+        type: 'error',
+        message: 'Local CLI runtime selection is invalid.',
+        code: 'RUNTIME_CONFIG_INVALID',
+      })
+      return
+    }
+    const { clis } = await localCliRuntimeService.listLocalClis()
+    const selectedCli = clis.find((cli) => cli.id === localCliId && cli.available)
+    if (!selectedCli) {
+      sendMessage(ws, {
+        type: 'error',
+        message: 'Selected local CLI is no longer available.',
+        code: 'RUNTIME_CONFIG_INVALID',
+      })
+      return
+    }
+  }
 
-  const nextOverride = {
-    providerId: message.providerId ?? null,
+  const nextOverride: RuntimeOverride = {
+    kind,
+    providerId: kind === 'provider' ? message.providerId ?? null : null,
+    localCliId: kind === 'local_cli' ? localCliId : null,
     modelId,
     ...(effortLevel ? { effort: effortLevel } : {}),
   }
   const prevOverride = runtimeOverrides.get(sessionId)
   if (
     prevOverride &&
+    prevOverride.kind === nextOverride.kind &&
     prevOverride.providerId === nextOverride.providerId &&
+    prevOverride.localCliId === nextOverride.localCliId &&
     prevOverride.modelId === nextOverride.modelId &&
     prevOverride.effort === nextOverride.effort
   ) {
@@ -631,7 +669,10 @@ async function handleSetRuntimeConfig(
       await pendingStartup.catch(() => undefined)
       const currentOverride = runtimeOverrides.get(sessionId)
       if (
+        !currentOverride ||
+        currentOverride.kind !== nextOverride.kind ||
         currentOverride?.providerId !== nextOverride.providerId ||
+        currentOverride.localCliId !== nextOverride.localCliId ||
         currentOverride.modelId !== nextOverride.modelId ||
         currentOverride.effort !== nextOverride.effort ||
         !conversationService.hasSession(sessionId)
@@ -707,7 +748,7 @@ async function persistSessionPermissionMode(
 
 async function persistSessionRuntimeConfig(
   sessionId: string,
-  runtime: { providerId: string | null; modelId: string; effort?: string },
+  runtime: RuntimeOverride,
 ): Promise<void> {
   const workDir =
     conversationService.getSessionWorkDir(sessionId) ||
@@ -717,7 +758,9 @@ async function persistSessionRuntimeConfig(
 
   await sessionService.appendSessionMetadata(sessionId, {
     workDir,
+    runtimeKind: runtime.kind,
     runtimeProviderId: runtime.providerId,
+    runtimeLocalCliId: runtime.localCliId ?? null,
     runtimeModelId: runtime.modelId,
     ...(runtime.effort ? { effortLevel: runtime.effort } : {}),
   })
@@ -801,7 +844,10 @@ function triggerTitleGeneration(ws: ServerWebSocket<WebSocketData>, sessionId: s
   const text = count === 1
     ? state.firstUserMessage
     : state.allUserMessages.join('\n')
-  const runtimeProviderId = runtimeOverrides.get(sessionId)?.providerId
+  const runtimeOverride = runtimeOverrides.get(sessionId)
+  const runtimeProviderId = runtimeOverride?.kind === 'provider'
+    ? runtimeOverride.providerId
+    : null
 
   // Fire-and-forget: derive quick title, then upgrade with AI
   void (async () => {
@@ -1932,6 +1978,8 @@ type RuntimeSettings = {
   effort?: string
   thinking?: 'disabled'
   providerId?: string | null
+  localCliId?: string | null
+  executionMode?: ExecutionMode
   metadata?: Record<string, unknown>
 }
 
@@ -1956,10 +2004,7 @@ function isKnownRuntimeProviderId(
   providerId: string,
   providers: Array<{ providerId: string }>,
 ): boolean {
-  return (
-    isOpenAIOfficialProviderId(providerId) ||
-    providers.some((provider) => provider.providerId === providerId)
-  )
+  return providers.some((provider) => provider.providerId === providerId)
 }
 
 async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> {
@@ -1972,15 +2017,54 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
   const persistedRuntimeOverride =
     launchInfo?.runtimeModelId
       ? {
+          kind: launchInfo.runtimeKind ?? (launchInfo.runtimeLocalCliId ? 'local_cli' : 'provider'),
           providerId: launchInfo.runtimeProviderId ?? null,
+          localCliId: launchInfo.runtimeLocalCliId ?? null,
           modelId: launchInfo.runtimeModelId,
           ...(launchInfo.effortLevel ? { effort: launchInfo.effortLevel } : {}),
-        }
+        } satisfies RuntimeOverride
       : undefined
   const runtimeOverride = sessionId
     ? runtimeOverrides.get(sessionId) ?? persistedRuntimeOverride
     : undefined
   if (runtimeOverride) {
+    const userSettings = await settingsService.getUserSettings()
+    if (runtimeOverride.kind === 'local_cli') {
+      if (!runtimeOverride.localCliId) {
+        runtimeOverrides.delete(sessionId!)
+        const defaults = await getDefaultRuntimeSettings()
+        return {
+          ...defaults,
+          permissionMode: sessionPermissionMode ?? defaults.permissionMode,
+          metadata: getSessionRuntimeMetadata(sessionId),
+        }
+      }
+      const { clis } = await localCliRuntimeService.listLocalClis()
+      const cliExists = clis.some((cli) => cli.id === runtimeOverride.localCliId && cli.available)
+      if (!cliExists) {
+        console.warn(
+          `[WS] Ignoring stale local CLI id for ${sessionId}: ${runtimeOverride.localCliId}`,
+        )
+        runtimeOverrides.delete(sessionId!)
+        const defaults = await getDefaultRuntimeSettings()
+        return {
+          ...defaults,
+          permissionMode: sessionPermissionMode ?? defaults.permissionMode,
+          metadata: getSessionRuntimeMetadata(sessionId),
+        }
+      }
+      return {
+        permissionMode: sessionPermissionMode ?? await settingsService.getPermissionMode().catch(() => undefined),
+        model: runtimeOverride.modelId,
+        effort: runtimeOverride.effort,
+        thinking: resolveDesktopThinkingMode(userSettings),
+        providerId: null,
+        localCliId: runtimeOverride.localCliId,
+        executionMode: 'local_cli',
+        metadata: getSessionRuntimeMetadata(sessionId),
+      }
+    }
+
     if (typeof runtimeOverride.providerId === 'string') {
       const { providers } = await providerService.listProviders()
       const providerExists = isKnownRuntimeProviderId(runtimeOverride.providerId, providers)
@@ -1998,7 +2082,6 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
       }
     }
 
-    const userSettings = await settingsService.getUserSettings()
     const thinking = resolveDesktopThinkingMode(userSettings)
 
     return {
@@ -2007,6 +2090,8 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
       effort: runtimeOverride.effort,
       thinking,
       providerId: runtimeOverride.providerId,
+      localCliId: null,
+      executionMode: 'provider',
       metadata: getSessionRuntimeMetadata(sessionId),
     }
   }
@@ -2035,10 +2120,23 @@ async function getDefaultRuntimeSettings(): Promise<RuntimeSettings> {
   }
 
   const userSettings = await settingsService.getUserSettings()
-  const providerSettings = resolvedActiveId
+  const executionMode = normalizeExecutionMode(userSettings.executionMode)
+  const runtimeProviderId = executionMode === 'provider' ? resolvedActiveId : null
+  let runtimeLocalCliId: string | null = null
+  let localCliModel: string | undefined
+  if (executionMode === 'local_cli') {
+    const { activeId: activeLocalCliId, clis } = await localCliRuntimeService.listLocalClis()
+    const selectedCli =
+      clis.find((cli) => cli.id === activeLocalCliId && cli.available) ??
+      clis.find((cli) => cli.available) ??
+      null
+    runtimeLocalCliId = selectedCli?.id ?? null
+    localCliModel = selectedCli?.modelRoles.primary || selectedCli?.models[0]?.id
+  }
+  const providerSettings = runtimeProviderId
     ? await providerService.getManagedSettings()
     : undefined
-  const modelSettings = providerSettings ?? userSettings
+  const modelSettings = providerSettings ?? (executionMode === 'provider' ? userSettings : {})
   const modelContext =
     typeof modelSettings.modelContext === 'string' && modelSettings.modelContext.trim()
       ? modelSettings.modelContext
@@ -2050,7 +2148,7 @@ async function getDefaultRuntimeSettings(): Promise<RuntimeSettings> {
   const thinking = resolveDesktopThinkingMode(userSettings)
 
   let model: string | undefined
-  if (resolvedActiveId) {
+  if (runtimeProviderId) {
     // Provider is active — only consult provider-managed Beya settings.
     // Global ~/.beya/settings.json model values must not bleed into provider mode.
     const baseModel =
@@ -2061,13 +2159,15 @@ async function getDefaultRuntimeSettings(): Promise<RuntimeSettings> {
       model = baseModel
       if (modelContext) model += `:${modelContext}`
     }
-  } else {
+  } else if (executionMode === 'provider') {
     // No provider — pass model normally
     const baseModel =
       typeof userSettings.model === 'string' && userSettings.model.trim()
         ? userSettings.model
         : undefined
     model = baseModel ? (modelContext ? `${baseModel}:${modelContext}` : baseModel) : undefined
+  } else if (executionMode === 'local_cli') {
+    model = localCliModel
   }
 
   return {
@@ -2075,7 +2175,9 @@ async function getDefaultRuntimeSettings(): Promise<RuntimeSettings> {
     model,
     effort,
     thinking,
-    providerId: resolvedActiveId,
+    providerId: runtimeProviderId,
+    localCliId: runtimeLocalCliId,
+    executionMode,
   }
 }
 
@@ -2109,7 +2211,9 @@ async function buildSessionStartupDiagnosticMessage(
 
   const runtimeOverride = runtimeOverrides.get(sessionId)
   if (runtimeOverride) {
-    lines.push(`- runtimeOverride.providerId: ${runtimeOverride.providerId ?? '(official)'}`)
+    lines.push(`- runtimeOverride.kind: ${runtimeOverride.kind}`)
+    lines.push(`- runtimeOverride.providerId: ${runtimeOverride.providerId ?? '(none)'}`)
+    lines.push(`- runtimeOverride.localCliId: ${runtimeOverride.localCliId ?? '(none)'}`)
     lines.push(`- runtimeOverride.modelId: ${runtimeOverride.modelId}`)
     lines.push(`- runtimeOverride.effort: ${runtimeOverride.effort ?? '(auto)'}`)
   } else {
@@ -2118,7 +2222,7 @@ async function buildSessionStartupDiagnosticMessage(
 
   try {
     const { providers, activeId } = await providerService.listProviders()
-    lines.push(`- activeProviderId: ${activeId ?? '(official)'}`)
+    lines.push(`- activeProviderId: ${activeId ?? '(none)'}`)
     lines.push(`- configuredProviders: ${providers.length}`)
     if (providers.length > 0) {
       lines.push(

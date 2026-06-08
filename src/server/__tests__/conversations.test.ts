@@ -2773,9 +2773,14 @@ describe('WebSocket Chat Integration', () => {
     }
   }, 20_000)
 
-  it('should preserve ChatGPT Official as the active default runtime after restart', async () => {
+  it('should ignore a stale removed ChatGPT Official active provider id after restart', async () => {
+    await fs.mkdir(path.join(tmpDir, 'beya'), { recursive: true })
+    await fs.writeFile(
+      path.join(tmpDir, 'beya', 'providers.json'),
+      JSON.stringify({ activeId: 'openai-official', providers: [] }),
+      'utf-8',
+    )
     const providerService = new ProviderService()
-    await providerService.activateProvider('openai-official')
 
     const createRes = await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',
@@ -2802,18 +2807,18 @@ describe('WebSocket Chat Integration', () => {
     }) as typeof conversationService.startSession
 
     try {
-      const messages = await runTurn(sessionId, 'default ChatGPT Official runtime')
+      const messages = await runTurn(sessionId, 'default runtime without removed ChatGPT Official provider')
 
       expect(startCalls).toHaveLength(1)
       expect(startCalls[0]).toMatchObject({
         sessionId,
         options: {
-          providerId: 'openai-official',
+          providerId: null,
         },
       })
       expect(messages.some((msg) => msg.type === 'message_complete')).toBe(true)
       await expect(providerService.listProviders()).resolves.toMatchObject({
-        activeId: 'openai-official',
+        activeId: null,
       })
     } finally {
       conversationService.startSession = originalStartSession

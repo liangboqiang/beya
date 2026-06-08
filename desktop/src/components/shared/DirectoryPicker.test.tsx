@@ -2,6 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '@testing-library/jest-dom'
 
+const directorySelectionMock = vi.hoisted(() => ({
+  selectDirectory: vi.fn(),
+}))
+
 vi.mock('../../api/sessions', () => ({
   sessionsApi: {
     getRecentProjects: vi.fn(),
@@ -14,6 +18,10 @@ vi.mock('../../api/filesystem', () => ({
   },
 }))
 
+vi.mock('../../lib/directorySelection', () => ({
+  selectDirectory: directorySelectionMock.selectDirectory,
+}))
+
 import { DirectoryPicker } from './DirectoryPicker'
 import { sessionsApi } from '../../api/sessions'
 import { filesystemApi } from '../../api/filesystem'
@@ -22,7 +30,9 @@ describe('DirectoryPicker', () => {
   let originalInnerWidth: number
 
   beforeEach(() => {
+    vi.clearAllMocks()
     originalInnerWidth = window.innerWidth
+    directorySelectionMock.selectDirectory.mockResolvedValue({ kind: 'unavailable' })
   })
 
   afterEach(() => {
@@ -168,5 +178,28 @@ describe('DirectoryPicker', () => {
     expect(errorSpy).not.toHaveBeenCalledWith(expect.stringContaining('validateDOMNesting'))
 
     errorSpy.mockRestore()
+  })
+
+  it('uses the shared system directory picker before falling back to in-app browsing', async () => {
+    vi.mocked(sessionsApi.getRecentProjects).mockResolvedValue({ projects: [] })
+    directorySelectionMock.selectDirectory.mockResolvedValueOnce({
+      kind: 'selected',
+      path: '/workspace/selected',
+    })
+    const onChange = vi.fn()
+
+    render(<DirectoryPicker value="/workspace/current" onChange={onChange} />)
+
+    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(await screen.findByText(/选择其他文件夹|Choose a different folder/))
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith('/workspace/selected')
+    })
+    expect(directorySelectionMock.selectDirectory).toHaveBeenCalledWith({
+      title: expect.any(String),
+      initialPath: '/workspace/current',
+    })
+    expect(filesystemApi.browse).not.toHaveBeenCalled()
   })
 })

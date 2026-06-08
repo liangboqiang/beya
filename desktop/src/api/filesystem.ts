@@ -14,6 +14,14 @@ type BrowseResult = {
   query?: string
 }
 
+type PickDirectoryResult = {
+  selectedPath: string | null
+}
+
+type RegisterDirectoryResult = {
+  selectedPath: string
+}
+
 export const filesystemApi = {
   browse(path?: string, options?: { includeFiles?: boolean }) {
     const q = new URLSearchParams()
@@ -27,5 +35,20 @@ export const filesystemApi = {
     const q = new URLSearchParams({ search: query, maxResults: '200', includeFiles: 'true' })
     if (cwd) q.set('path', cwd)
     return api.get<BrowseResult>(`/api/filesystem/browse?${q}`)
+  },
+
+  pickDirectory(initialPath?: string) {
+    return api.post<PickDirectoryResult>(
+      '/api/filesystem/pick-directory',
+      { initialPath },
+      { timeout: 10 * 60_000 },
+    )
+  },
+
+  registerDirectory(path: string) {
+    return api.post<RegisterDirectoryResult>(
+      '/api/filesystem/register-directory',
+      { path },
+    )
   },
 }

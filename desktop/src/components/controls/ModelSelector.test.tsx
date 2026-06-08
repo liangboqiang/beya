@@ -1,14 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import '@testing-library/jest-dom'
 
 import { ModelSelector } from './ModelSelector'
 import { useChatStore } from '../../stores/chatStore'
-import { useBeyaOpenAIOAuthStore } from '../../stores/beyaOpenAIOAuthStore'
+import { useLocalCliStore } from '../../stores/localCliStore'
 import { useProviderStore } from '../../stores/providerStore'
 import { useSessionRuntimeStore } from '../../stores/sessionRuntimeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
-import { OPENAI_OFFICIAL_PROVIDER_ID } from '../../constants/openaiOfficialProvider'
 import type { ModelInfo } from '../../types/settings'
 
 const MODELS: ModelInfo[] = [
@@ -27,14 +26,9 @@ afterEach(() => {
   cleanup()
   useSettingsStore.setState(useSettingsStore.getInitialState(), true)
   useProviderStore.setState(useProviderStore.getInitialState(), true)
+  useLocalCliStore.setState(useLocalCliStore.getInitialState(), true)
   useSessionRuntimeStore.setState(useSessionRuntimeStore.getInitialState(), true)
   useChatStore.setState(useChatStore.getInitialState(), true)
-  useBeyaOpenAIOAuthStore.setState(useBeyaOpenAIOAuthStore.getInitialState(), true)
-})
-
-// Prevent real API calls from fetchStatus on mount
-beforeEach(() => {
-  useBeyaOpenAIOAuthStore.setState({ fetchStatus: async () => {} })
 })
 
 describe('ModelSelector', () => {
@@ -71,29 +65,19 @@ describe('ModelSelector', () => {
     expect(setModel).toHaveBeenCalledWith('beta')
   })
 
-  it('selects provider-scoped runtime models and mirrors session selections', async () => {
+  it('selects a provider runtime target and uses the provider primary model', async () => {
     const setSessionRuntime = vi.fn()
     useSettingsStore.setState({
       locale: 'en',
       availableModels: MODELS,
       currentModel: MODELS[0],
-      activeProviderName: 'Provider A',
+      effortLevel: 'max',
     })
     useProviderStore.setState({
-      providers: [{
-        providerId: 'provider-a',
-        displayName: 'Provider A',
-        apiKey: '***',
-        baseUrl: 'https://api.example.com',
-        apiFormat: 'anthropic',
-        modelRoles: {
-          primary: 'provider-main',
-          fast: 'provider-fast',
-          balanced: 'provider-main',
-          powerful: '',
-        },
-        enabledModels: ['provider-main', 'provider-fast'],
-      }],
+      providers: [
+        providerFixture('provider-a', 'Provider A', 'provider-a-main'),
+        providerFixture('provider-b', 'Provider B', 'provider-b-main'),
+      ],
       activeId: 'provider-a',
       hasLoadedProviders: true,
       isLoading: true,
@@ -104,22 +88,18 @@ describe('ModelSelector', () => {
 
     render(<ModelSelector runtimeKey="session-1" />)
 
-    await clickByRole(/alpha/i)
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /provider-fast/ }))
-      await Promise.resolve()
-    })
+    await clickByRole(/Provider A/i)
+    await clickByRole(/Provider B/)
 
-    expect(useSessionRuntimeStore.getState().selections['session-1']).toEqual({
-      providerId: 'provider-a',
-      modelId: 'provider-fast',
+    const selection = {
+      kind: 'provider',
+      providerId: 'provider-b',
+      localCliId: null,
+      modelId: 'provider-b-main',
       effortLevel: 'max',
-    })
-    expect(setSessionRuntime).toHaveBeenCalledWith('session-1', {
-      providerId: 'provider-a',
-      modelId: 'provider-fast',
-      effortLevel: 'max',
-    })
+    }
+    expect(useSessionRuntimeStore.getState().selections['session-1']).toEqual(selection)
+    expect(setSessionRuntime).toHaveBeenCalledWith('session-1', selection)
   })
 
   it('keeps runtime effort scoped to the selected session', async () => {
@@ -128,30 +108,18 @@ describe('ModelSelector', () => {
       locale: 'en',
       availableModels: MODELS,
       currentModel: MODELS[0],
-      activeProviderName: 'Provider A',
       effortLevel: 'max',
     })
     useProviderStore.setState({
-      providers: [{
-        providerId: 'provider-a',
-        displayName: 'Provider A',
-        apiKey: '***',
-        baseUrl: 'https://api.example.com',
-        apiFormat: 'anthropic',
-        modelRoles: {
-          primary: 'provider-main',
-          fast: 'provider-fast',
-          balanced: 'provider-main',
-          powerful: '',
-        },
-        enabledModels: ['provider-main', 'provider-fast'],
-      }],
+      providers: [providerFixture('provider-a', 'Provider A', 'provider-main')],
       activeId: 'provider-a',
       hasLoadedProviders: true,
       isLoading: true,
     })
     useSessionRuntimeStore.getState().setSelection('session-2', {
+      kind: 'provider',
       providerId: 'provider-a',
+      localCliId: null,
       modelId: 'provider-main',
       effortLevel: 'max',
     })
@@ -161,84 +129,27 @@ describe('ModelSelector', () => {
 
     render(<ModelSelector runtimeKey="session-1" />)
 
-    await clickByRole(/alpha/i)
+    await clickByRole(/Provider A/i)
     await clickByRole(/^High$/)
 
     expect(useSessionRuntimeStore.getState().selections['session-1']).toEqual({
+      kind: 'provider',
       providerId: 'provider-a',
-      modelId: 'alpha',
+      localCliId: null,
+      modelId: 'provider-main',
       effortLevel: 'high',
     })
     expect(useSessionRuntimeStore.getState().selections['session-2']).toEqual({
+      kind: 'provider',
       providerId: 'provider-a',
+      localCliId: null,
       modelId: 'provider-main',
       effortLevel: 'max',
-    })
-    expect(setSessionRuntime).toHaveBeenCalledWith('session-1', {
-      providerId: 'provider-a',
-      modelId: 'alpha',
-      effortLevel: 'high',
     })
     expect(useSettingsStore.getState().effortLevel).toBe('max')
   })
 
-  it('uses the ChatGPT Official catalog when that built-in provider is active', async () => {
-    const openAIModels: ModelInfo[] = [
-      {
-        id: 'gpt-5.3-codex',
-        name: 'GPT-5.3 Codex',
-        description: 'Best for coding and agentic work',
-        context: '',
-      },
-      {
-        id: 'gpt-5.5',
-        name: 'GPT-5.5',
-        description: 'Latest general-purpose model',
-        context: '',
-      },
-    ]
-    const setSessionRuntime = vi.fn()
-    useBeyaOpenAIOAuthStore.setState({
-      status: { loggedIn: true, expiresAt: null, email: null, accountId: null },
-      fetchStatus: async () => {},
-    })
-    useSettingsStore.setState({
-      locale: 'en',
-      availableModels: openAIModels,
-      currentModel: openAIModels[0],
-      activeProviderName: 'ChatGPT Official',
-    })
-    useProviderStore.setState({
-      providers: [],
-      activeId: OPENAI_OFFICIAL_PROVIDER_ID,
-      hasLoadedProviders: true,
-      isLoading: true,
-    })
-    useChatStore.setState({
-      setSessionRuntime,
-    } as Partial<ReturnType<typeof useChatStore.getState>>)
-
-    render(<ModelSelector runtimeKey="session-openai" />)
-
-    await clickByRole(/GPT-5\.3 Codex/i)
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /GPT-5\.5/ }))
-      await Promise.resolve()
-    })
-
-    expect(useSessionRuntimeStore.getState().selections['session-openai']).toEqual({
-      providerId: OPENAI_OFFICIAL_PROVIDER_ID,
-      modelId: 'gpt-5.5',
-      effortLevel: 'max',
-    })
-    expect(setSessionRuntime).toHaveBeenCalledWith('session-openai', {
-      providerId: OPENAI_OFFICIAL_PROVIDER_ID,
-      modelId: 'gpt-5.5',
-      effortLevel: 'max',
-    })
-  })
-
-  it('localizes official model descriptions in Chinese locale', async () => {
+  it('localizes model descriptions in Chinese locale', async () => {
     const openAIModels: ModelInfo[] = [
       {
         id: 'gpt-5.3-codex',
@@ -261,41 +172,76 @@ describe('ModelSelector', () => {
     expect(screen.queryByText('Best for coding and agentic work')).not.toBeInTheDocument()
   })
 
-  it('hides official provider sections when OAuth is not logged in', async () => {
-    useBeyaOpenAIOAuthStore.setState({ status: { loggedIn: false }, fetchStatus: async () => {} })
+  it('selects an available local CLI runtime and hides unavailable CLIs', async () => {
+    const setSessionRuntime = vi.fn()
     useSettingsStore.setState({
       locale: 'en',
+      executionMode: 'provider',
       availableModels: MODELS,
       currentModel: MODELS[0],
-      activeProviderName: 'Provider A',
+      effortLevel: 'max',
     })
     useProviderStore.setState({
-      providers: [{
-        providerId: 'provider-a',
-        displayName: 'Provider A',
-        apiKey: '***',
-        baseUrl: 'https://api.example.com',
-        apiFormat: 'anthropic',
-        modelRoles: {
-          primary: 'provider-main',
-          fast: '',
-          balanced: '',
-          powerful: '',
-        },
-        enabledModels: ['provider-main'],
-      }],
+      providers: [providerFixture('provider-a', 'Provider A', 'provider-main')],
       activeId: 'provider-a',
       hasLoadedProviders: true,
       isLoading: true,
     })
+    useLocalCliStore.setState({
+      activeId: 'codex',
+      clis: [
+        localCliFixture('codex', 'Codex CLI', true),
+        localCliFixture('qoder', 'Qoder', false),
+      ],
+      isLoading: true,
+    })
+    useChatStore.setState({
+      setSessionRuntime,
+    } as Partial<ReturnType<typeof useChatStore.getState>>)
 
-    render(<ModelSelector runtimeKey="session-hide" />)
+    render(<ModelSelector runtimeKey="session-local-cli" />)
 
-    await clickByRole(/alpha/i)
-
+    await clickByRole(/Provider A/i)
     const dropdown = screen.getByTestId('model-selector-dropdown')
-    expect(dropdown.textContent).not.toContain('ChatGPT Official')
-    expect(dropdown.textContent).toContain('Provider A')
+    expect(dropdown.textContent).toContain('Local CLI')
+    expect(dropdown.textContent).toContain('Codex CLI')
+    expect(dropdown.textContent).not.toContain('Qoder')
+
+    await clickByRole(/Codex CLI/)
+
+    const selection = {
+      kind: 'local_cli',
+      providerId: null,
+      localCliId: 'codex',
+      modelId: 'gpt-5-codex',
+      effortLevel: 'max',
+    }
+    expect(useSessionRuntimeStore.getState().selections['session-local-cli']).toEqual(selection)
+    expect(setSessionRuntime).toHaveBeenCalledWith('session-local-cli', selection)
+  })
+
+  it('defaults to the active local CLI in local CLI execution mode', async () => {
+    useSettingsStore.setState({
+      locale: 'en',
+      executionMode: 'local_cli',
+      availableModels: MODELS,
+      currentModel: MODELS[0],
+    })
+    useProviderStore.setState({
+      providers: [providerFixture('provider-a', 'Provider A', 'provider-main')],
+      activeId: 'provider-a',
+      hasLoadedProviders: true,
+      isLoading: true,
+    })
+    useLocalCliStore.setState({
+      activeId: 'codex',
+      clis: [localCliFixture('codex', 'Codex CLI', true)],
+      isLoading: true,
+    })
+
+    render(<ModelSelector runtimeKey="session-local-default" />)
+
+    expect(screen.getByRole('button', { name: /Codex CLI/ })).toBeInTheDocument()
   })
 
   it('portals the dropdown outside clipping containers and positions it below the trigger', async () => {
@@ -341,3 +287,44 @@ describe('ModelSelector', () => {
     expect(dropdown.style.width).toBe('360px')
   })
 })
+
+function providerFixture(providerId: string, displayName: string, primaryModel: string) {
+  return {
+    providerId,
+    displayName,
+    apiKey: '***',
+    baseUrl: 'https://api.example.com',
+    apiFormat: 'anthropic' as const,
+    modelRoles: {
+      primary: primaryModel,
+      fast: primaryModel,
+      balanced: primaryModel,
+      powerful: primaryModel,
+    },
+    enabledModels: [primaryModel],
+  }
+}
+
+function localCliFixture(id: string, displayName: string, available: boolean) {
+  return {
+    id,
+    displayName,
+    command: id,
+    executablePath: available ? `C:\\Tools\\${id}.cmd` : null,
+    launchPath: available ? `C:\\Tools\\${id}.cmd` : null,
+    launchKind: 'selected' as const,
+    source: available ? 'path' as const : null,
+    available,
+    supportsDesktopRuntime: true,
+    version: available ? `${id} 1.0.0` : null,
+    config: {},
+    models: [{ id: 'gpt-5-codex', label: 'GPT-5 Codex' }],
+    modelRoles: {
+      primary: 'gpt-5-codex',
+      fast: 'gpt-5-codex',
+      balanced: 'gpt-5-codex',
+      powerful: 'gpt-5-codex',
+    },
+    enabledModels: ['gpt-5-codex'],
+  }
+}

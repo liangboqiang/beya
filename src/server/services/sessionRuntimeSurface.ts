@@ -46,12 +46,16 @@ export async function loadSessionRuntimeSurface(options: {
     options.permissionContext ?? getEmptyToolPermissionContext()
   const nativeTools = getTools(toolPermissionContext)
   const pluginToolDefinitions = await loadRuntimePluginToolDefinitions()
+  const metadata = {
+    ...(options.metadata ?? {}),
+    ...(options.cwd ? { cwd: options.cwd } : {}),
+  }
   const pluginTools = pluginToolDefinitions.map(definition =>
     toolDefinitionToBeyaTool(definition, {
       taskId: options.sessionId ?? 'beya-server-tools',
       sessionId: options.sessionId ?? 'beya-server-tools',
       signal: new AbortController().signal,
-      metadata: options.metadata ?? {},
+      metadata,
     }),
   )
 

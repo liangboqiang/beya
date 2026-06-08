@@ -45,7 +45,7 @@ export const OPENAI_OFFICIAL_PROVIDER: SavedProvider = {
     .toString()
     .replace(/\/+$/, ''),
   apiFormat: 'openai_responses',
-  runtimeKind: 'openai_oauth',
+  runtimeKind: 'anthropic_compatible',
   modelRoles: openAIModelRoles,
   enabledModels: Object.values(openAIModelRoles),
   modelContextWindows,

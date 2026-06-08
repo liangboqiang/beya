@@ -7,8 +7,16 @@ const desktopUiPreferencesApiMock = vi.hoisted(() => ({
   updateSidebarPreferences: vi.fn(),
 }))
 
+const directorySelectionMock = vi.hoisted(() => ({
+  selectDirectory: vi.fn(),
+}))
+
 vi.mock('../../api/desktopUiPreferences', () => ({
   desktopUiPreferencesApi: desktopUiPreferencesApiMock,
+}))
+
+vi.mock('../../lib/directorySelection', () => ({
+  selectDirectory: directorySelectionMock.selectDirectory,
 }))
 
 const openTargetStoreMock = vi.hoisted(() => ({
@@ -47,7 +55,7 @@ vi.mock('../../i18n', () => ({
       'sidebar.sortByUpdatedAt': 'Updated time',
       'sidebar.newBlankProject': 'New blank project',
       'sidebar.useExistingFolder': 'Use existing folder',
-      'sidebar.chooseProjectFolderUnavailable': 'Folder selection is only available in the desktop app.',
+      'sidebar.chooseProjectFolderUnavailable': 'Folder selection is not available in this runtime.',
       'sidebar.projectActions': 'Project actions for {project}',
       'sidebar.pinProject': 'Pin Project',
       'sidebar.unpinProject': 'Unpin Project',
@@ -179,6 +187,8 @@ describe('Sidebar', () => {
     addToast.mockReset()
     desktopUiPreferencesApiMock.getPreferences.mockReset()
     desktopUiPreferencesApiMock.updateSidebarPreferences.mockReset()
+    directorySelectionMock.selectDirectory.mockReset()
+    directorySelectionMock.selectDirectory.mockResolvedValue({ kind: 'cancelled' })
     desktopUiPreferencesApiMock.getPreferences.mockRejectedValue(new Error('server unavailable'))
     desktopUiPreferencesApiMock.updateSidebarPreferences.mockResolvedValue({
       ok: true,
@@ -442,6 +452,58 @@ describe('Sidebar', () => {
       expect(createSession).toHaveBeenCalledWith(undefined)
       expect(connectToSession).toHaveBeenCalledWith('session-blank-project')
     })
+  })
+
+  it('creates a new session from an existing folder selected by the shared picker', async () => {
+    createSession.mockResolvedValue('session-existing-folder')
+    directorySelectionMock.selectDirectory.mockResolvedValueOnce({
+      kind: 'selected',
+      path: '/workspace/existing',
+    })
+    useSessionStore.setState({
+      sessions: [
+        makeSession('alpha-1', 'Alpha Session', '/workspace/alpha', new Date().toISOString()),
+      ],
+    })
+
+    render(<Sidebar />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Use existing folder' }))
+    })
+
+    await waitFor(() => {
+      expect(directorySelectionMock.selectDirectory).toHaveBeenCalledWith({ title: 'Use existing folder' })
+      expect(createSession).toHaveBeenCalledWith('/workspace/existing')
+      expect(connectToSession).toHaveBeenCalledWith('session-existing-folder')
+    })
+  })
+
+  it('shows an error toast when existing-folder selection is unavailable', async () => {
+    directorySelectionMock.selectDirectory.mockResolvedValueOnce({ kind: 'unavailable' })
+    useSessionStore.setState({
+      sessions: [
+        makeSession('alpha-1', 'Alpha Session', '/workspace/alpha', new Date().toISOString()),
+      ],
+    })
+
+    render(<Sidebar />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'New project' }))
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Use existing folder' }))
+    })
+
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith({
+        type: 'error',
+        message: 'Folder selection is not available in this runtime.',
+      })
+    })
+    expect(createSession).not.toHaveBeenCalled()
   })
 
   it('persists project header sort preferences through desktop UI settings', async () => {

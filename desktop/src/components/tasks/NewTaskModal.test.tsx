@@ -17,7 +17,7 @@ afterEach(() => {
 })
 
 describe('NewTaskModal', () => {
-  it('creates scheduled tasks with a provider-scoped model selection', async () => {
+  it('creates scheduled tasks with a provider-scoped runtime selection', async () => {
     const createTask = vi.fn(async () => {})
     useTaskStore.setState({ createTask } as Partial<ReturnType<typeof useTaskStore.getState>>)
     useAdapterStore.setState({
@@ -38,20 +38,36 @@ describe('NewTaskModal', () => {
       activeProviderName: 'Provider A',
     })
     useProviderStore.setState({
-      providers: [{
-        providerId: 'provider-a',
-        displayName: 'Provider A',
-        apiKey: '***',
-        baseUrl: 'https://api.example.com',
-        apiFormat: 'anthropic',
-        modelRoles: {
-          primary: 'provider-main',
-          fast: 'provider-fast',
-          balanced: 'provider-main',
-          powerful: '',
+      providers: [
+        {
+          providerId: 'provider-a',
+          displayName: 'Provider A',
+          apiKey: '***',
+          baseUrl: 'https://api.example.com',
+          apiFormat: 'anthropic',
+          modelRoles: {
+            primary: 'provider-main',
+            fast: 'provider-fast',
+            balanced: 'provider-main',
+            powerful: '',
+          },
+          enabledModels: ['provider-main', 'provider-fast'],
         },
-        enabledModels: ['provider-main', 'provider-fast'],
-      }],
+        {
+          providerId: 'provider-b',
+          displayName: 'Provider B',
+          apiKey: '***',
+          baseUrl: 'https://api.b.example.com',
+          apiFormat: 'openai_chat',
+          modelRoles: {
+            primary: 'provider-b-main',
+            fast: 'provider-b-fast',
+            balanced: 'provider-b-main',
+            powerful: '',
+          },
+          enabledModels: ['provider-b-main', 'provider-b-fast'],
+        },
+      ],
       activeId: 'provider-a',
       hasLoadedProviders: true,
       isLoading: true,
@@ -70,11 +86,11 @@ describe('NewTaskModal', () => {
     })
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /provider-main/i }))
+      fireEvent.click(screen.getByRole('button', { name: /Provider A/i }))
       await Promise.resolve()
     })
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /provider-fast/i }))
+      fireEvent.click(screen.getByRole('button', { name: /Provider B/i }))
       await Promise.resolve()
     })
     await act(async () => {
@@ -84,8 +100,8 @@ describe('NewTaskModal', () => {
 
     await waitFor(() => expect(createTask).toHaveBeenCalledTimes(1))
     expect(createTask).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'provider-fast',
-      providerId: 'provider-a',
+      model: 'provider-b-main',
+      providerId: 'provider-b',
       permissionMode: 'bypassPermissions',
       enabled: true,
       recurring: true,

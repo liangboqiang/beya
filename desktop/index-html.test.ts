@@ -80,6 +80,15 @@ describe('desktop index startup bridge', () => {
     expect(startWebUi).toContain("`$env:VITE_BEYA_WEB_PORT='$webPortResolved'")
   })
 
+  it('keeps web launcher ports fixed and reconnects or clears the requested port', () => {
+    expect(startWebUi).not.toContain('Find-AvailablePort')
+    expect(startWebUi).toContain('Test-HttpReady "$serverUrl/api/health"')
+    expect(startWebUi).toContain('$webStatusUrl = "$webOrigin/__beya_web_ui_status"')
+    expect(startWebUi).toContain('Stop-ListenerOnPort -Port $serverPortResolved -ExpectedRoot $rootDir -ForceAny')
+    expect(startWebUi).toContain('Stop-ListenerOnPort -Port $webPortResolved -ExpectedRoot $rootDir -ForceAny')
+    expect(startWebUi).toContain('web-ui.json')
+  })
+
   it('does not show the stale automatic restart holding screen', () => {
     expect(html).not.toContain('autoRetryLimit')
     expect(html).not.toContain('autoRetryDelayMs')

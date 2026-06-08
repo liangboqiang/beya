@@ -9,7 +9,7 @@ export type ProviderAuthStrategy =
   | 'dual_same_token'
   | 'dual_dummy'
 
-export type ProviderRuntimeKind = 'anthropic_compatible' | 'openai_oauth'
+export type ProviderRuntimeKind = 'anthropic_compatible'
 
 export type ModelRoles = {
   primary: string
@@ -52,7 +52,7 @@ export type CreateProviderInput = {
   baseUrl: string
   apiFormat?: ApiFormat
   runtimeKind?: ProviderRuntimeKind
-  modelRoles: ModelRoles
+  modelRoles?: ModelRoles
   enabledModels?: string[]
   connectionOverrides?: ConnectionOverrides
   autoCompactWindow?: number
@@ -81,6 +81,7 @@ export type TestProviderConfigInput = {
   modelId: string
   authStrategy?: ProviderAuthStrategy
   apiFormat?: ApiFormat
+  scanModels?: boolean
 }
 
 export type ProviderTestStepResult = {
@@ -91,9 +92,16 @@ export type ProviderTestStepResult = {
   httpStatus?: number
 }
 
+export type ProviderDetectedModel = {
+  id: string
+  label?: string
+  contextWindow?: number
+}
+
 export type ProviderTestResult = {
   /** Step 1: Basic connectivity */
   connectivity: ProviderTestStepResult
   /** Step 2: Proxy pipeline (only for openai_* formats) */
   proxy?: ProviderTestStepResult
+  availableModels?: ProviderDetectedModel[]
 }

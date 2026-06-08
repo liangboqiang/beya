@@ -1,29 +1,28 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  OPENAI_OFFICIAL_DEFAULT_MODEL_ID,
-  OPENAI_OFFICIAL_MODELS,
-  OPENAI_OFFICIAL_PROVIDER_ID,
-} from '../../constants/openaiOfficialProvider'
 import { useTranslation, type TranslationKey } from '../../i18n'
 import { useChatStore } from '../../stores/chatStore'
 import { useProviderStore } from '../../stores/providerStore'
+import { useLocalCliStore } from '../../stores/localCliStore'
 import { DRAFT_RUNTIME_SELECTION_KEY, useSessionRuntimeStore } from '../../stores/sessionRuntimeStore'
 import { useSettingsStore } from '../../stores/settingsStore'
+import type { LocalCliRuntimeInfo } from '../../types/localCli'
 import type { SavedProvider } from '../../types/provider'
 import type { RuntimeSelection } from '../../types/runtime'
 import type { EffortLevel, ModelInfo } from '../../types/settings'
 import { useMobileViewport } from '../../hooks/useMobileViewport'
 import { isTauriRuntime } from '../../lib/desktopRuntime'
-import { useBeyaOpenAIOAuthStore } from '../../stores/beyaOpenAIOAuthStore'
 import { MobileBottomSheet } from '../shared/MobileBottomSheet'
 import { getProviderModelRoles } from '../../lib/modelRoles'
 
-type ProviderChoice = {
+type RuntimeChoice = {
+  kind: 'provider' | 'local_cli'
+  id: string
+  label: string
+  detail: string
+  modelId: string
   providerId: string | null
-  providerName: string
-  isDefault: boolean
-  models: ModelInfo[]
+  localCliId: string | null
 }
 
 type Props = {
@@ -50,87 +49,6 @@ const VIEWPORT_MARGIN = 16
 const DROPDOWN_MAX_HEIGHT = 420
 const DROPDOWN_MIN_HEIGHT = 180
 
-function officialChoices(
-  providerId: string | null,
-  models: ModelInfo[],
-  isDefault: boolean,
-  providerName: string,
-): ProviderChoice {
-  return {
-    providerId,
-    providerName,
-    isDefault,
-    models,
-  }
-}
-
-function buildProviderModels(
-  provider: SavedProvider,
-  labels: Record<'primary' | 'fast' | 'balanced' | 'powerful', string>,
-): ModelInfo[] {
-  const modelRoles = getProviderModelRoles(provider)
-  const entries: Array<{ id: string; label: string }> = [
-    { id: modelRoles.primary.trim(), label: labels.primary },
-    { id: modelRoles.fast.trim(), label: labels.fast },
-    { id: modelRoles.balanced.trim(), label: labels.balanced },
-    { id: modelRoles.powerful.trim(), label: labels.powerful },
-  ]
-
-  const byId = new Map<string, { id: string; labels: string[] }>()
-  for (const entry of entries) {
-    if (!entry.id) continue
-    const existing = byId.get(entry.id)
-    if (existing) {
-      if (!existing.labels.includes(entry.label)) {
-        existing.labels.push(entry.label)
-      }
-      continue
-    }
-    byId.set(entry.id, { id: entry.id, labels: [entry.label] })
-  }
-
-  return [...byId.values()].map((entry) => ({
-    id: entry.id,
-    name: entry.id,
-    description: entry.labels.join(' · '),
-    context: '',
-  }))
-}
-
-function buildProviderChoices(
-  providers: SavedProvider[],
-  activeId: string | null,
-  availableModels: ModelInfo[],
-  openAIOfficialName: string,
-  labels: Record<'primary' | 'fast' | 'balanced' | 'powerful', string>,
-  openAIOfficialLoggedIn: boolean,
-): ProviderChoice[] {
-  const openAIOfficialModels = activeId === OPENAI_OFFICIAL_PROVIDER_ID && availableModels.length > 0
-    ? availableModels
-    : OPENAI_OFFICIAL_MODELS
-
-  const choices: ProviderChoice[] = []
-  if (openAIOfficialLoggedIn) {
-    choices.push(officialChoices(
-      OPENAI_OFFICIAL_PROVIDER_ID,
-      openAIOfficialModels,
-      activeId === OPENAI_OFFICIAL_PROVIDER_ID,
-      openAIOfficialName,
-    ))
-  }
-
-  for (const provider of providers) {
-    choices.push({
-      providerId: provider.providerId,
-      providerName: provider.displayName,
-      isDefault: activeId === provider.providerId,
-      models: buildProviderModels(provider, labels),
-    })
-  }
-
-  return choices
-}
-
 function getLocalizedModelDescription(
   model: ModelInfo,
   t: (key: TranslationKey) => string,
@@ -140,36 +58,95 @@ function getLocalizedModelDescription(
   return translated === key ? model.description : translated
 }
 
+function getProviderPrimaryModel(provider: SavedProvider): string {
+  return getProviderModelRoles(provider).primary
+}
+
+function getLocalCliPrimaryModel(cli: LocalCliRuntimeInfo): string {
+  return cli.modelRoles?.primary?.trim() || cli.models?.[0]?.id || 'default'
+}
+
+function buildProviderChoices(providers: SavedProvider[]): RuntimeChoice[] {
+  return providers
+    .map((provider) => ({
+      kind: 'provider' as const,
+      id: provider.providerId,
+      label: provider.displayName,
+      detail: getProviderPrimaryModel(provider),
+      modelId: getProviderPrimaryModel(provider),
+      providerId: provider.providerId,
+      localCliId: null,
+    }))
+    .filter((choice) => choice.modelId.trim())
+}
+
+function buildLocalCliChoices(clis: LocalCliRuntimeInfo[]): RuntimeChoice[] {
+  return clis
+    .filter((cli) => cli.available)
+    .map((cli) => ({
+      kind: 'local_cli' as const,
+      id: cli.id,
+      label: cli.displayName,
+      detail: getLocalCliPrimaryModel(cli),
+      modelId: getLocalCliPrimaryModel(cli),
+      providerId: null,
+      localCliId: cli.id,
+    }))
+}
+
+function isSelectedChoice(selection: RuntimeSelection | null | undefined, choice: RuntimeChoice): boolean {
+  if (!selection) return false
+  const selectionKind = selection.kind ?? (selection.localCliId ? 'local_cli' : 'provider')
+  if (selectionKind !== choice.kind) return false
+  return choice.kind === 'local_cli'
+    ? selection.localCliId === choice.localCliId
+    : selection.providerId === choice.providerId
+}
+
+function findRuntimeChoice(
+  selection: RuntimeSelection | null | undefined,
+  choices: RuntimeChoice[],
+): RuntimeChoice | null {
+  return choices.find((choice) => isSelectedChoice(selection, choice)) ?? null
+}
+
+function selectionFromChoice(choice: RuntimeChoice, effortLevel?: EffortLevel): RuntimeSelection {
+  return {
+    kind: choice.kind,
+    providerId: choice.providerId,
+    localCliId: choice.localCliId,
+    modelId: choice.modelId,
+    ...(effortLevel ? { effortLevel } : {}),
+  }
+}
+
 function resolveDefaultRuntimeSelection(
-  activeId: string | null,
-  activeProviderName: string | null,
+  executionMode: 'provider' | 'local_cli',
+  activeProviderId: string | null,
   providers: SavedProvider[],
+  activeLocalCliId: string | null,
+  localClis: LocalCliRuntimeInfo[],
   currentModelId: string | undefined,
 ): RuntimeSelection {
-  const inferredProviderId = activeId ?? (
-    activeProviderName
-      ? providers.find((provider) => provider.displayName === activeProviderName)?.providerId ?? null
-      : null
-  )
+  const providerChoices = buildProviderChoices(providers)
+  const localCliChoices = buildLocalCliChoices(localClis)
 
-  if (!inferredProviderId) {
-    return {
-      providerId: null,
-      modelId: '',
-    }
+  if (executionMode === 'local_cli') {
+    const activeLocalCli = localCliChoices.find((choice) => choice.localCliId === activeLocalCliId)
+    if (activeLocalCli) return selectionFromChoice(activeLocalCli)
+    if (localCliChoices[0]) return selectionFromChoice(localCliChoices[0])
   }
 
-  const inferredProvider = providers.find((provider) => provider.providerId === inferredProviderId)
+  const activeProvider = providerChoices.find((choice) => choice.providerId === activeProviderId)
+  if (activeProvider) return selectionFromChoice(activeProvider)
+  if (providerChoices[0]) return selectionFromChoice(providerChoices[0])
+  if (localCliChoices[0]) return selectionFromChoice(localCliChoices[0])
 
   return {
-    providerId: inferredProviderId,
-    modelId: currentModelId ?? (
-      inferredProviderId === OPENAI_OFFICIAL_PROVIDER_ID
-        ? OPENAI_OFFICIAL_DEFAULT_MODEL_ID
-        : inferredProvider
-          ? getProviderModelRoles(inferredProvider).primary
-          : ''
-    ),
+    kind: 'provider',
+    providerId: null,
+    localCliId: null,
+    modelId: currentModelId ?? '',
   }
 }
 
@@ -188,7 +165,7 @@ export function ModelSelector({
     currentModel: storeModel,
     availableModels,
     effortLevel,
-    activeProviderName,
+    executionMode,
     setModel,
   } = useSettingsStore()
   const {
@@ -197,9 +174,13 @@ export function ModelSelector({
     isLoading: providersLoading,
     fetchProviders,
   } = useProviderStore()
-  const openAIOAuthStatus = useBeyaOpenAIOAuthStore((s) => s.status)
-  const fetchOpenAIOAuthStatus = useBeyaOpenAIOAuthStore((s) => s.fetchStatus)
-  const runtimeSelection = useSessionRuntimeStore((state) =>
+  const {
+    clis: localClis,
+    activeId: activeLocalCliId,
+    isLoading: localClisLoading,
+    fetchClis,
+  } = useLocalCliStore()
+  const storedRuntimeSelection = useSessionRuntimeStore((state) =>
     runtimeKey ? state.selections[runtimeKey] : undefined,
   )
   const [open, setOpen] = useState(false)
@@ -207,6 +188,7 @@ export function ModelSelector({
   const ref = useRef<HTMLDivElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const requestedProvidersRef = useRef(false)
+  const requestedLocalClisRef = useRef(false)
 
   const EFFORT_OPTIONS: { value: EffortLevel; label: string }[] = [
     { value: 'low', label: t('settings.general.effort.low') },
@@ -228,8 +210,10 @@ export function ModelSelector({
   }, [fetchProviders, isRuntimeScoped, providersLoading])
 
   useEffect(() => {
-    void fetchOpenAIOAuthStatus()
-  }, [fetchOpenAIOAuthStatus])
+    if (!isRuntimeScoped || localClisLoading || requestedLocalClisRef.current) return
+    requestedLocalClisRef.current = true
+    void fetchClis()
+  }, [fetchClis, isRuntimeScoped, localClisLoading])
 
   useEffect(() => {
     if (!open) return
@@ -302,26 +286,11 @@ export function ModelSelector({
     }
   }, [open, updateDropdownPosition])
 
-  const roleLabels = useMemo(
-    () => ({
-      primary: t('settings.providers.primaryModel'),
-      fast: t('settings.providers.fastModel'),
-      balanced: t('settings.providers.balancedModel'),
-      powerful: t('settings.providers.powerfulModel'),
-    }),
-    [t],
-  )
-
-  const providerChoices = useMemo(
-    () => buildProviderChoices(
-      providers,
-      activeId,
-      availableModels,
-      t('settings.providers.openaiOfficialName'),
-      roleLabels,
-      openAIOAuthStatus?.loggedIn === true,
-    ),
-    [activeId, availableModels, providers, roleLabels, t, openAIOAuthStatus],
+  const providerChoices = useMemo(() => buildProviderChoices(providers), [providers])
+  const localCliChoices = useMemo(() => buildLocalCliChoices(localClis), [localClis])
+  const runtimeChoices = useMemo(
+    () => [...providerChoices, ...localCliChoices],
+    [providerChoices, localCliChoices],
   )
 
   const selectedModel = isControlled
@@ -329,35 +298,24 @@ export function ModelSelector({
     : storeModel
 
   const activeRuntimeSelection = isRuntimeScoped
-    ? controlledRuntimeSelection ?? runtimeSelection ?? resolveDefaultRuntimeSelection(
+    ? controlledRuntimeSelection ?? storedRuntimeSelection ?? resolveDefaultRuntimeSelection(
+      executionMode,
       activeId,
-      activeProviderName,
       providers,
+      activeLocalCliId,
+      localClis,
       storeModel?.id,
     )
     : null
 
-  const selectedProviderChoice = activeRuntimeSelection
-    ? providerChoices.find((choice) => choice.providerId === activeRuntimeSelection.providerId) ?? null
-    : null
-
-  const selectedRuntimeModel = activeRuntimeSelection?.modelId
-    ? selectedProviderChoice?.models.find((model) => model.id === activeRuntimeSelection.modelId)
-      ?? {
-        id: activeRuntimeSelection.modelId,
-        name: activeRuntimeSelection.modelId,
-        description: '',
-        context: '',
-      }
-    : null
-
+  const selectedRuntimeChoice = findRuntimeChoice(activeRuntimeSelection, runtimeChoices)
   const buttonModelLabel = isRuntimeScoped
-    ? activeRuntimeSelection?.providerId
-      ? selectedRuntimeModel?.name ?? t('model.selectModel')
-      : t('model.selectModel')
+    ? selectedRuntimeChoice?.label ?? t('model.selectRuntime')
     : selectedModel?.name ?? t('model.selectModel')
-  const buttonProviderLabel = isRuntimeScoped
-    ? selectedProviderChoice?.providerName ?? activeProviderName ?? t('settings.providers.noProvider')
+  const buttonProviderLabel = isRuntimeScoped && selectedRuntimeChoice
+    ? selectedRuntimeChoice.kind === 'local_cli'
+      ? t('settings.executionMode.localCli')
+      : t('settings.executionMode.provider')
     : null
   const selectedRuntimeEffort = activeRuntimeSelection?.effortLevel ?? effortLevel
 
@@ -380,78 +338,79 @@ export function ModelSelector({
     })
   }
 
+  const renderRuntimeChoice = (choice: RuntimeChoice) => {
+    const isSelected = isSelectedChoice(activeRuntimeSelection, choice)
+    return (
+      <button
+        key={`${choice.kind}:${choice.id}`}
+        onClick={() => handleRuntimeSelect(selectionFromChoice(choice, selectedRuntimeEffort))}
+        className={`
+          w-full rounded-lg border px-3 text-left transition-colors
+          ${isMobileBrowser ? 'min-h-[56px] py-3' : 'py-2.5'}
+          ${isSelected
+            ? 'border-[var(--color-model-option-selected-border)] bg-[var(--color-model-option-selected-bg)]'
+            : 'border-transparent hover:bg-[var(--color-surface-hover)]'
+          }
+        `}
+      >
+        <div className="flex items-start gap-3">
+          <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 ${
+            isSelected ? 'border-[var(--color-brand)]' : 'border-[var(--color-outline)]'
+          }`}>
+            {isSelected && (
+              <div className="h-2 w-2 rounded-full bg-[var(--color-brand)]" />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-[var(--color-text-primary)]">
+              {choice.label}
+            </div>
+            {choice.detail && (
+              <div className="mt-0.5 truncate pr-[6px] font-mono text-[10px] text-[var(--color-text-tertiary)]">
+                {choice.detail}
+              </div>
+            )}
+          </div>
+        </div>
+      </button>
+    )
+  }
+
   const dropdownContent = (
     <>
       <div className={`overflow-y-auto ${isMobileBrowser ? 'p-1' : 'p-3'}`} style={{ maxHeight: isMobileBrowser ? undefined : dropdownPosition?.maxHeight }}>
         {!isMobileBrowser && (
           <div className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-[var(--color-outline)]">
-            {t('model.configuration')}
+            {isRuntimeScoped ? t('model.runtimeConfiguration') : t('model.configuration')}
           </div>
         )}
 
         {isRuntimeScoped ? (
           <div className="space-y-3">
-            {providerChoices.map((choice) => (
-              <div key={choice.providerId ?? 'none'} className="space-y-1.5">
-                <div className="flex items-center justify-between px-2 pt-1">
-                  <span className="truncate text-[11px] font-semibold tracking-[0.01em] text-[var(--color-text-secondary)]">
-                    {choice.providerName}
-                  </span>
-                  {choice.isDefault && (
-                    <span className="flex-shrink-0 text-[10px] font-medium text-[var(--color-text-tertiary)]">
-                      {t('settings.providers.default')}
-                    </span>
-                  )}
+            {providerChoices.length > 0 && (
+              <div className="space-y-1">
+                <div className="px-2 pt-1 text-[11px] font-semibold tracking-[0.01em] text-[var(--color-text-secondary)]">
+                  {t('settings.executionMode.provider')}
                 </div>
-
-                <div className="space-y-1">
-                  {choice.models.map((model) => {
-                    const isSelected =
-                      activeRuntimeSelection?.providerId === choice.providerId &&
-                      activeRuntimeSelection.modelId === model.id
-                    return (
-                      <button
-                        key={`${choice.providerId ?? 'none'}:${model.id}`}
-                        onClick={() => handleRuntimeSelect({
-                          providerId: choice.providerId,
-                          modelId: model.id,
-                          effortLevel: selectedRuntimeEffort,
-                        })}
-                        className={`
-                          w-full rounded-lg border px-3 text-left transition-colors
-                          ${isMobileBrowser ? 'min-h-[56px] py-3' : 'py-2.5'}
-                          ${isSelected
-                            ? 'border-[var(--color-model-option-selected-border)] bg-[var(--color-model-option-selected-bg)]'
-                            : 'border-transparent hover:bg-[var(--color-surface-hover)]'
-                          }
-                        `}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border-2 ${
-                            isSelected ? 'border-[var(--color-brand)]' : 'border-[var(--color-outline)]'
-                          }`}>
-                            {isSelected && (
-                              <div className="h-2 w-2 rounded-full bg-[var(--color-brand)]" />
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold text-[var(--color-text-primary)]">
-                              {model.name}
-                            </div>
-                            {model.description && (
-                              <div className="mt-0.5 truncate pr-[6px] text-[10px] text-[var(--color-text-tertiary)]">
-                                {getLocalizedModelDescription(model, t)}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
+                {providerChoices.map(renderRuntimeChoice)}
               </div>
-            ))}
+            )}
+
+            {localCliChoices.length > 0 && (
+              <div className="space-y-1">
+                <div className="px-2 pt-1 text-[11px] font-semibold tracking-[0.01em] text-[var(--color-text-secondary)]">
+                  {t('settings.executionMode.localCli')}
+                </div>
+                {localCliChoices.map(renderRuntimeChoice)}
+              </div>
+            )}
+
+            {runtimeChoices.length === 0 && (
+              <div className="rounded-lg border border-dashed border-[var(--color-border)] px-3 py-5 text-sm text-[var(--color-text-tertiary)]">
+                {t('model.noRuntimeTargets')}
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-1">
@@ -513,9 +472,7 @@ export function ModelSelector({
               return (
                 <button
                   key={opt.value}
-                  onClick={() => {
-                    handleRuntimeEffortSelect(opt.value)
-                  }}
+                  onClick={() => handleRuntimeEffortSelect(opt.value)}
                   className={`
                     rounded-lg py-2 text-center text-xs font-semibold transition-colors
                     ${isSelected
@@ -539,9 +496,9 @@ export function ModelSelector({
       <MobileBottomSheet
         open={open}
         onClose={() => setOpen(false)}
-        title={t('model.configuration')}
+        title={isRuntimeScoped ? t('model.runtimeConfiguration') : t('model.configuration')}
         closeLabel={t('tabs.close')}
-        ariaLabel={t('model.configuration')}
+        ariaLabel={isRuntimeScoped ? t('model.runtimeConfiguration') : t('model.configuration')}
         contentClassName="p-3"
         panelRef={dropdownRef}
         testId="model-selector-dropdown"

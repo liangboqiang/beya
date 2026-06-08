@@ -188,6 +188,29 @@ describe('ProviderService', () => {
       expect((config.providers as Array<{ models?: unknown }>)[0]?.models).toBeUndefined()
     })
 
+    test('should use catalog default model roles when adding a preset without explicit mappings', async () => {
+      const svc = new ProviderService()
+      const provider = await svc.addProvider({
+        providerId: 'openai',
+        displayName: 'OpenAI',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-test-key-123',
+        apiFormat: 'openai_responses',
+      })
+
+      expect(provider.modelRoles).toEqual({
+        primary: 'gpt-5.1',
+        fast: 'gpt-5-nano-2025-08-07',
+        balanced: 'gpt-5-mini-2025-08-07',
+        powerful: 'gpt-5.1',
+      })
+      expect(provider.enabledModels).toEqual([
+        'gpt-5.1',
+        'gpt-5-nano-2025-08-07',
+        'gpt-5-mini-2025-08-07',
+      ])
+    })
+
     test('new providers should not be auto-activated', async () => {
       const svc = new ProviderService()
       const provider = await svc.addProvider(sampleInput())
@@ -314,8 +337,8 @@ describe('ProviderService', () => {
       expect(fetched.displayName).toBe(added.displayName)
     })
 
-    describe('ChatGPT Official provider metadata', () => {
-      test('normalizes the built-in ChatGPT provider as an active provider id', async () => {
+    describe('legacy ChatGPT Official provider id', () => {
+      test('normalizes the removed built-in ChatGPT provider to no active provider', async () => {
         await fs.mkdir(path.join(tmpDir, 'beya'), { recursive: true })
         await fs.writeFile(
           path.join(tmpDir, 'beya', 'providers.json'),
@@ -326,134 +349,14 @@ describe('ProviderService', () => {
         const svc = new ProviderService()
         const result = await svc.listProviders()
 
-        expect(result.activeId).toBe('openai-official')
+        expect(result.activeId).toBeNull()
         expect(result.providers).toEqual([])
       })
 
-      test('returns built-in ChatGPT provider metadata without persisting secrets', async () => {
+      test('does not return or activate the removed built-in ChatGPT provider', async () => {
         const svc = new ProviderService()
-        const provider = await svc.getProvider('openai-official')
-
-        expect(provider).toMatchObject({
-          providerId: 'openai-official',
-          displayName: 'ChatGPT Official',
-          apiKey: '',
-          apiFormat: 'openai_responses',
-          runtimeKind: 'openai_oauth',
-          modelRoles: {
-            primary: 'gpt-5.3-codex',
-            fast: 'gpt-5.4-mini',
-            balanced: 'gpt-5.4',
-            powerful: 'gpt-5.3-codex',
-          },
-        })
-      })
-
-      test('activating ChatGPT Official writes OpenAI OAuth runtime env without Anthropic auth or proxy env', async () => {
-        const svc = new ProviderService()
-
-        await svc.activateProvider('openai-official')
-
-        const config = await readProvidersConfig()
-        const settings = await readSettings()
-        expect(config.activeId).toBe('openai-official')
-        const env = settings.env as Record<string, string>
-        expect(env.BEYA_OPENAI_OAUTH_PROVIDER).toBe('1')
-        expect(env.OPENAI_CODEX_OAUTH_FILE).toBe(
-          path.join(tmpDir, 'beya', 'openai-oauth.json'),
-        )
-        expect(env.ANTHROPIC_MODEL).toBe('gpt-5.3-codex')
-        expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe('gpt-5.4-mini')
-        expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('gpt-5.4')
-        expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe('gpt-5.3-codex')
-        expect(typeof env.CLAUDE_CODE_MODEL_CONTEXT_WINDOWS).toBe('string')
-        expect(JSON.parse(env.CLAUDE_CODE_MODEL_CONTEXT_WINDOWS)).toEqual({
-          'gpt-5.3-codex': 258_400,
-          'gpt-5.4': 950_000,
-          'gpt-5.5': 258_400,
-          'gpt-5.4-mini': 258_400,
-        })
-        expect(env.ANTHROPIC_BASE_URL).toBeUndefined()
-        expect(env.ANTHROPIC_API_KEY).toBeUndefined()
-        expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
-      })
-
-      test('activating ChatGPT Official clears stale managed provider env', async () => {
-        const svc = new ProviderService()
-        const provider = await svc.addProvider(sampleInput({
-          apiFormat: 'openai_responses',
-          baseUrl: 'https://api.example.com/openai',
-          modelRoles: {
-            primary: 'provider-primary',
-            fast: 'provider-fast',
-            balanced: 'provider-balanced',
-            powerful: 'provider-powerful',
-          },
-        }))
-        await svc.activateProvider(provider.providerId)
-        expect(((await readSettings()).env as Record<string, string>).ANTHROPIC_BASE_URL).toContain('/proxy')
-
-        await svc.activateProvider('openai-official')
-
-        const settings = await readSettings()
-        const env = settings.env as Record<string, string>
-        expect(env.BEYA_OPENAI_OAUTH_PROVIDER).toBe('1')
-        expect(env.OPENAI_CODEX_OAUTH_FILE).toBe(
-          path.join(tmpDir, 'beya', 'openai-oauth.json'),
-        )
-        expect(env.ANTHROPIC_BASE_URL).toBeUndefined()
-        expect(env.ANTHROPIC_API_KEY).toBeUndefined()
-        expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
-      })
-
-      test('auth status reports ChatGPT Official from the desktop OpenAI token file', async () => {
-        await fs.mkdir(path.join(tmpDir, 'beya'), { recursive: true })
-        await fs.writeFile(
-          path.join(tmpDir, 'beya', 'openai-oauth.json'),
-          JSON.stringify({
-            accessToken: 'openai-access',
-            refreshToken: 'openai-refresh',
-            expiresAt: Date.now() + 60 * 60_000,
-            email: 'user@example.com',
-            accountId: 'acct_123',
-          }),
-          'utf-8',
-        )
-
-        const svc = new ProviderService()
-        await svc.activateProvider('openai-official')
-
-        await expect(svc.checkAuthStatus()).resolves.toMatchObject({
-          hasAuth: true,
-          source: 'openai-oauth',
-          activeProvider: 'ChatGPT Official',
-        })
-      })
-
-      test('auth status reports ChatGPT Official as unauthenticated when the OpenAI token file is missing', async () => {
-        const svc = new ProviderService()
-        await svc.activateProvider('openai-official')
-
-        await expect(svc.checkAuthStatus()).resolves.toMatchObject({
-          hasAuth: false,
-          source: 'none',
-          activeProvider: 'ChatGPT Official',
-        })
-      })
-
-      test('activating another provider clears ChatGPT Official runtime markers', async () => {
-        const svc = new ProviderService()
-        const provider = await svc.addProvider(sampleInput())
-
-        await svc.activateProvider('openai-official')
-        await svc.activateProvider(provider.providerId)
-
-        const env = (await readSettings()).env as Record<string, string>
-        expect(env.BEYA_OPENAI_OAUTH_PROVIDER).toBeUndefined()
-        expect(env.OPENAI_CODEX_OAUTH_FILE).toBeUndefined()
-        expect(env.ANTHROPIC_BASE_URL).toBe('https://api.example.com')
-        expect(env.ANTHROPIC_API_KEY).toBe('sk-test-key-123')
-        expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
+        await expect(svc.getProvider('openai-official')).rejects.toMatchObject({ statusCode: 404 })
+        await expect(svc.activateProvider('openai-official')).rejects.toMatchObject({ statusCode: 404 })
       })
     })
 
@@ -608,18 +511,21 @@ describe('ProviderService', () => {
       expect(providers[0].displayName).toBe('First')
     })
 
-    test('should throw 409 when deleting an active provider', async () => {
+    test('should delete an active provider and clear managed settings', async () => {
       const svc = new ProviderService()
       const active = await svc.addProvider(sampleInput())
       await svc.activateProvider(active.providerId)
 
-      try {
-        await svc.deleteProvider(active.providerId)
-        expect(true).toBe(false)
-      } catch (err: unknown) {
-        const apiErr = err as { statusCode: number }
-        expect(apiErr.statusCode).toBe(409)
-      }
+      await svc.deleteProvider(active.providerId)
+
+      const { activeId, providers } = await svc.listProviders()
+      expect(activeId).toBe(null)
+      expect(providers).toHaveLength(0)
+      const settings = await readSettings()
+      const env = settings.env as Record<string, string>
+      expect(env.ANTHROPIC_BASE_URL).toBeUndefined()
+      expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+      expect(env.ANTHROPIC_MODEL).toBeUndefined()
     })
 
     test('should throw 404 when deleting non-existent provider', async () => {
@@ -932,12 +838,10 @@ describe('ProviderService', () => {
       expect(active).toBeNull()
     })
 
-    test('should return null for explicit ChatGPT Official proxy lookup', async () => {
+    test('should reject explicit lookup for removed ChatGPT Official provider id', async () => {
       const svc = new ProviderService()
 
-      const active = await svc.getProviderForProxy('openai-official')
-
-      expect(active).toBeNull()
+      await expect(svc.getProviderForProxy('openai-official')).rejects.toMatchObject({ statusCode: 404 })
     })
 
     test('should return the active provider proxy config', async () => {
@@ -952,9 +856,14 @@ describe('ProviderService', () => {
       expect(active!.apiFormat).toBe('anthropic')
     })
 
-    test('should return null when ChatGPT Official is the active provider', async () => {
+    test('should return null when a stale ChatGPT Official active id is normalized away', async () => {
+      await fs.mkdir(path.join(tmpDir, 'beya'), { recursive: true })
+      await fs.writeFile(
+        path.join(tmpDir, 'beya', 'providers.json'),
+        JSON.stringify({ activeId: 'openai-official', providers: [] }),
+        'utf-8',
+      )
       const svc = new ProviderService()
-      await svc.activateProvider('openai-official')
 
       const active = await svc.getProviderForProxy()
 
@@ -1123,6 +1032,76 @@ describe('ProviderService', () => {
         globalThis.fetch = originalFetch
       }
     })
+
+    test('should refresh saved provider candidates from the upstream model scan after a successful test', async () => {
+      const originalFetch = globalThis.fetch
+      globalThis.fetch = mock(async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).endsWith('/v1/models')) {
+          return new Response(JSON.stringify({
+            data: [
+              { id: 'deepseek-chat', display_name: 'DeepSeek Chat', context_window: 128000 },
+              { id: 'deepseek-reasoner', display_name: 'DeepSeek Reasoner', context_window: 128000 },
+            ],
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+
+        expect(init?.method).toBe('POST')
+        return new Response(JSON.stringify({
+          id: 'chatcmpl-test',
+          object: 'chat.completion',
+          model: 'old-model',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'ok' },
+              finish_reason: 'stop',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }) as typeof fetch
+
+      try {
+        const svc = new ProviderService()
+        const provider = await svc.addProvider(sampleInput({
+          providerId: 'custom',
+          apiFormat: 'openai_chat',
+          baseUrl: 'https://api.example.com/v1',
+          modelRoles: {
+            primary: 'old-model',
+            fast: 'old-model',
+            balanced: 'old-model',
+            powerful: 'old-model',
+          },
+        }))
+
+        const result = await svc.testProvider(provider.providerId)
+        const updated = await svc.getProvider(provider.providerId)
+
+        expect(result.availableModels).toEqual([
+          { id: 'deepseek-chat', label: 'DeepSeek Chat', contextWindow: 128000 },
+          { id: 'deepseek-reasoner', label: 'DeepSeek Reasoner', contextWindow: 128000 },
+        ])
+        expect(updated.enabledModels).toEqual(['deepseek-chat', 'deepseek-reasoner'])
+        expect(updated.modelRoles).toEqual({
+          primary: 'deepseek-chat',
+          fast: 'deepseek-chat',
+          balanced: 'deepseek-chat',
+          powerful: 'deepseek-chat',
+        })
+        expect(updated.modelContextWindows).toEqual({
+          'deepseek-chat': 128000,
+          'deepseek-reasoner': 128000,
+        })
+      } finally {
+        globalThis.fetch = originalFetch
+      }
+    })
   })
 
   describe('testProviderConfig', () => {
@@ -1262,6 +1241,40 @@ describe('Providers API', () => {
     expect(JSON.stringify(body)).not.toContain('sk-test-key-123')
   })
 
+  test('POST /api/providers/rescan should refresh saved provider model candidates', async () => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = mock(async (url: string | URL | Request) => {
+      expect(String(url)).toBe('https://api.example.com/v1/models')
+      return new Response(JSON.stringify({
+        data: [
+          { id: 'scan-model-a', display_name: 'Scan Model A' },
+          { id: 'scan-model-b', display_name: 'Scan Model B' },
+        ],
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }) as typeof fetch
+
+    try {
+      const svc = new ProviderService()
+      await svc.addProvider(sampleInput({
+        apiFormat: 'openai_chat',
+        baseUrl: 'https://api.example.com/v1',
+      }))
+
+      const { req, url, segments } = makeRequest('POST', '/api/providers/rescan')
+      const res = await handleProvidersApi(req, url, segments)
+
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { providers: Array<{ enabledModels: string[]; apiKey: string }> }
+      expect(body.providers[0].enabledModels).toEqual(['scan-model-a', 'scan-model-b'])
+      expect(body.providers[0].apiKey).toBe('***REDACTED***')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
   // ─── POST /api/providers ─────────────────────────────────────────────────
 
   test('POST /api/providers should create a provider', async () => {
@@ -1377,7 +1390,7 @@ describe('Providers API', () => {
     expect(body.ok).toBe(true)
   })
 
-  test('DELETE /api/providers/:id should return 409 for active provider', async () => {
+  test('DELETE /api/providers/:id should delete an active provider', async () => {
     const svc = new ProviderService()
     const active = await svc.addProvider(sampleInput())
     await svc.activateProvider(active.providerId)
@@ -1385,7 +1398,12 @@ describe('Providers API', () => {
     const { req, url, segments } = makeRequest('DELETE', `/api/providers/${active.providerId}`)
     const res = await handleProvidersApi(req, url, segments)
 
-    expect(res.status).toBe(409)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { ok: boolean }
+    expect(body.ok).toBe(true)
+    const { activeId, providers } = await svc.listProviders()
+    expect(activeId).toBe(null)
+    expect(providers).toHaveLength(0)
   })
 
   // ─── POST /api/providers/:id/activate ────────────────────────────────────

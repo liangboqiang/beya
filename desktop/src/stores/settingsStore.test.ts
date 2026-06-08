@@ -166,6 +166,61 @@ describe('settingsStore update proxy persistence', () => {
   })
 })
 
+describe('settingsStore execution mode persistence', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.clearAllMocks()
+    window.localStorage.clear()
+  })
+
+  it('hydrates and persists the desktop execution mode', async () => {
+    const updateUser = vi.fn().mockResolvedValue({})
+    vi.doMock('../api/settings', () => ({
+      settingsApi: {
+        getUser: vi.fn().mockResolvedValue({ executionMode: 'local_cli' }),
+        updateUser,
+        getPermissionMode: vi.fn().mockResolvedValue({ mode: 'default' }),
+        setPermissionMode: vi.fn(),
+        getCliLauncherStatus: vi.fn(),
+      },
+    }))
+    vi.doMock('../api/models', () => ({
+      modelsApi: {
+        list: vi.fn().mockResolvedValue({ models: [] }),
+        getCurrent: vi.fn().mockResolvedValue({ model: null }),
+        setCurrent: vi.fn(),
+        getEffort: vi.fn().mockResolvedValue({ level: 'medium' }),
+        setEffort: vi.fn(),
+      },
+    }))
+    vi.doMock('../api/h5Access', () => ({
+      h5AccessApi: {
+        get: vi.fn().mockResolvedValue({
+          settings: {
+            enabled: false,
+            tokenPreview: null,
+            allowedOrigins: [],
+            publicBaseUrl: null,
+          },
+        }),
+        enable: vi.fn(),
+        disable: vi.fn(),
+        regenerate: vi.fn(),
+        update: vi.fn(),
+      },
+    }))
+
+    const { useSettingsStore } = await import('./settingsStore')
+
+    await useSettingsStore.getState().fetchAll()
+    expect(useSettingsStore.getState().executionMode).toBe('local_cli')
+
+    await useSettingsStore.getState().setExecutionMode('provider')
+    expect(useSettingsStore.getState().executionMode).toBe('provider')
+    expect(updateUser).toHaveBeenCalledWith({ executionMode: 'provider' })
+  })
+})
+
 describe('settingsStore network persistence', () => {
   beforeEach(() => {
     vi.resetModules()

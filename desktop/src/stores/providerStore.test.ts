@@ -7,6 +7,7 @@ const {
   runtimeStoreState,
   setSessionRuntimeMock,
   setSelectionMock,
+  settingsSetExecutionModeMock,
   settingsSetModelMock,
   settingsFetchAllMock,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
     create: vi.fn(),
+    rescan: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
     activate: vi.fn(),
@@ -28,11 +30,12 @@ const {
     setSessionRuntime: vi.fn(),
   },
   runtimeStoreState: {
-    selections: {} as Record<string, { providerId: string | null; modelId: string }>,
+    selections: {} as Record<string, { kind?: 'provider' | 'local_cli'; providerId: string | null; localCliId?: string | null; modelId: string }>,
     setSelection: vi.fn(),
   },
   setSessionRuntimeMock: vi.fn(),
   setSelectionMock: vi.fn(),
+  settingsSetExecutionModeMock: vi.fn(),
   settingsSetModelMock: vi.fn(),
   settingsFetchAllMock: vi.fn(),
 }))
@@ -62,6 +65,7 @@ vi.mock('./sessionRuntimeStore', () => ({
 vi.mock('./settingsStore', () => ({
   useSettingsStore: {
     getState: () => ({
+      setExecutionMode: settingsSetExecutionModeMock,
       setModel: settingsSetModelMock,
       fetchAll: settingsFetchAllMock,
     }),
@@ -92,6 +96,7 @@ describe('providerStore runtime refresh', () => {
     chatStoreState.sessions = {}
     runtimeStoreState.selections = {}
     providersApiMock.list.mockResolvedValue({ providers: [], activeId: null })
+    providersApiMock.rescan.mockResolvedValue({ providers: [], activeId: null })
   })
 
   it('reapplies an updated active provider to idle connected sessions using default runtime', async () => {
@@ -106,11 +111,15 @@ describe('providerStore runtime refresh', () => {
     await useProviderStore.getState().updateProvider(provider.providerId, { apiKey: 'new-key' })
 
     expect(setSelectionMock).toHaveBeenCalledWith('session-a', {
+      kind: 'provider',
       providerId: provider.providerId,
+      localCliId: null,
       modelId: 'model-primary',
     })
     expect(setSessionRuntimeMock).toHaveBeenCalledWith('session-a', {
+      kind: 'provider',
       providerId: provider.providerId,
+      localCliId: null,
       modelId: 'model-primary',
     })
   })
@@ -130,7 +139,9 @@ describe('providerStore runtime refresh', () => {
     await useProviderStore.getState().updateProvider(provider.providerId, { apiKey: 'new-key' })
 
     expect(setSessionRuntimeMock).toHaveBeenCalledWith('session-a', {
+      kind: 'provider',
       providerId: provider.providerId,
+      localCliId: null,
       modelId: 'model-powerful',
     })
   })
@@ -151,20 +162,6 @@ describe('providerStore runtime refresh', () => {
     expect(setSessionRuntimeMock).not.toHaveBeenCalled()
   })
 
-  it('sets the OpenAI default model when activating built-in ChatGPT Official', async () => {
-    providersApiMock.activate.mockResolvedValue({ ok: true })
-    providersApiMock.list.mockResolvedValue({
-      providers: [],
-      activeId: 'openai-official',
-    })
-
-    const { useProviderStore } = await import('./providerStore')
-    await useProviderStore.getState().activateProvider('openai-official')
-
-    expect(settingsSetModelMock).toHaveBeenCalledWith('gpt-5.3-codex')
-    expect(settingsFetchAllMock).toHaveBeenCalled()
-  })
-
   it('sets the provider primary model when activating a saved provider', async () => {
     const provider = makeProvider()
     providersApiMock.activate.mockResolvedValue({ ok: true })
@@ -177,6 +174,30 @@ describe('providerStore runtime refresh', () => {
     await useProviderStore.getState().activateProvider(provider.providerId)
 
     expect(settingsSetModelMock).toHaveBeenCalledWith('model-primary')
+    expect(settingsSetExecutionModeMock).toHaveBeenCalledWith('provider')
     expect(settingsFetchAllMock).toHaveBeenCalled()
+  })
+
+  it('stores providers returned by a model rescan', async () => {
+    const provider = makeProvider({
+      enabledModels: ['scan-model'],
+      modelRoles: {
+        primary: 'scan-model',
+        fast: 'scan-model',
+        balanced: 'scan-model',
+        powerful: 'scan-model',
+      },
+    })
+    providersApiMock.rescan.mockResolvedValue({
+      providers: [provider],
+      activeId: provider.providerId,
+    })
+
+    const { useProviderStore } = await import('./providerStore')
+    await useProviderStore.getState().rescanProviders()
+
+    expect(providersApiMock.rescan).toHaveBeenCalled()
+    expect(useProviderStore.getState().providers).toEqual([provider])
+    expect(useProviderStore.getState().activeId).toBe(provider.providerId)
   })
 })

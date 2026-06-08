@@ -24,6 +24,7 @@ import {
   H5_TOKEN_STORAGE_KEY,
   initializeDesktopServerUrl,
   isLoopbackHostname,
+  isTauriRuntime,
   requiresH5AuthForServerUrl,
   saveAndVerifyH5Connection,
 } from './desktopRuntime'
@@ -37,6 +38,9 @@ describe('desktopRuntime browser H5 bootstrap', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    delete (globalThis as typeof globalThis & { isTauri?: unknown }).isTauri
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    delete (window as typeof window & { __TAURI__?: unknown }).__TAURI__
     clientMocks.defaultBaseUrl = 'http://127.0.0.1:3456'
     clientMocks.explicitDefaultBaseUrl = false
     vi.useRealTimers()
@@ -48,7 +52,16 @@ describe('desktopRuntime browser H5 bootstrap', () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    delete (globalThis as typeof globalThis & { isTauri?: unknown }).isTauri
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    delete (window as typeof window & { __TAURI__?: unknown }).__TAURI__
     globalThis.fetch = originalFetch
+  })
+
+  it('detects Tauri v2 when the runtime exposes the official isTauri marker', () => {
+    (globalThis as typeof globalThis & { isTauri?: boolean }).isTauri = true
+
+    expect(isTauriRuntime()).toBe(true)
   })
 
   it('treats IPv6 loopback as local', () => {

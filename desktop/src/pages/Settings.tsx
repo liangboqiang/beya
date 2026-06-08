@@ -9,9 +9,10 @@ import { ConfirmDialog } from '../components/shared/ConfirmDialog'
 import { Input } from '../components/shared/Input'
 import { Button } from '../components/shared/Button'
 import { Dropdown } from '../components/shared/Dropdown'
-import type { UpdateProxyMode, NetworkProxyMode, WebSearchMode, AppMode, ChatSendBehavior } from '../types/settings'
+import { ModelCandidateInput, type ModelCandidate } from '../components/controls/ModelCandidateInput'
+import type { UpdateProxyMode, NetworkProxyMode, WebSearchMode, AppMode, ChatSendBehavior, ExecutionMode } from '../types/settings'
 import type { Locale } from '../i18n'
-import type { SavedProvider, UpdateProviderInput, ProviderTestResult, ModelRoles, ApiFormat, ProviderAuthStrategy } from '../types/provider'
+import type { SavedProvider, UpdateProviderInput, ProviderTestResult, ProviderDetectedModel, ModelRoles, ApiFormat, ProviderAuthStrategy } from '../types/provider'
 import type { ProviderDefinition } from '../types/providerCatalog'
 import { AdapterSettings } from './AdapterSettings'
 import { useAgentStore } from '../stores/agentStore'
@@ -30,12 +31,12 @@ import { TerminalSettings } from './TerminalSettings'
 import { DiagnosticsSettings } from './DiagnosticsSettings'
 import { ActivitySettings } from './ActivitySettings'
 import { MemorySettings } from './MemorySettings'
+import { LocalCliSettings } from './LocalCliSettings'
 import { useUIStore, type SettingsTab } from '../stores/uiStore'
-import { ChatGPTOfficialLogin } from '../components/settings/ChatGPTOfficialLogin'
-import { OPENAI_OFFICIAL_PROVIDER_ID } from '../constants/openaiOfficialProvider'
 import { useUpdateStore } from '../stores/updateStore'
 import { formatBytes } from '../lib/formatBytes'
 import { isTauriRuntime } from '../lib/desktopRuntime'
+import { selectDirectory } from '../lib/directorySelection'
 import {
   getDesktopNotificationPermission,
   notifyDesktop,
@@ -43,10 +44,6 @@ import {
   requestDesktopNotificationPermission,
   type DesktopNotificationPermission,
 } from '../lib/desktopNotifications'
-import {
-  maskSettingsJsonSecrets,
-  stripProviderSettingsJsonEnv,
-} from '../lib/providerSettingsJson'
 import { copyTextToClipboard } from '../components/chat/clipboard'
 import {
   EMPTY_MODEL_ROLES,
@@ -176,12 +173,16 @@ export function Settings() {
 
         {/* Tab content */}
         <div className="flex-1 overflow-y-auto px-8 py-6">
-          {activeTab === 'providers' && <ProviderSettings />}
+          {activeTab === 'providers' && <ExecutionModeSettings />}
           {activeTab === 'activity' && <ActivitySettings />}
           {activeTab === 'general' && <GeneralSettings />}
           {activeTab === 'h5Access' && <H5AccessSettings />}
           {activeTab === 'adapters' && <AdapterSettings />}
-          {activeTab === 'terminal' && <TerminalSettings showPreferences />}
+          {activeTab === 'terminal' && (
+            <div className="max-w-4xl space-y-6">
+              <TerminalSettings showPreferences />
+            </div>
+          )}
           {activeTab === 'mcp' && <McpSettings />}
           {activeTab === 'agents' && <AgentsSettings />}
           {activeTab === 'skills' && <SkillSettings />}
@@ -214,21 +215,111 @@ function TabButton({ icon, label, active, onClick }: { icon: string; label: stri
 
 // ─── Provider Settings ──────────────────────────────────────
 
+function ExecutionModeSettings() {
+  const t = useTranslation()
+  const executionMode = useSettingsStore((s) => s.executionMode)
+  const setExecutionMode = useSettingsStore((s) => s.setExecutionMode)
+  const [savingMode, setSavingMode] = useState<ExecutionMode | null>(null)
+
+  const handleModeChange = async (mode: ExecutionMode) => {
+    if (mode === executionMode || savingMode) return
+    setSavingMode(mode)
+    try {
+      await setExecutionMode(mode)
+    } finally {
+      setSavingMode(null)
+    }
+  }
+
+  return (
+    <div className="max-w-4xl space-y-6">
+      <section className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">
+        <div className="border-b border-[var(--color-border-separator)] px-4 py-3.5">
+          <h2 className="text-base font-semibold text-[var(--color-text-primary)]">{t('settings.executionMode.title')}</h2>
+          <p className="mt-0.5 max-w-2xl text-sm text-[var(--color-text-tertiary)]">
+            {t('settings.executionMode.description')}
+          </p>
+        </div>
+        <div className="grid gap-3 p-4 sm:grid-cols-2" role="tablist" aria-label={t('settings.executionMode.title')}>
+          <ExecutionModeButton
+            title={t('settings.executionMode.provider')}
+            description={t('settings.executionMode.providerDescription')}
+            icon="dns"
+            selected={executionMode === 'provider'}
+            saving={savingMode === 'provider'}
+            onClick={() => void handleModeChange('provider')}
+          />
+          <ExecutionModeButton
+            title={t('settings.executionMode.localCli')}
+            description={t('settings.executionMode.localCliDescription')}
+            icon="terminal"
+            selected={executionMode === 'local_cli'}
+            saving={savingMode === 'local_cli'}
+            onClick={() => void handleModeChange('local_cli')}
+          />
+        </div>
+      </section>
+
+      {executionMode === 'local_cli' ? <LocalCliSettings /> : <ProviderSettings />}
+    </div>
+  )
+}
+
+function ExecutionModeButton({
+  title,
+  description,
+  icon,
+  selected,
+  saving,
+  onClick,
+}: {
+  title: string
+  description: string
+  icon: string
+  selected: boolean
+  saving: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={selected}
+      onClick={onClick}
+      disabled={saving}
+      className={`flex min-h-[112px] items-start gap-3 rounded-xl border p-4 text-left transition-colors disabled:cursor-wait disabled:opacity-75 ${
+        selected
+          ? 'border-[var(--color-brand)] bg-[var(--color-surface-container)] shadow-[var(--shadow-focus-ring)]'
+          : 'border-[var(--color-border)] bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)]'
+      }`}
+    >
+      <span className={`material-symbols-outlined mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-[20px] ${
+        selected
+          ? 'bg-[var(--color-brand)] text-white'
+          : 'bg-[var(--color-surface-container-high)] text-[var(--color-text-secondary)]'
+      }`}>
+        {saving ? 'progress_activity' : icon}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-[var(--color-text-primary)]">{title}</span>
+        <span className="mt-1 block text-xs leading-5 text-[var(--color-text-tertiary)]">{description}</span>
+      </span>
+    </button>
+  )
+}
+
 function ProviderSettings() {
   const {
     providers,
-    activeId,
-    hasLoadedProviders,
     catalog,
     isLoading,
     isCatalogLoading,
     fetchProviders,
     fetchCatalog,
+    rescanProviders,
     deleteProvider,
-    activateProvider,
     testProvider,
   } = useProviderStore()
-  const fetchSettings = useSettingsStore((s) => s.fetchAll)
   const t = useTranslation()
   const [editingProvider, setEditingProvider] = useState<SavedProvider | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -248,7 +339,6 @@ function ProviderSettings() {
   )
 
   const handleDelete = async (provider: SavedProvider) => {
-    if (activeId === provider.providerId) return
     setPendingDeleteProvider(provider)
   }
 
@@ -275,12 +365,6 @@ function ProviderSettings() {
     }
   }
 
-  const handleActivate = async (id: string) => {
-    await activateProvider(id)
-    await fetchSettings()
-  }
-  const isOpenAIOfficialActive = hasLoadedProviders && activeId === OPENAI_OFFICIAL_PROVIDER_ID
-
   return (
     <div className="max-w-2xl">
       <div className="flex items-center justify-between mb-4">
@@ -288,42 +372,16 @@ function ProviderSettings() {
           <h2 className="text-base font-semibold text-[var(--color-text-primary)]">{t('settings.providers.title')}</h2>
           <p className="text-sm text-[var(--color-text-tertiary)] mt-0.5">{t('settings.providers.description')}</p>
         </div>
-        <Button size="sm" onClick={() => setShowCreateModal(true)} disabled={isCatalogLoading || providerDefinitions.length === 0}>
-          <span className="material-symbols-outlined text-[16px]">add</span>
-          {t('settings.providers.addProvider')}
-        </Button>
-      </div>
-
-
-      <div
-        data-testid="openai-official-provider"
-        className={`relative flex flex-col rounded-xl border transition-all mb-2 ${
-          isOpenAIOfficialActive
-            ? 'border-[var(--color-brand)] bg-[var(--color-surface-container)] shadow-[var(--shadow-focus-ring)]'
-            : 'border-[var(--color-border)] hover:border-[var(--color-border-focus)] cursor-pointer'
-        }`}
-      >
-        <div
-          className="flex items-center gap-4 px-4 py-3.5"
-          onClick={() => !isOpenAIOfficialActive && handleActivate(OPENAI_OFFICIAL_PROVIDER_ID)}
-        >
-          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isOpenAIOfficialActive ? 'bg-[var(--color-success)]' : 'bg-[var(--color-text-tertiary)]'}`} />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-[var(--color-text-primary)]">{t('settings.providers.openaiOfficialName')}</span>
-              {isOpenAIOfficialActive && (
-                <span className="px-1.5 py-0.5 text-[10px] font-bold rounded border border-[var(--color-brand)]/18 bg-[var(--color-brand)]/14 text-[var(--color-brand)] leading-none">{t('settings.providers.default')}</span>
-              )}
-            </div>
-            <div className="text-xs text-[var(--color-text-tertiary)] mt-0.5">{t('settings.providers.openaiOfficialDesc')}</div>
-          </div>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={() => void rescanProviders()} disabled={isLoading || providers.length === 0}>
+            <RotateCw size={14} />
+            {t('settings.providers.rescan')}
+          </Button>
+          <Button size="sm" onClick={() => setShowCreateModal(true)} disabled={isCatalogLoading || providerDefinitions.length === 0}>
+            <span className="material-symbols-outlined text-[16px]">add</span>
+            {t('settings.providers.addProvider')}
+          </Button>
         </div>
-
-        {isOpenAIOfficialActive && (
-          <div className="px-4 pb-4 pt-3 border-t border-[var(--color-border-separator)]">
-            <ChatGPTOfficialLogin />
-          </div>
-        )}
       </div>
 
       {/* Saved providers */}
@@ -334,19 +392,28 @@ function ProviderSettings() {
       ) : (
         <div className="flex flex-col gap-2">
           {providers.map((provider) => {
-            const isActive = activeId === provider.providerId
             const test = testResults[provider.providerId]
             const definition = providerDefinitionMap.get(provider.providerId)
+            const testSuccess = Boolean(
+              test?.result?.connectivity.success &&
+              (test.result.proxy ? test.result.proxy.success : true),
+            )
+            const testFailed = Boolean(
+              test?.result &&
+              !testSuccess,
+            )
             return (
               <div
                 key={provider.providerId}
-                className={`relative flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all group ${
-                  isActive
-                    ? 'border-[var(--color-brand)] bg-[var(--color-surface-container)] shadow-[var(--shadow-focus-ring)]'
-                    : 'border-[var(--color-border)] hover:border-[var(--color-border-focus)]'
-                }`}
+                className="relative flex items-center gap-4 px-4 py-3.5 rounded-xl border border-[var(--color-border)] transition-all group hover:border-[var(--color-border-focus)]"
               >
-                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isActive ? 'bg-[var(--color-success)]' : 'bg-[var(--color-text-tertiary)]'}`} />
+                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                  testSuccess
+                    ? 'bg-[var(--color-success)]'
+                    : testFailed
+                      ? 'bg-[var(--color-error)]'
+                      : 'bg-[var(--color-text-tertiary)]'
+                }`} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-[var(--color-text-primary)] truncate">{provider.displayName}</span>
@@ -357,9 +424,6 @@ function ProviderSettings() {
                       <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[var(--color-surface-container-high)] text-[var(--color-warning)] leading-none">
                         {provider.apiFormat === 'openai_chat' ? 'OpenAI Chat' : 'OpenAI Responses'}
                       </span>
-                    )}
-                    {isActive && (
-                      <span className="px-1.5 py-0.5 text-[10px] font-bold rounded border border-[var(--color-brand)]/18 bg-[var(--color-brand)]/14 text-[var(--color-brand)] leading-none">{t('settings.providers.default')}</span>
                     )}
                   </div>
                   <div className="text-xs text-[var(--color-text-tertiary)] truncate mt-0.5">
@@ -383,14 +447,9 @@ function ProviderSettings() {
                   )}
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                  {!isActive && (
-                    <Button variant="ghost" size="sm" onClick={() => handleActivate(provider.providerId)}>{t('settings.providers.setDefault')}</Button>
-                  )}
                   <Button variant="ghost" size="sm" onClick={() => handleTest(provider)} loading={test?.loading}>{t('settings.providers.test')}</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setEditingProvider(provider)}>{t('settings.providers.edit')}</Button>
-                  {!isActive && (
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(provider)} className="text-[var(--color-error)] hover:text-[var(--color-error)]">{t('common.delete')}</Button>
-                  )}
+                  <Button variant="ghost" size="sm" onClick={() => setEditingProvider(provider)}>{t('settings.providers.configure')}</Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(provider)} className="text-[var(--color-error)] hover:text-[var(--color-error)]">{t('common.delete')}</Button>
                 </div>
               </div>
             )
@@ -444,12 +503,10 @@ function requireProviderDefinition(provider: ProviderDefinition | undefined): Pr
 }
 
 const AUTO_COMPACT_WINDOW_ENV_KEY = 'CLAUDE_CODE_AUTO_COMPACT_WINDOW'
-const MODEL_CONTEXT_WINDOWS_ENV_KEY = 'CLAUDE_CODE_MODEL_CONTEXT_WINDOWS'
 const MODEL_CONTEXT_WINDOW_MIN = 16000
 const MODEL_CONTEXT_WINDOW_MAX = 10000000
 const MODEL_ROLE_SLOTS = ['primary', 'fast', 'balanced', 'powerful'] as const
 const DEFAULT_PROVIDER_AUTH_STRATEGY: ProviderAuthStrategy = 'auth_token'
-const AUTH_ENV_KEYS = new Set(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'])
 type ModelRoleSlot = typeof MODEL_ROLE_SLOTS[number]
 type ModelContextInputs = Record<ModelRoleSlot, string>
 
@@ -463,45 +520,6 @@ function getDefinitionAutoCompactWindow(preset: ProviderDefinition): string {
 
 function getDefinitionAuthStrategy(preset: ProviderDefinition): ProviderAuthStrategy {
   return preset.authStrategy ?? DEFAULT_PROVIDER_AUTH_STRATEGY
-}
-
-function omitAuthEnv(env: Record<string, string> | undefined): Record<string, string> {
-  if (!env) return {}
-  return Object.fromEntries(
-    Object.entries(env).filter(([key]) => !AUTH_ENV_KEYS.has(key.toUpperCase())),
-  )
-}
-
-function getProviderAuthValue(apiKey: string, preset: ProviderDefinition): string {
-  return apiKey || preset.defaultEnv?.ANTHROPIC_AUTH_TOKEN || preset.defaultEnv?.ANTHROPIC_API_KEY || (preset.needsApiKey ? '(your API key)' : '')
-}
-
-function buildSettingsJsonAuthEnv(
-  apiFormat: ApiFormat,
-  authStrategy: ProviderAuthStrategy,
-  apiKey: string,
-  preset: ProviderDefinition,
-): Record<string, string> {
-  if (apiFormat !== 'anthropic') {
-    return { ANTHROPIC_API_KEY: 'proxy-managed' }
-  }
-
-  const value = getProviderAuthValue(apiKey, preset)
-  switch (authStrategy) {
-    case 'api_key':
-      return value ? { ANTHROPIC_API_KEY: value } : {}
-    case 'auth_token':
-      return value ? { ANTHROPIC_AUTH_TOKEN: value } : {}
-    case 'auth_token_empty_api_key':
-      return {
-        ANTHROPIC_API_KEY: '',
-        ...(value ? { ANTHROPIC_AUTH_TOKEN: value } : {}),
-      }
-    case 'dual_same_token':
-      return value ? { ANTHROPIC_API_KEY: value, ANTHROPIC_AUTH_TOKEN: value } : {}
-    case 'dual_dummy':
-      return { ANTHROPIC_API_KEY: 'dummy', ANTHROPIC_AUTH_TOKEN: 'dummy' }
-  }
 }
 
 function parseAutoCompactWindowInput(value: string): number | undefined {
@@ -576,90 +594,30 @@ function buildModelContextWindows(
   return windows
 }
 
-function updateSettingsJsonAutoCompactWindow(raw: string, value: string): string {
-  try {
-    const parsed = JSON.parse(raw || '{}') as { env?: Record<string, unknown> }
-    const existingEnv = parsed.env && typeof parsed.env === 'object' && !Array.isArray(parsed.env)
-      ? parsed.env
-      : {}
-    const env = { ...existingEnv }
-    const trimmed = value.trim()
-    if (trimmed) {
-      env[AUTO_COMPACT_WINDOW_ENV_KEY] = trimmed
-    } else {
-      delete env[AUTO_COMPACT_WINDOW_ENV_KEY]
-    }
-    parsed.env = env
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    return raw
+function modelRolesFromModelId(modelId: string): ModelRoles {
+  return {
+    primary: modelId,
+    fast: modelId,
+    balanced: modelId,
+    powerful: modelId,
   }
 }
 
-function updateSettingsJsonModelContextWindows(
-  raw: string,
-  modelContextWindows: Record<string, number>,
-): string {
-  try {
-    const parsed = JSON.parse(raw || '{}') as { env?: Record<string, unknown> }
-    const existingEnv = parsed.env && typeof parsed.env === 'object' && !Array.isArray(parsed.env)
-      ? parsed.env
-      : {}
-    const env = { ...existingEnv }
-    if (Object.keys(modelContextWindows).length > 0) {
-      env[MODEL_CONTEXT_WINDOWS_ENV_KEY] = JSON.stringify(modelContextWindows)
-    } else {
-      delete env[MODEL_CONTEXT_WINDOWS_ENV_KEY]
-    }
-    parsed.env = env
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    return raw
-  }
-}
+function modelRolesFromDetectedModels(currentRoles: ModelRoles, detectedModels: ProviderDetectedModel[]): ModelRoles {
+  const detectedIds = detectedModels
+    .map((model) => model.id.trim())
+    .filter(Boolean)
+  const firstDetected = detectedIds[0]
+  if (!firstDetected) return currentRoles
 
-function updateSettingsJsonModelRoles(raw: string, modelRoles: ModelRoles): string {
-  try {
-    const parsed = JSON.parse(raw || '{}') as { env?: Record<string, unknown> }
-    const existingEnv = parsed.env && typeof parsed.env === 'object' && !Array.isArray(parsed.env)
-      ? parsed.env
-      : {}
-    parsed.env = {
-      ...existingEnv,
-      ANTHROPIC_MODEL: modelRoles.primary,
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: modelRoles.fast,
-      ANTHROPIC_DEFAULT_SONNET_MODEL: modelRoles.balanced,
-      ANTHROPIC_DEFAULT_OPUS_MODEL: modelRoles.powerful,
-    }
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    return raw
-  }
-}
-
-function updateSettingsJsonProviderConnection(
-  raw: string,
-  apiFormat: ApiFormat,
-  authStrategy: ProviderAuthStrategy,
-  apiKey: string,
-  preset: ProviderDefinition,
-  baseUrl: string,
-): string {
-  try {
-    const parsed = JSON.parse(raw || '{}') as { env?: Record<string, unknown> }
-    const existingEnv = parsed.env && typeof parsed.env === 'object' && !Array.isArray(parsed.env)
-      ? parsed.env
-      : {}
-    const env = { ...existingEnv }
-    delete env.ANTHROPIC_API_KEY
-    delete env.ANTHROPIC_AUTH_TOKEN
-    env.ANTHROPIC_BASE_URL = apiFormat !== 'anthropic' ? 'http://127.0.0.1:3456/proxy' : baseUrl
-    Object.assign(env, buildSettingsJsonAuthEnv(apiFormat, authStrategy, apiKey, preset))
-    parsed.env = env
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    return raw
-  }
+  const available = new Set(detectedIds)
+  const pick = (modelId: string) => available.has(modelId) ? modelId : firstDetected
+  return normalizeModelRoles({
+    primary: pick(currentRoles.primary),
+    fast: pick(currentRoles.fast),
+    balanced: pick(currentRoles.balanced),
+    powerful: pick(currentRoles.powerful),
+  })
 }
 
 function buildFallbackDefinition(provider?: SavedProvider): ProviderDefinition {
@@ -687,6 +645,42 @@ function buildFallbackDefinition(provider?: SavedProvider): ProviderDefinition {
   }
 }
 
+function buildProviderModelCandidates(
+  preset: ProviderDefinition,
+  provider: SavedProvider | undefined,
+  modelRoles: ModelRoles,
+  detectedModels: ProviderDetectedModel[] = [],
+): ModelCandidate[] {
+  const seen = new Set<string>()
+  const candidates: ModelCandidate[] = []
+  const add = (id: string | undefined, label?: string) => {
+    const trimmed = id?.trim()
+    if (!trimmed || seen.has(trimmed)) return
+    seen.add(trimmed)
+    candidates.push({ id: trimmed, label: label?.trim() || trimmed })
+  }
+
+  for (const model of preset.models) {
+    add(model.id, model.displayName)
+  }
+  for (const model of detectedModels) {
+    add(model.id, model.label)
+  }
+  for (const model of provider?.enabledModels ?? []) {
+    add(model)
+  }
+  if (provider) {
+    for (const model of Object.values(getProviderModelRoles(provider))) {
+      add(model)
+    }
+  }
+  for (const model of Object.values(modelRoles)) {
+    add(model)
+  }
+
+  return candidates
+}
+
 function openExternalUrl(url: string) {
   if (!isTauriRuntime()) {
     window.open(url, '_blank', 'noopener,noreferrer')
@@ -699,15 +693,11 @@ function openExternalUrl(url: string) {
 }
 
 function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions }: ProviderFormProps) {
-  const { createProvider, updateProvider, testConfig } = useProviderStore()
+  const { createProvider, updateProvider, testProvider, testConfig } = useProviderStore()
   const fetchSettings = useSettingsStore((s) => s.fetchAll)
   const t = useTranslation()
 
   const availableProviders = providerDefinitions
-  const presetDefaultEnvKeys = useMemo(
-    () => providerDefinitions.flatMap((definition) => Object.keys(definition.defaultEnv ?? {})),
-    [providerDefinitions],
-  )
   const fallbackPreset = provider
     ? buildFallbackDefinition(provider)
     : requireProviderDefinition(availableProviders[availableProviders.length - 1])
@@ -724,9 +714,11 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
   const [authStrategy, setAuthStrategy] = useState<ProviderAuthStrategy>(provider?.authStrategy ?? getDefinitionAuthStrategy(initialPreset))
   const [apiKey, setApiKey] = useState(provider?.apiKey ?? '')
   const [showApiKey, setShowApiKey] = useState(false)
-  const [notes, setNotes] = useState(provider?.notes ?? '')
   const [modelRoles, setModelRoles] = useState<ModelRoles>(
     provider ? getProviderModelRoles(provider) : getDefinitionModelRoles(initialPreset),
+  )
+  const [connectionTestModel, setConnectionTestModel] = useState(
+    provider ? getProviderModelRoles(provider).primary : getDefinitionModelRoles(initialPreset).primary,
   )
   const [modelContextInputs, setModelContextInputs] = useState<ModelContextInputs>(
     getModelContextInputs(
@@ -744,43 +736,11 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [testResult, setTestResult] = useState<ProviderTestResult | null>(null)
   const [isTesting, setIsTesting] = useState(false)
-  const [settingsJson, setSettingsJson] = useState('')
-
-  // Load current settings.json and merge provider env vars
-  useEffect(() => {
-    import('../api/providers').then(({ providersApi }) => {
-      providersApi.getSettings().then((settings) => {
-        const needsProxy = apiFormat !== 'anthropic'
-        const autoCompactWindowEnv = autoCompactWindow.trim()
-        const modelContextWindows = buildModelContextWindows(modelRoles, modelContextInputs)
-        const normalizedModelRoles = normalizeModelRoles(modelRoles)
-        const existingEnv = (settings.env as Record<string, string>) || {}
-        const cleanedEnv = stripProviderSettingsJsonEnv(existingEnv, presetDefaultEnvKeys)
-        const merged = {
-          ...settings,
-          skipWebFetchPreflight: settings.skipWebFetchPreflight ?? true,
-          env: {
-            ...cleanedEnv,
-            ...omitAuthEnv(selectedPreset.defaultEnv),
-            ...(autoCompactWindowEnv ? { [AUTO_COMPACT_WINDOW_ENV_KEY]: autoCompactWindowEnv } : {}),
-            ...(Object.keys(modelContextWindows).length > 0
-              ? { [MODEL_CONTEXT_WINDOWS_ENV_KEY]: JSON.stringify(modelContextWindows) }
-              : {}),
-            ANTHROPIC_BASE_URL: needsProxy ? 'http://127.0.0.1:3456/proxy' : baseUrl,
-            ...buildSettingsJsonAuthEnv(apiFormat, authStrategy, apiKey, selectedPreset),
-            ANTHROPIC_MODEL: normalizedModelRoles.primary,
-            ANTHROPIC_DEFAULT_HAIKU_MODEL: normalizedModelRoles.fast,
-            ANTHROPIC_DEFAULT_SONNET_MODEL: normalizedModelRoles.balanced,
-            ANTHROPIC_DEFAULT_OPUS_MODEL: normalizedModelRoles.powerful,
-          },
-        }
-        setSettingsJson(JSON.stringify(merged, null, 2))
-      }).catch(() => {
-        setSettingsJson(JSON.stringify({}, null, 2))
-      })
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPreset.providerId])
+  const [detectedModels, setDetectedModels] = useState<ProviderDetectedModel[]>([])
+  const modelCandidates = useMemo(
+    () => buildProviderModelCandidates(selectedPreset, provider, modelRoles, detectedModels),
+    [selectedPreset, provider, modelRoles, detectedModels],
+  )
 
   const handlePresetChange = (preset: ProviderDefinition) => {
     setSelectedPreset(preset)
@@ -790,21 +750,23 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
     setAuthStrategy(getDefinitionAuthStrategy(preset))
     const nextModelRoles = getDefinitionModelRoles(preset)
     setModelRoles(nextModelRoles)
+    setConnectionTestModel(nextModelRoles.primary)
     setModelContextInputs(getModelContextInputs(nextModelRoles, preset))
     setAutoCompactWindow(getDefinitionAutoCompactWindow(preset))
     setShowContextSettings(false)
     setTestResult(null)
+    setDetectedModels([])
   }
 
   const isCustom = selectedPreset.providerId === 'custom'
   const requiresApiKey = selectedPreset.needsApiKey !== false
   const autoCompactWindowErrorKey = getAutoCompactWindowErrorKey(autoCompactWindow)
   const modelContextWindowErrorSlots = MODEL_ROLE_SLOTS.filter((slot) => getModelContextWindowErrorKey(modelContextInputs[slot]))
-  const canSubmit = name.trim() && baseUrl.trim() && (mode === 'edit' || !requiresApiKey || apiKey.trim()) && modelRoles.primary.trim() && !autoCompactWindowErrorKey && modelContextWindowErrorSlots.length === 0
+  const testModelId = mode === 'create' ? connectionTestModel : modelRoles.primary
+  const canSubmit = mode === 'create'
+    ? Boolean(name.trim() && baseUrl.trim() && (!requiresApiKey || apiKey.trim()) && testModelId.trim())
+    : Boolean(modelRoles.primary.trim() && !autoCompactWindowErrorKey && modelContextWindowErrorSlots.length === 0)
   const apiKeyUrl = selectedPreset.apiKeyUrl?.trim()
-  const displayedSettingsJson = showApiKey
-    ? settingsJson
-    : maskSettingsJsonSecrets(settingsJson)
   const apiFormatItems = [
     {
       value: 'anthropic' as const,
@@ -872,23 +834,18 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
   const shouldShowContextFields = showContextSettings || modelContextWindowErrorSlots.length > 0 || !!autoCompactWindowErrorKey
   const handleAutoCompactWindowChange = (value: string) => {
     setAutoCompactWindow(value)
-    setSettingsJson((current) => updateSettingsJsonAutoCompactWindow(current, value))
   }
   const handleBaseUrlChange = (value: string) => {
     setBaseUrl(value)
-    setSettingsJson((current) => updateSettingsJsonProviderConnection(current, apiFormat, authStrategy, apiKey, selectedPreset, value))
   }
   const handleApiKeyChange = (value: string) => {
     setApiKey(value)
-    setSettingsJson((current) => updateSettingsJsonProviderConnection(current, apiFormat, authStrategy, value, selectedPreset, baseUrl))
   }
   const handleApiFormatChange = (value: ApiFormat) => {
     setApiFormat(value)
-    setSettingsJson((current) => updateSettingsJsonProviderConnection(current, value, authStrategy, apiKey, selectedPreset, baseUrl))
   }
   const handleAuthStrategyChange = (value: ProviderAuthStrategy) => {
     setAuthStrategy(value)
-    setSettingsJson((current) => updateSettingsJsonProviderConnection(current, apiFormat, value, apiKey, selectedPreset, baseUrl))
   }
   const handleModelRoleChange = (slot: ModelRoleSlot, value: string) => {
     const nextModelRoles = { ...modelRoles, [slot]: value }
@@ -898,18 +855,10 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
     }
     setModelRoles(nextModelRoles)
     setModelContextInputs(nextInputs)
-    setSettingsJson((current) => updateSettingsJsonModelContextWindows(
-      updateSettingsJsonModelRoles(current, normalizeModelRoles(nextModelRoles)),
-      buildModelContextWindows(nextModelRoles, nextInputs),
-    ))
   }
   const handleModelContextWindowChange = (slot: ModelRoleSlot, value: string) => {
     const nextInputs = { ...modelContextInputs, [slot]: value }
     setModelContextInputs(nextInputs)
-    setSettingsJson((current) => updateSettingsJsonModelContextWindows(
-      current,
-      buildModelContextWindows(modelRoles, nextInputs),
-    ))
   }
   const renderPresetButton = (preset: ProviderDefinition) => (
     <button
@@ -933,6 +882,13 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
     setIsSubmitting(true)
     try {
       if (mode === 'create') {
+        const detectedModelIds = detectedModels.map((model) => model.id.trim()).filter(Boolean)
+        const shouldSendModelRoles = detectedModelIds.length > 0 || selectedPreset.providerId === 'custom'
+        const createModelRoles = shouldSendModelRoles
+          ? normalizeModelRoles(modelRoles.primary.trim()
+            ? modelRoles
+            : modelRolesFromModelId(connectionTestModel.trim()))
+          : undefined
         await createProvider({
           providerId: selectedPreset.providerId,
           displayName: name.trim(),
@@ -940,27 +896,22 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
           authStrategy,
           baseUrl: baseUrl.trim(),
           apiFormat,
-          modelRoles: normalizedModelRoles,
-          enabledModels: [...new Set(Object.values(normalizedModelRoles).filter(Boolean))],
-          ...(parsedAutoCompactWindow !== undefined && { autoCompactWindow: parsedAutoCompactWindow }),
-          ...(Object.keys(parsedModelContextWindows).length > 0 && { modelContextWindows: parsedModelContextWindows }),
-          notes: notes.trim() || undefined,
+          ...(createModelRoles && { modelRoles: createModelRoles }),
+          ...(detectedModelIds.length > 0
+            ? { enabledModels: [...new Set(detectedModelIds)] }
+            : createModelRoles
+              ? { enabledModels: [...new Set(Object.values(createModelRoles).filter(Boolean))] }
+              : {}),
         })
       } else if (provider) {
         const input: UpdateProviderInput = {
-          displayName: name.trim(),
-          baseUrl: baseUrl.trim(),
-          authStrategy,
-          apiFormat,
           modelRoles: normalizedModelRoles,
           enabledModels: [...new Set(Object.values(normalizedModelRoles).filter(Boolean))],
           autoCompactWindow: parsedAutoCompactWindow ?? null,
           modelContextWindows: Object.keys(parsedModelContextWindows).length > 0
             ? parsedModelContextWindows
             : null,
-          notes: notes.trim() || undefined,
         }
-        if (apiKey.trim()) input.apiKey = apiKey.trim()
         await updateProvider(provider.providerId, input)
       }
       await fetchSettings()
@@ -973,27 +924,38 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
   }
 
   const handleTest = async () => {
-    if (!baseUrl.trim() || !modelRoles.primary.trim()) return
+    if (mode === 'create' && (!baseUrl.trim() || !testModelId.trim())) return
+    if (mode === 'edit' && !modelRoles.primary.trim()) return
     setIsTesting(true)
     setTestResult(null)
     try {
       let result: ProviderTestResult
-      if (mode === 'edit' && provider && !apiKey.trim()) {
-        result = await useProviderStore.getState().testProvider(provider.providerId, {
-          baseUrl: baseUrl.trim(),
+      if (mode === 'edit' && provider) {
+        result = await testProvider(provider.providerId, {
           modelId: modelRoles.primary.trim(),
-          apiFormat,
-          authStrategy,
         })
       } else {
         if (requiresApiKey && !apiKey.trim()) return
         result = await testConfig({
           baseUrl: baseUrl.trim(),
           apiKey: apiKey.trim() || selectedPreset.defaultEnv?.ANTHROPIC_AUTH_TOKEN || 'local',
-          modelId: modelRoles.primary.trim(),
+          modelId: testModelId.trim(),
           authStrategy,
           apiFormat,
+          scanModels: true,
         })
+      }
+      if (result.availableModels?.length) {
+        const nextModelRoles = modelRolesFromDetectedModels(
+          mode === 'create'
+            ? (modelRoles.primary.trim() ? modelRoles : modelRolesFromModelId(testModelId.trim()))
+            : modelRoles,
+          result.availableModels,
+        )
+        setDetectedModels(result.availableModels)
+        setModelRoles(nextModelRoles)
+        setConnectionTestModel(nextModelRoles.primary)
+        setModelContextInputs(getModelContextInputs(nextModelRoles, selectedPreset, provider))
       }
       setTestResult(result)
     } catch {
@@ -1029,119 +991,172 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
           </div>
         )}
 
-        <Input label={t('settings.providers.name')} required value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.providers.namePlaceholder')} />
+        {mode === 'create' ? (
+          <>
+            <Input label={t('settings.providers.name')} required value={name} onChange={(e) => setName(e.target.value)} placeholder={t('settings.providers.namePlaceholder')} />
 
-        <Input label={t('settings.providers.notes')} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t('settings.providers.notesPlaceholder')} />
+            <Input label={t('settings.providers.baseUrl')} required value={baseUrl} onChange={(e) => handleBaseUrlChange(e.target.value)} placeholder={t('settings.providers.baseUrlPlaceholder')} />
 
-        <Input label={t('settings.providers.baseUrl')} required value={baseUrl} onChange={(e) => handleBaseUrlChange(e.target.value)} placeholder={t('settings.providers.baseUrlPlaceholder')} />
+            {/* API Format */}
+            {isCustom ? (
+              <div>
+                <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">{t('settings.providers.apiFormat')}</label>
+                <Dropdown<ApiFormat>
+                  items={apiFormatItems}
+                  value={apiFormat}
+                  onChange={handleApiFormatChange}
+                  width="100%"
+                  className="block w-full"
+                  trigger={
+                    <button
+                      type="button"
+                      className="flex h-10 w-full items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-left text-sm text-[var(--color-text-primary)] outline-none transition-colors hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-container-low)] focus-visible:border-[var(--color-border-focus)] focus-visible:shadow-[var(--shadow-focus-ring)]"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{selectedApiFormatLabel}</span>
+                      <span className="material-symbols-outlined flex-shrink-0 text-[18px] text-[var(--color-text-secondary)]">expand_more</span>
+                    </button>
+                  }
+                />
+                {apiFormat !== 'anthropic' && (
+                  <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">{t('settings.providers.proxyHint')}</p>
+                )}
+              </div>
+            ) : apiFormat !== 'anthropic' ? (
+              <div>
+                <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">{t('settings.providers.apiFormat')}</label>
+                <div className="text-xs text-[var(--color-text-tertiary)] px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border border-[var(--color-border)]">
+                  {apiFormat === 'openai_chat' ? t('settings.providers.apiFormatOpenaiChat') : t('settings.providers.apiFormatOpenaiResponses')}
+                </div>
+              </div>
+            ) : null}
 
-        {/* API Format */}
-        {(isCustom || mode === 'edit') ? (
-          <div>
-            <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">{t('settings.providers.apiFormat')}</label>
-            <Dropdown<ApiFormat>
-              items={apiFormatItems}
-              value={apiFormat}
-              onChange={handleApiFormatChange}
-              width="100%"
-              className="block w-full"
-              trigger={
+            {apiFormat === 'anthropic' && (
+              <div>
+                <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">{t('settings.providers.authStrategy')}</label>
+                <Dropdown<ProviderAuthStrategy>
+                  items={authStrategyItems}
+                  value={authStrategy}
+                  onChange={handleAuthStrategyChange}
+                  width="100%"
+                  className="block w-full"
+                  trigger={
+                    <button
+                      type="button"
+                      className="flex min-h-10 w-full items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-left text-sm text-[var(--color-text-primary)] outline-none transition-colors hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-container-low)] focus-visible:border-[var(--color-border-focus)] focus-visible:shadow-[var(--shadow-focus-ring)]"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{selectedAuthStrategyLabel}</span>
+                      <span className="material-symbols-outlined flex-shrink-0 text-[18px] text-[var(--color-text-secondary)]">expand_more</span>
+                    </button>
+                  }
+                />
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1">
+              <label htmlFor="provider-api-key" className="text-sm font-medium text-[var(--color-text-primary)]">
+                {t('settings.providers.apiKey')}
+                {requiresApiKey && <span className="text-[var(--color-error)] ml-0.5">*</span>}
+              </label>
+              <div className="relative">
+                <input
+                  id="provider-api-key"
+                  type={showApiKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => handleApiKeyChange(e.target.value)}
+                  placeholder="sk-..."
+                  className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 pr-10 text-sm text-[var(--color-text-primary)] outline-none transition-colors duration-150 placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-border-focus)] focus:shadow-[var(--shadow-focus-ring)]"
+                />
                 <button
                   type="button"
-                  className="flex h-10 w-full items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-left text-sm text-[var(--color-text-primary)] outline-none transition-colors hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-container-low)] focus-visible:border-[var(--color-border-focus)] focus-visible:shadow-[var(--shadow-focus-ring)]"
+                  onClick={() => setShowApiKey((visible) => !visible)}
+                  aria-label={showApiKey ? 'Hide API Key' : 'Show API Key'}
+                  className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] focus:outline-none focus:shadow-[var(--shadow-focus-ring)]"
                 >
-                  <span className="min-w-0 flex-1 truncate">{selectedApiFormatLabel}</span>
-                  <span className="material-symbols-outlined flex-shrink-0 text-[18px] text-[var(--color-text-secondary)]">expand_more</span>
+                  <span className="material-symbols-outlined text-[16px]">
+                    {showApiKey ? 'visibility_off' : 'visibility'}
+                  </span>
                 </button>
-              }
-            />
-            {apiFormat !== 'anthropic' && (
-              <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">{t('settings.providers.proxyHint')}</p>
-            )}
-          </div>
-        ) : apiFormat !== 'anthropic' ? (
-          <div>
-            <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">{t('settings.providers.apiFormat')}</label>
-            <div className="text-xs text-[var(--color-text-tertiary)] px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border border-[var(--color-border)]">
-              {apiFormat === 'openai_chat' ? t('settings.providers.apiFormatOpenaiChat') : t('settings.providers.apiFormatOpenaiResponses')}
+              </div>
             </div>
+
+            {apiKeyUrl && (
+              <div className="-mt-2 flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => openExternalUrl(apiKeyUrl)}
+                  className="group inline-flex h-6 w-fit cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-1.5 text-[11px] font-medium leading-none text-[var(--color-brand)] transition-colors hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-hover)] focus:outline-none focus:shadow-[var(--shadow-focus-ring)]"
+                >
+                  <span className="material-symbols-outlined text-[13px]">key</span>
+                  {t('settings.providers.getApiKey')}
+                  <span className="material-symbols-outlined text-[9px] opacity-60 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5">arrow_outward</span>
+                </button>
+              </div>
+            )}
+
+            <ModelCandidateInput
+              label={t('settings.providers.testModel')}
+              required
+              value={connectionTestModel}
+              onChange={setConnectionTestModel}
+              placeholder={t('settings.providers.modelIdPlaceholder')}
+              candidates={modelCandidates}
+              testId="provider-test-model"
+            />
+          </>
+        ) : provider ? (
+          <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-3 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">{provider.displayName}</div>
+                <div className="mt-1 text-xs text-[var(--color-text-tertiary)] truncate">{provider.baseUrl}</div>
+              </div>
+              <span className="shrink-0 rounded bg-[var(--color-surface-container-high)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-[var(--color-text-tertiary)]">
+                {provider.apiFormat === 'openai_chat'
+                  ? 'OpenAI Chat'
+                  : provider.apiFormat === 'openai_responses'
+                    ? 'OpenAI Responses'
+                    : 'Anthropic'}
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] leading-5 text-[var(--color-text-tertiary)]">
+              {t('settings.providers.configureOnlyHint')}
+            </p>
           </div>
         ) : null}
 
-        {apiFormat === 'anthropic' && (
-          <div>
-            <label className="text-sm font-medium text-[var(--color-text-primary)] mb-1 block">{t('settings.providers.authStrategy')}</label>
-            <Dropdown<ProviderAuthStrategy>
-              items={authStrategyItems}
-              value={authStrategy}
-              onChange={handleAuthStrategyChange}
-              width="100%"
-              className="block w-full"
-              trigger={
-                <button
-                  type="button"
-                  className="flex min-h-10 w-full items-center gap-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-left text-sm text-[var(--color-text-primary)] outline-none transition-colors hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-container-low)] focus-visible:border-[var(--color-border-focus)] focus-visible:shadow-[var(--shadow-focus-ring)]"
-                >
-                  <span className="min-w-0 flex-1 truncate">{selectedAuthStrategyLabel}</span>
-                  <span className="material-symbols-outlined flex-shrink-0 text-[18px] text-[var(--color-text-secondary)]">expand_more</span>
-                </button>
-              }
-            />
-          </div>
-        )}
-
-        <div className="flex flex-col gap-1">
-          <label htmlFor="provider-api-key" className="text-sm font-medium text-[var(--color-text-primary)]">
-            {t('settings.providers.apiKey')}
-            {mode === 'create' && requiresApiKey && <span className="text-[var(--color-error)] ml-0.5">*</span>}
-          </label>
-          <div className="relative">
-            <input
-              id="provider-api-key"
-              type={showApiKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => handleApiKeyChange(e.target.value)}
-              placeholder="sk-..."
-              className="h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 pr-10 text-sm text-[var(--color-text-primary)] outline-none transition-colors duration-150 placeholder:text-[var(--color-text-tertiary)] focus:border-[var(--color-border-focus)] focus:shadow-[var(--shadow-focus-ring)]"
-            />
-            <button
-              type="button"
-              onClick={() => setShowApiKey((visible) => !visible)}
-              aria-label={showApiKey ? 'Hide API Key' : 'Show API Key'}
-              className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] transition-colors hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] focus:outline-none focus:shadow-[var(--shadow-focus-ring)]"
-            >
-              <span className="material-symbols-outlined text-[16px]">
-                {showApiKey ? 'visibility_off' : 'visibility'}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {apiKeyUrl && (
-          <div className="-mt-2 flex flex-col gap-1.5">
-            <button
-              type="button"
-              onClick={() => openExternalUrl(apiKeyUrl)}
-              className="group inline-flex h-6 w-fit cursor-pointer items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface-container-low)] px-1.5 text-[11px] font-medium leading-none text-[var(--color-brand)] transition-colors hover:border-[var(--color-border-focus)] hover:bg-[var(--color-surface-hover)] focus:outline-none focus:shadow-[var(--shadow-focus-ring)]"
-            >
-              <span className="material-symbols-outlined text-[13px]">key</span>
-              {t('settings.providers.getApiKey')}
-              <span className="material-symbols-outlined text-[9px] opacity-60 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5">arrow_outward</span>
-            </button>
-          </div>
-        )}
-
         {/* Model Mapping */}
+        {mode === 'edit' && (
         <div>
           <label className="text-sm font-medium text-[var(--color-text-primary)] mb-2 block">{t('settings.providers.modelMapping')}</label>
           <div className="grid grid-cols-2 gap-2">
-            <Input label={t('settings.providers.primaryModel')} required value={modelRoles.primary} onChange={(e) => handleModelRoleChange('primary', e.target.value)} placeholder={t('settings.providers.modelIdPlaceholder')} />
-            <Input label={t('settings.providers.fastModel')} value={modelRoles.fast} onChange={(e) => handleModelRoleChange('fast', e.target.value)} placeholder={t('settings.providers.sameAsPrimary')} />
-            <Input label={t('settings.providers.balancedModel')} value={modelRoles.balanced} onChange={(e) => handleModelRoleChange('balanced', e.target.value)} placeholder={t('settings.providers.sameAsPrimary')} />
-            <Input label={t('settings.providers.powerfulModel')} value={modelRoles.powerful} onChange={(e) => handleModelRoleChange('powerful', e.target.value)} placeholder={t('settings.providers.sameAsPrimary')} />
+            {MODEL_ROLE_SLOTS.map((slot) => {
+              const labelKey = slot === 'primary'
+                ? 'settings.providers.primaryModel'
+                : slot === 'fast'
+                  ? 'settings.providers.fastModel'
+                  : slot === 'balanced'
+                    ? 'settings.providers.balancedModel'
+                    : 'settings.providers.powerfulModel'
+              return (
+                <ModelCandidateInput
+                  key={slot}
+                  label={t(labelKey)}
+                  required={slot === 'primary'}
+                  value={modelRoles[slot]}
+                  onChange={(value) => handleModelRoleChange(slot, value)}
+                  placeholder={slot === 'primary'
+                    ? t('settings.providers.modelIdPlaceholder')
+                    : t('settings.providers.sameAsPrimary')}
+                  candidates={modelCandidates}
+                  testId={`provider-model-${slot}`}
+                />
+              )
+            })}
           </div>
         </div>
+        )}
 
+        {mode === 'edit' && (
         <div className="rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface-container-low)]">
           <button
             type="button"
@@ -1231,6 +1246,7 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
             </div>
           )}
         </div>
+        )}
 
         {/* Test connection */}
         <div className="flex items-center gap-3">
@@ -1255,18 +1271,6 @@ function ProviderFormModal({ open, onClose, mode, provider, providerDefinitions 
           )}
         </div>
 
-        {/* Settings JSON preview generated from the provider catalog. */}
-        <div>
-          <label className="text-sm font-medium text-[var(--color-text-primary)] mb-2 block">{t('settings.providers.settingsJson')}</label>
-          <textarea
-            value={displayedSettingsJson}
-            readOnly
-            rows={16}
-            spellCheck={false}
-            className="w-full text-xs px-3 py-3 rounded-[var(--radius-md)] bg-[var(--color-surface-container-low)] border border-[var(--color-border)] font-mono leading-relaxed resize-y text-[var(--color-text-secondary)] outline-none"
-          />
-          <p className="text-[11px] text-[var(--color-text-tertiary)] mt-1">{t('settings.providers.settingsJsonDesc')}</p>
-        </div>
       </div>
     </Modal>
   )
@@ -1562,17 +1566,13 @@ function GeneralSettings() {
 
   const openPortableDirPicker = async () => {
     setModeError(null)
-    try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: t('settings.general.storageChooseDirTitle'),
-      })
-      if (typeof selected === 'string') {
-        setPortableDirDraft(selected)
-      }
-    } catch {
+    const result = await selectDirectory({
+      title: t('settings.general.storageChooseDirTitle'),
+      initialPath: portableDirDraft.trim() || undefined,
+    })
+    if (result.kind === 'selected') {
+      setPortableDirDraft(result.path)
+    } else if (result.kind === 'unavailable') {
       setModeError(t('settings.general.storagePickerError'))
     }
   }

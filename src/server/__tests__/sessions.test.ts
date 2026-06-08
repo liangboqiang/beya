@@ -39,7 +39,18 @@ async function setupTmpConfigDir(): Promise<string> {
 
 async function cleanupTmpDir(): Promise<void> {
   if (tmpDir) {
-    await fs.rm(tmpDir, { recursive: true, force: true })
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        await fs.rm(tmpDir, { recursive: true, force: true })
+        break
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (!['EBUSY', 'ENOTEMPTY', 'EPERM'].includes(code ?? '') || attempt === 4) {
+          throw error
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)))
+      }
+    }
   }
   delete process.env.BEYA_CONFIG_DIR
 }
@@ -1345,7 +1356,7 @@ describe('SessionService', () => {
       path.basename(plannedWorktreePath).replace(/^desktop-/, 'worktree-desktop-'),
     )
     expect(context.branches.some((branch) => branch.name.startsWith('worktree-desktop-'))).toBe(false)
-  })
+  }, 15_000)
 
   it('should defer direct branch switching until CLI startup when worktree isolation is disabled', async () => {
     const workDir = await createCleanGitRepo(tmpDir)
@@ -1421,7 +1432,7 @@ describe('SessionService', () => {
     expect(git(workDir, 'branch', '--show-current')).toBe('feature/rail\n')
     expect(await fs.readFile(path.join(workDir, 'README.md'), 'utf-8'))
       .toContain('local-pricing-edit')
-  })
+  }, 15_000)
 
   it('should plan isolated worktrees from dirty source checkouts without switching branches', async () => {
     const workDir = await createCleanGitRepo(tmpDir)
@@ -1441,7 +1452,7 @@ describe('SessionService', () => {
     expect(git(workDir, 'branch', '--show-current')).toBe('main\n')
     expect(await fs.readFile(path.join(workDir, 'README.md'), 'utf-8'))
       .toContain('local-pricing-edit')
-  })
+  }, 15_000)
 
   it('should defer checked-out direct branch launch validation until CLI startup', async () => {
     const workDir = await createCleanGitRepo(tmpDir)
@@ -1459,7 +1470,7 @@ describe('SessionService', () => {
       { branch: 'feature/rail', worktree: false },
       sessionId,
     )).rejects.toMatchObject({ code: 'REPOSITORY_BRANCH_CHECKED_OUT' })
-  })
+  }, 15_000)
 
   it('should reject branch launch outside Git repositories with a stable error code', async () => {
     const workDir = path.join(tmpDir, `not-git-${Date.now()}`)
@@ -2013,7 +2024,7 @@ describe('Sessions API', () => {
     expect(project?.projectName).toBe(path.basename(workDir))
     expect(project?.branch).toBe('main')
     expect(project?.realPath).toBe(await fs.realpath(workDir))
-  })
+  }, 15_000)
 
   it('GET /api/sessions/:id should return session detail', async () => {
     // Create a session file

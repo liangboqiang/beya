@@ -534,6 +534,28 @@ describe('remote H5 auth and CORS integration', () => {
     })
   })
 
+  test('blocks remote browsers from local interactive filesystem selection routes', async () => {
+    for (const endpoint of [
+      '/api/filesystem/pick-directory',
+      '/api/filesystem/register-directory',
+    ]) {
+      const response = await fetch(`${baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          Origin: PHONE_ORIGIN,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path: tmpDir, initialPath: tmpDir }),
+      })
+
+      expect(response.status).toBe(403)
+      await expect(response.json()).resolves.toMatchObject({
+        error: 'Forbidden',
+        message: 'Interactive filesystem selection is only available from the local desktop app or loopback Web UI.',
+      })
+    }
+  })
+
   test('blocks remote preflight requests to the local H5 access control plane', async () => {
     const response = await fetch(`${baseUrl}/api/h5-access/enable`, {
       method: 'OPTIONS',

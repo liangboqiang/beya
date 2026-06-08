@@ -17,14 +17,11 @@ import {
   ATTRIBUTION_HEADER_ENV_KEY,
   attributionHeaderEnvForModel,
 } from './attributionHeaderPolicy.js'
-import {
-  OPENAI_CODEX_OAUTH_FILE_ENV_KEY,
-  OPENAI_OAUTH_PROVIDER_ENV_KEY,
-  buildOpenAIOfficialRuntimeEnv,
-  isOpenAIOfficialProviderId,
-} from './openaiOfficialProvider.js'
 import { MODEL_CONTEXT_WINDOWS_ENV_KEY } from '../../utils/model/modelContextWindows.js'
 import { normalizeProviderBaseUrl } from './providerEndpoint.js'
+
+const OPENAI_OAUTH_PROVIDER_ENV_KEY = 'BEYA_OPENAI_OAUTH_PROVIDER'
+const OPENAI_CODEX_OAUTH_FILE_ENV_KEY = 'OPENAI_CODEX_OAUTH_FILE'
 
 export const MANAGED_PROVIDER_ENV_KEYS = [
   'ANTHROPIC_BASE_URL',
@@ -73,8 +70,7 @@ function isSavedProvider(value: unknown): value is SavedProvider {
     isModelRoles(value.modelRoles) &&
     (
       runtimeKind === undefined ||
-      runtimeKind === 'anthropic_compatible' ||
-      runtimeKind === 'openai_oauth'
+      runtimeKind === 'anthropic_compatible'
     )
   )
 }
@@ -132,10 +128,7 @@ export function normalizeProvidersIndex(value: unknown): ProvidersIndex | null {
     .filter(isSavedProvider)
     .map((provider) => normalizeSavedProvider(provider))
   const rawActiveId = typeof value.activeId === 'string' ? value.activeId : null
-  const activeId = rawActiveId && (
-    providers.some((provider) => provider.providerId === rawActiveId) ||
-    isOpenAIOfficialProviderId(rawActiveId)
-  )
+  const activeId = rawActiveId && providers.some((provider) => provider.providerId === rawActiveId)
     ? rawActiveId
     : null
 
@@ -207,10 +200,6 @@ export function buildProviderManagedEnv(
   provider: SavedProvider,
   options?: { proxyPath?: string; serverPort?: number },
 ): Record<string, string> {
-  if (provider.runtimeKind === 'openai_oauth') {
-    return buildOpenAIOfficialRuntimeEnv()
-  }
-
   const normalizedProvider = normalizeSavedProvider(provider)
   const apiFormat: ApiFormat = normalizedProvider.apiFormat ?? 'anthropic'
   const needsProxy = apiFormat !== 'anthropic'
@@ -263,10 +252,6 @@ export function readActiveProviderManagedEnv(
     const raw = fs.readFileSync(path.join(configDir, 'beya', 'providers.json'), 'utf-8')
     const index = normalizeProvidersIndex(JSON.parse(raw))
     if (!index?.activeId) return null
-
-    if (isOpenAIOfficialProviderId(index.activeId)) {
-      return buildOpenAIOfficialRuntimeEnv()
-    }
 
     const provider = index.providers.find((entry) => entry.providerId === index.activeId)
     if (!provider) return null

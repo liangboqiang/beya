@@ -137,7 +137,7 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
             timestamp: message.timestamp,
             isSynthetic: message.isMeta || message.isVisibleInTranscriptOnly,
             // Structured tool output (not the string content sent to the
-            // model â€?the full Output object). Rides the protobuf catchall
+            // model â€”the full Output object). Rides the protobuf catchall
             // so web viewers can read things like BriefTool's file_uuid
             // without it polluting model context.
             ...(message.toolUseResult !== undefined
@@ -202,7 +202,7 @@ export function localCommandOutputToSDKAssistantMessage(
     .replace(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/, '$1')
     .trim()
   // createAssistantMessage builds a complete APIAssistantMessage with id, type,
-  // model: SYNTHETIC_MODEL, role, stop_reason, usage â€?all fields required by
+  // model: SYNTHETIC_MODEL, role, stop_reason, usage â€”all fields required by
   // downstream deserializers like Android's SdkAssistantMessage.
   const synthetic = createAssistantMessage({ content: cleanContent })
   return {

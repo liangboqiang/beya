@@ -38,7 +38,8 @@ export class H5ConnectionRequiredError extends Error {
 
 export function isTauriRuntime() {
   if (typeof window === 'undefined') return false
-  return '__TAURI_INTERNALS__' in window || '__TAURI__' in window
+  const runtime = globalThis as typeof globalThis & { isTauri?: unknown }
+  return runtime.isTauri === true || '__TAURI_INTERNALS__' in window || '__TAURI__' in window
 }
 
 export function isBrowserH5Runtime() {

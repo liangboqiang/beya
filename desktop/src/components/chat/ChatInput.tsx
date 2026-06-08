@@ -133,8 +133,9 @@ export function ChatInput({ variant = 'default', compact = false }: ChatInputPro
   )
   const currentModel = useSettingsStore((state) => state.currentModel)
   const chatSendBehavior = useSettingsStore((state) => state.chatSendBehavior)
+  const runtimeSelectionKind = runtimeSelection?.kind ?? (runtimeSelection?.localCliId ? 'local_cli' : 'provider')
   const runtimeSelectionKey = runtimeSelection
-    ? `${runtimeSelection.providerId ?? 'official'}:${runtimeSelection.modelId}:${runtimeSelection.effortLevel ?? 'auto'}`
+    ? `${runtimeSelectionKind}:${runtimeSelection.localCliId ?? runtimeSelection.providerId ?? 'official'}:${runtimeSelection.modelId}:${runtimeSelection.effortLevel ?? 'auto'}`
     : undefined
   const runtimeModelLabel = runtimeSelection?.modelId ?? currentModel?.name ?? currentModel?.id
   const activeSession = useSessionStore((state) => activeTabId ? state.sessions.find((session) => session.id === activeTabId) ?? null : null)

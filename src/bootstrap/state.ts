@@ -12,7 +12,7 @@ import type { HookEvent, ModelUsage } from 'src/types/sdkProtocol.js'
 import type { AgentColorName } from 'src/tools/AgentTool/agentColorManager.js'
 import type { HookCallbackMatcher } from 'src/types/hooks.js'
 // Indirection for browser-sdk build (package.json "browser" field swaps
-// crypto.ts for crypto.browser.ts). Pure leaf re-export of node:crypto â€?// zero circular-dep risk. Path-alias import bypasses bootstrap-isolation
+// crypto.ts for crypto.browser.ts). Pure leaf re-export of node:crypto â€”// zero circular-dep risk. Path-alias import bypasses bootstrap-isolation
 // (rule only checks ./ and / prefixes); explicit disable documents intent.
 // eslint-disable-next-line custom-rules/bootstrap-isolation
 import { randomUUID } from 'src/utils/crypto.js'
@@ -119,7 +119,7 @@ type State = {
   // Last auto-mode classifier request(s) for /share transcript
   lastClassifierRequests: unknown[] | null
   // BEYA.md content cached by context.ts for the auto-mode classifier.
-  // Breaks the yoloClassifier â†?claudemd â†?filesystem â†?permissions cycle.
+  // Breaks the yoloClassifier â†’claudemd â†’filesystem â†’permissions cycle.
   cachedBeyaMdContent: string | null
   // In-memory error log for recent errors
   inMemoryErrorLog: Array<{ error: string; timestamp: string }>
@@ -137,7 +137,7 @@ type State = {
   scheduledTasksEnabled: boolean
   // Session-only cron tasks created via CronCreate with durable: false.
   // Fire on schedule like file-backed tasks but are never written to
-  // .beya/scheduled_tasks.json â€?they die with the process. Typed via
+  // .beya/scheduled_tasks.json â€”they die with the process. Typed via
   // SessionCronTask below (not importing from cronTasks.ts keeps
   // bootstrap a leaf of the import DAG).
   sessionCronTasks: SessionCronTask[]
@@ -210,8 +210,8 @@ type State = {
   // Additional directories from --add-dir flag (for BEYA.md loading)
   additionalDirectoriesForBeyaMd: string[]
   // Channel server allowlist from --channels flag (servers whose channel
-  // notifications should register this session). Parsed once in main.tsx â€?  // the tag decides trust model: 'plugin' â†?marketplace verification +
-  // allowlist, 'server' â†?allowlist always fails (schema is plugin-only).
+  // notifications should register this session). Parsed once in main.tsx â€”  // the tag decides trust model: 'plugin' â†’marketplace verification +
+  // allowlist, 'server' â†’allowlist always fails (schema is plugin-only).
   // Either kind needs entry.dev to bypass allowlist.
   allowedChannels: ChannelEntry[]
   // True if any entry in allowedChannels came from
@@ -239,7 +239,7 @@ type State = {
   // GrowthBook/settings toggles don't bust the prompt cache.
   cacheEditingHeaderLatched: boolean | null
   // Sticky-on latch for clearing thinking from prior tool loops. Triggered
-  // when >1h since last API call (confirmed cache miss â€?no cache-hit
+  // when >1h since last API call (confirmed cache miss â€”no cache-hit
   // benefit to keeping thinking). Once latched, stays on so the newly-warmed
   // thinking-cleared cache isn't busted by flipping back to keep:'all'.
   thinkingClearLatched: boolean | null
@@ -474,11 +474,11 @@ export function getParentSessionId(): SessionId | undefined {
 
 /**
  * Atomically switch the active session. `sessionId` and `sessionProjectDir`
- * always change together â€?there is no separate setter for either, so they
+ * always change together â€”there is no separate setter for either, so they
  * cannot drift out of sync (CC-34).
  *
- * @param projectDir â€?directory containing `<sessionId>.jsonl`. Omit (or
- *   pass `null`) for sessions in the current project â€?the path will derive
+ * @param projectDir â€”directory containing `<sessionId>.jsonl`. Omit (or
+ *   pass `null`) for sessions in the current project â€”the path will derive
  *   from originalCwd at read time. Pass `dirname(transcriptPath)` when the
  *   session lives in a different project directory (git worktrees,
  *   cross-project resume). Every call resets the project dir; it never
@@ -516,7 +516,7 @@ export const onSessionSwitch = sessionSwitched.subscribe
 
 /**
  * Project directory the current session's transcript lives in, or `null` if
- * the session was created in the current project (common case â€?derive from
+ * the session was created in the current project (common case â€”derive from
  * originalCwd). See `switchSession()`.
  */
 export function getSessionProjectDir(): string | null {
@@ -549,7 +549,7 @@ export function setOriginalCwd(cwd: string): void {
 
 /**
  * Only for --worktree startup flag. Mid-session EnterWorktreeTool must NOT
- * call this â€?skills/history should stay anchored to where the session started.
+ * call this â€”skills/history should stay anchored to where the session started.
  */
 export function setProjectRoot(cwd: string): void {
   STATE.projectRoot = cwd.normalize('NFC')
@@ -820,10 +820,10 @@ export function getLastInteractionTime(): number {
   return STATE.lastInteractionTime
 }
 
-// Scroll drain suspension â€?background intervals check this before doing work
+// Scroll drain suspension â€”background intervals check this before doing work
 // so they don't compete with scroll frames for the event loop. Set by
 // ScrollBox scrollBy/scrollTo, cleared SCROLL_DRAIN_IDLE_MS after the last
-// scroll event. Module-scope (not in STATE) â€?ephemeral hot-path flag, no
+// scroll event. Module-scope (not in STATE) â€”ephemeral hot-path flag, no
 // test-reset needed since the debounce timer self-clears.
 let scrollDraining = false
 let scrollDrainTimer: ReturnType<typeof setTimeout> | undefined
@@ -842,7 +842,7 @@ export function markScrollActivity(): void {
 }
 
 /** True while scroll is actively draining (within 150ms of last event).
- *  Intervals should early-return when this is set â€?the work picks up next
+ *  Intervals should early-return when this is set â€”the work picks up next
  *  tick after scroll settles. */
 export function getIsScrollDraining(): boolean {
   return scrollDraining
@@ -1143,7 +1143,7 @@ export function setStrictToolResultPairing(value: boolean): void {
 }
 
 // Field name 'userMsgOptIn' avoids excluded-string substrings ('BriefTool',
-// 'SendUserMessage' â€?case-insensitive). All callers are inside feature()
+// 'SendUserMessage' â€”case-insensitive). All callers are inside feature()
 // guards so these accessors don't need their own (matches getKairosActive).
 export function getUserMsgOptIn(): boolean {
   return STATE.userMsgOptIn
@@ -1330,7 +1330,7 @@ export type SessionCronTask = {
   /**
    * When set, the task was created by an in-process teammate (not the team lead).
    * The scheduler routes fires to that teammate's pendingUserMessages queue
-   * instead of the main REPL command queue. Session-only â€?never written to disk.
+   * instead of the main REPL command queue. Session-only â€”never written to disk.
    */
   agentId?: string
   /** Human-readable task name. */

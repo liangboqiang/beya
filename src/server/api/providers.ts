@@ -43,6 +43,12 @@ export async function handleProvidersApi(
       return await handleTestUnsaved(req)
     }
 
+    // POST /api/providers/rescan
+    if (id === 'rescan' && req.method === 'POST') {
+      const { providers, activeId } = await providerService.rescanProviders()
+      return Response.json({ providers: providers.map(providerForApi), activeId })
+    }
+
     // GET /api/providers/catalog
     if (id === 'catalog' && req.method === 'GET') {
       return Response.json({ catalog: PROVIDER_CATALOG })

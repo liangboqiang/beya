@@ -366,24 +366,11 @@ describe('ConversationService', () => {
     expect(env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC).toBeUndefined()
   })
 
-  test('buildChildEnv injects ChatGPT Official runtime env for session-scoped provider selection', async () => {
+  test('buildChildEnv rejects the removed ChatGPT Official session provider id', async () => {
     const service = new ConversationService() as any
-    const env = (await service.buildChildEnv('/tmp', undefined, {
+    await expect(service.buildChildEnv('/tmp', undefined, {
       providerId: 'openai-official',
-    })) as Record<string, string>
-
-    expect(env.BEYA_OPENAI_OAUTH_PROVIDER).toBe('1')
-    expect(env.OPENAI_CODEX_OAUTH_FILE).toBe(
-      path.join(tmpDir, 'beya', 'openai-oauth.json'),
-    )
-    expect(env.ANTHROPIC_MODEL).toBe('gpt-5.3-codex')
-    expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe('gpt-5.4')
-    expect(env.CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST).toBe('1')
-    expect(env.CLAUDE_CODE_ENTRYPOINT).toBeUndefined()
-    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
-    expect(env.ANTHROPIC_API_KEY).toBeUndefined()
-    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined()
-    expect(env.ANTHROPIC_BASE_URL).toBeUndefined()
+    })).rejects.toMatchObject({ statusCode: 404 })
   })
 
   test('buildChildEnv does not leak inherited CLAUDE_CODE_OAUTH_TOKEN when no provider is configured', async () => {
@@ -427,6 +414,52 @@ describe('ConversationService', () => {
       expect(args[3]).toContain(path.join('src', 'entrypoints', 'cli.tsx'))
     } else {
       expect(args[0]).toContain(path.join('bin', 'beya'))
+    }
+  })
+
+  test('injects selected local CLI config only in local_cli execution mode', async () => {
+    const localCliPath = path.join(tmpDir, process.platform === 'win32' ? 'codex.cmd' : 'codex')
+    const previousAnthropicKey = process.env.ANTHROPIC_API_KEY
+    await fs.writeFile(localCliPath, process.platform === 'win32' ? '@echo off\r\n' : '#!/bin/sh\n', 'utf-8')
+    await fs.writeFile(
+      path.join(tmpDir, 'settings.json'),
+      JSON.stringify({
+        localCliRuntime: {
+          activeId: 'codex',
+          configs: {
+            codex: {
+              CODEX_BIN: localCliPath,
+              CODEX_HOME: path.join(tmpDir, '.codex'),
+            },
+          },
+        },
+      }),
+      'utf-8',
+    )
+
+    try {
+      process.env.ANTHROPIC_API_KEY = 'provider-key-that-must-not-leak'
+      const service = new ConversationService() as any
+      const providerModeArgs = service.resolveCliArgs(['--print'], 'provider')
+      const localCliModeArgs = service.resolveCliArgs(['--print'], 'local_cli')
+      const providerModeEnv = await service.buildChildEnv('/tmp', undefined, { executionMode: 'provider' })
+      const localCliModeEnv = await service.buildChildEnv('/tmp', undefined, { executionMode: 'local_cli' })
+
+      expect(providerModeArgs).not.toContain(localCliPath)
+      expect(localCliModeArgs).not.toContain(localCliPath)
+      expect(localCliModeArgs).toContain('--print')
+      expect(providerModeEnv.BEYA_LOCAL_CLI_ID).toBeUndefined()
+      expect(localCliModeEnv.ANTHROPIC_API_KEY).toBeUndefined()
+      expect(localCliModeEnv).toMatchObject({
+        BEYA_EXECUTION_MODE: 'local_cli',
+        BEYA_LOCAL_CLI_ID: 'codex',
+        BEYA_LOCAL_CLI_PATH: localCliPath,
+        CODEX_BIN: localCliPath,
+        CODEX_HOME: path.join(tmpDir, '.codex'),
+      })
+    } finally {
+      if (previousAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY
+      else process.env.ANTHROPIC_API_KEY = previousAnthropicKey
     }
   })
 
@@ -565,6 +598,78 @@ describe('ConversationService', () => {
     expect(args).toContain('feature/rail')
   })
 
+  test('local_cli execution mode runs the selected Codex CLI backend for user turns', async () => {
+    const workDir = path.join(tmpDir, 'workspace')
+    await fs.mkdir(workDir, { recursive: true })
+    const codexPath = path.join(
+      tmpDir,
+      process.platform === 'win32' ? 'codex.cmd' : 'codex',
+    )
+    await fs.writeFile(
+      codexPath,
+      process.platform === 'win32'
+        ? [
+            '@echo off',
+            'echo {"type":"item.completed","item":{"type":"assistant_message","text":"codex backend handled this turn"}}',
+            '',
+          ].join('\r\n')
+        : [
+            '#!/bin/sh',
+            'cat >/dev/null',
+            'printf \'%s\\n\' \'{"type":"item.completed","item":{"type":"assistant_message","text":"codex backend handled this turn"}}\'',
+            '',
+          ].join('\n'),
+      { mode: 0o755 },
+    )
+    await fs.writeFile(
+      path.join(tmpDir, 'settings.json'),
+      JSON.stringify({
+        executionMode: 'local_cli',
+        localCliRuntime: {
+          activeId: 'codex',
+          configs: {
+            codex: {
+              CODEX_BIN: codexPath,
+              OPENAI_API_KEY: 'explicit-codex-key',
+            },
+          },
+        },
+      }),
+      'utf-8',
+    )
+
+    const service = new ConversationService()
+    await service.startSession(
+      'local-cli-session',
+      workDir,
+      'ws://127.0.0.1:3456/sdk/local-cli-session?token=test-token',
+      { executionMode: 'local_cli' },
+    )
+
+    const seen: any[] = []
+    const completed = new Promise<void>((resolve) => {
+      service.onOutput('local-cli-session', (message) => {
+        seen.push(message)
+        if (message?.type === 'result') resolve()
+      })
+    })
+
+    expect(await service.sendMessage('local-cli-session', 'hello codex')).toBe(true)
+    await completed
+    await service.stopSessionAndWait('local-cli-session', 500)
+
+    expect(seen).toContainEqual(expect.objectContaining({
+      type: 'assistant',
+      message: expect.objectContaining({
+        content: [{ type: 'text', text: 'codex backend handled this turn' }],
+      }),
+    }))
+    expect(seen).toContainEqual(expect.objectContaining({
+      type: 'result',
+      is_error: false,
+    }))
+  })
+
   test('stopAllSessionsAndWait kills every active CLI subprocess and waits for exits', async () => {
     const service = new ConversationService() as any
     const killed: string[] = []
@@ -577,6 +682,7 @@ describe('ConversationService', () => {
       })
 
       return {
+        runtimeKind: 'sdk',
         proc: {
           kill: () => {
             killed.push(sessionId)

@@ -416,8 +416,8 @@ const STAGE_LABELS: Record<(typeof STAGES)[number], string> = {
   synthesizing: 'Dedupe'
 };
 
-// Setup â†?Find â†?Verify â†?Dedupe pipeline. Current stage in cloud teal,
-// rest dim. When completed, all stages dim with a trailing green âœ? The
+// Setup â†’Find â†’Verify â†’Dedupe pipeline. Current stage in cloud teal,
+// rest dim. When completed, all stages dim with a trailing green âœ“ The
 // "Setup" label shows before the orchestrator writes its first progress
 // snapshot (container boot + repo clone), so the 0-found display doesn't
 // look like a hung finder.
@@ -448,7 +448,7 @@ function StagePipeline(t0) {
   }
   let t3;
   if ($[4] === Symbol.for("react.memo_cache_sentinel")) {
-    t3 = <Text dimColor={true}> â†?</Text>;
+    t3 = <Text dimColor={true}> â†’</Text>;
     $[4] = t3;
   } else {
     t3 = $[4];
@@ -457,7 +457,7 @@ function StagePipeline(t0) {
   if ($[5] !== completed || $[6] !== currentIdx || $[7] !== inSetup) {
     t4 = STAGES.map((s, i) => {
       const isCurrent = !completed && !inSetup && i === currentIdx;
-      return <React.Fragment key={s}>{i > 0 && <Text dimColor={true}> â†?</Text>}{isCurrent ? <Text color="background">{STAGE_LABELS[s]}</Text> : <Text dimColor={true}>{STAGE_LABELS[s]}</Text>}</React.Fragment>;
+      return <React.Fragment key={s}>{i > 0 && <Text dimColor={true}> â†’</Text>}{isCurrent ? <Text color="background">{STAGE_LABELS[s]}</Text> : <Text dimColor={true}>{STAGE_LABELS[s]}</Text>}</React.Fragment>;
     });
     $[5] = completed;
     $[6] = currentIdx;
@@ -492,7 +492,7 @@ function StagePipeline(t0) {
 // drift; completed state is dialog-specific (findings summary).
 function reviewCountsLine(session: DeepImmutable<RemoteAgentTaskState>): string {
   const p = session.reviewProgress;
-  // No progress data â€?the orchestrator never wrote a snapshot. Don't
+  // No progress data â€”the orchestrator never wrote a snapshot. Don't
   // claim "0 findings" when completed; we just don't know.
   if (!p) return session.status === 'completed' ? 'done' : 'setting up';
   const verified = p.bugsVerified;
@@ -789,7 +789,7 @@ export function RemoteSessionDetailDialog({
   // Scan all messages (not just the last 3 raw entries) because the tail of
   // the log is often thinking-only blocks that normalise to 'progress' type.
   // Placed before the early returns so hook call order is stable (Rules of Hooks).
-  // Ultraplan/review sessions never read this â€?skip the normalize work for them.
+  // Ultraplan/review sessions never read this â€”skip the normalize work for them.
   const lastMessages = useMemo(() => {
     if (session.isUltraplan || session.isRemoteReview) return [];
     return normalizeMessages(toInternalMessages(session.log as SDKMessage[])).filter(_ => _.type !== 'progress').slice(-3);

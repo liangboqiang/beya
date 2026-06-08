@@ -78,7 +78,9 @@ export type SessionLaunchInfo = {
   transcriptMessageCount: number
   customTitle: string | null
   permissionMode?: string
+  runtimeKind?: 'provider' | 'local_cli'
   runtimeProviderId?: string | null
+  runtimeLocalCliId?: string | null
   runtimeModelId?: string
   effortLevel?: string
 }
@@ -361,7 +363,9 @@ export class SessionService {
     let latestWorkDir: string | null = null
     let latestCwd: string | null = null
     let permissionMode: string | undefined
+    let runtimeKind: 'provider' | 'local_cli' | undefined
     let runtimeProviderId: string | null | undefined
+    let runtimeLocalCliId: string | null | undefined
     let runtimeModelId: string | undefined
     let effortLevel: string | undefined
     let repository: PreparedSessionWorkspace['repository'] | undefined
@@ -410,10 +414,22 @@ export class SessionService {
             permissionMode = entry.permissionMode
           }
           if (
+            (entry as Record<string, unknown>).runtimeKind === 'provider' ||
+            (entry as Record<string, unknown>).runtimeKind === 'local_cli'
+          ) {
+            runtimeKind = (entry as Record<string, unknown>).runtimeKind as 'provider' | 'local_cli'
+          }
+          if (
             (entry as Record<string, unknown>).runtimeProviderId === null ||
             typeof (entry as Record<string, unknown>).runtimeProviderId === 'string'
           ) {
             runtimeProviderId = (entry as Record<string, unknown>).runtimeProviderId as string | null
+          }
+          if (
+            (entry as Record<string, unknown>).runtimeLocalCliId === null ||
+            typeof (entry as Record<string, unknown>).runtimeLocalCliId === 'string'
+          ) {
+            runtimeLocalCliId = (entry as Record<string, unknown>).runtimeLocalCliId as string | null
           }
           if (typeof (entry as Record<string, unknown>).runtimeModelId === 'string') {
             runtimeModelId = (entry as Record<string, unknown>).runtimeModelId as string
@@ -485,7 +501,9 @@ export class SessionService {
       messageCount,
       workDir: latestWorkDir || latestCwd || this.desanitizePath(projectDir),
       ...(permissionMode ? { permissionMode } : {}),
+      ...(runtimeKind ? { runtimeKind } : {}),
       ...(runtimeProviderId !== undefined ? { runtimeProviderId } : {}),
+      ...(runtimeLocalCliId !== undefined ? { runtimeLocalCliId } : {}),
       ...(runtimeModelId ? { runtimeModelId } : {}),
       ...(effortLevel ? { effortLevel } : {}),
       ...(repository ? { repository } : {}),
@@ -1901,7 +1919,9 @@ export class SessionService {
     const worktreeSession = this.resolveWorktreeSessionFromEntries(entries)
     const permissionMode = this.resolvePermissionModeFromEntries(entries)
     let customTitle: string | null = null
+    let runtimeKind: 'provider' | 'local_cli' | undefined
     let runtimeProviderId: string | null | undefined
+    let runtimeLocalCliId: string | null | undefined
     let runtimeModelId: string | undefined
     let effortLevel: string | undefined
 
@@ -1911,8 +1931,14 @@ export class SessionService {
       }
       if (entry.type === 'session-meta') {
         const record = entry as Record<string, unknown>
+        if (record.runtimeKind === 'provider' || record.runtimeKind === 'local_cli') {
+          runtimeKind = record.runtimeKind
+        }
         if (record.runtimeProviderId === null || typeof record.runtimeProviderId === 'string') {
           runtimeProviderId = record.runtimeProviderId as string | null
+        }
+        if (record.runtimeLocalCliId === null || typeof record.runtimeLocalCliId === 'string') {
+          runtimeLocalCliId = record.runtimeLocalCliId as string | null
         }
         if (typeof record.runtimeModelId === 'string') {
           runtimeModelId = record.runtimeModelId
@@ -1936,7 +1962,9 @@ export class SessionService {
       transcriptMessageCount,
       customTitle,
       permissionMode,
+      ...(runtimeKind ? { runtimeKind } : {}),
       ...(runtimeProviderId !== undefined ? { runtimeProviderId } : {}),
+      ...(runtimeLocalCliId !== undefined ? { runtimeLocalCliId } : {}),
       ...(runtimeModelId ? { runtimeModelId } : {}),
       ...(effortLevel ? { effortLevel } : {}),
     }
@@ -2004,7 +2032,9 @@ export class SessionService {
       customTitle?: string | null
       repository?: PreparedSessionWorkspace['repository']
       permissionMode?: string
+      runtimeKind?: 'provider' | 'local_cli'
       runtimeProviderId?: string | null
+      runtimeLocalCliId?: string | null
       runtimeModelId?: string
       effortLevel?: string
     }
@@ -2038,6 +2068,10 @@ export class SessionService {
         : {}),
       ...(metadata.runtimeProviderId !== undefined
         ? { runtimeProviderId: metadata.runtimeProviderId }
+        : {}),
+      ...(metadata.runtimeKind ? { runtimeKind: metadata.runtimeKind } : {}),
+      ...(metadata.runtimeLocalCliId !== undefined
+        ? { runtimeLocalCliId: metadata.runtimeLocalCliId }
         : {}),
       ...(metadata.runtimeModelId ? { runtimeModelId: metadata.runtimeModelId } : {}),
       ...(metadata.effortLevel && VALID_SESSION_EFFORT_LEVELS.has(metadata.effortLevel)

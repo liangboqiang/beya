@@ -10,6 +10,7 @@ import {
   type ChatSendBehavior,
   type DesktopTerminalSettings,
   type DesktopTerminalStartupShell,
+  type ExecutionMode,
   type H5AccessDiagnostics,
   type H5AccessSettings,
   type NetworkSettings,
@@ -62,6 +63,7 @@ type SettingsStore = {
   chatSendBehavior: ChatSendBehavior
   skipWebFetchPreflight: boolean
   desktopNotificationsEnabled: boolean
+  executionMode: ExecutionMode
   desktopTerminal: DesktopTerminalSettings
   webSearch: WebSearchSettings
   updateProxy: UpdateProxySettings
@@ -88,6 +90,7 @@ type SettingsStore = {
   setChatSendBehavior: (behavior: ChatSendBehavior) => Promise<void>
   setSkipWebFetchPreflight: (enabled: boolean) => Promise<void>
   setDesktopNotificationsEnabled: (enabled: boolean) => Promise<void>
+  setExecutionMode: (mode: ExecutionMode) => Promise<void>
   setDesktopTerminal: (settings: DesktopTerminalSettings) => Promise<void>
   setWebSearch: (settings: WebSearchSettings) => Promise<void>
   setUpdateProxy: (settings: UpdateProxySettings) => Promise<void>
@@ -146,6 +149,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
   chatSendBehavior: 'enter',
   skipWebFetchPreflight: true,
   desktopNotificationsEnabled: false,
+  executionMode: 'provider',
   desktopTerminal: DEFAULT_DESKTOP_TERMINAL_SETTINGS,
   webSearch: { mode: 'auto', tavilyApiKey: '', braveApiKey: '' },
   updateProxy: DEFAULT_UPDATE_PROXY_SETTINGS,
@@ -197,6 +201,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
         chatSendBehavior: normalizeChatSendBehavior(userSettings.chatSendBehavior),
         skipWebFetchPreflight: userSettings.skipWebFetchPreflight !== false,
         desktopNotificationsEnabled: userSettings.desktopNotificationsEnabled === true,
+        executionMode: normalizeExecutionMode(userSettings.executionMode),
         desktopTerminal: normalizeDesktopTerminalSettings(userSettings.desktopTerminal),
         webSearch: normalizeWebSearchSettings(userSettings.webSearch),
         updateProxy: normalizeUpdateProxySettings(userSettings.updateProxy),
@@ -318,6 +323,18 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (get().desktopNotificationsEnabled === enabled) {
         set({ desktopNotificationsEnabled: prev })
       }
+    }
+  },
+
+  setExecutionMode: async (mode) => {
+    const prev = get().executionMode
+    const next = normalizeExecutionMode(mode)
+    set({ executionMode: next })
+    try {
+      await settingsApi.updateUser({ executionMode: next })
+    } catch (error) {
+      set({ executionMode: prev })
+      throw error
     }
   },
 
@@ -486,6 +503,10 @@ function normalizeWebSearchSettings(settings: WebSearchSettings | undefined): We
 
 function normalizeChatSendBehavior(value: unknown): ChatSendBehavior {
   return value === 'modifierEnter' ? 'modifierEnter' : 'enter'
+}
+
+function normalizeExecutionMode(value: unknown): ExecutionMode {
+  return value === 'local_cli' ? 'local_cli' : 'provider'
 }
 
 function isUpdateProxyMode(value: unknown): value is UpdateProxyMode {

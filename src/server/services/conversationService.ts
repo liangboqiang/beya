@@ -10,12 +10,14 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { ProviderService } from './providerService.js'
-import {
-  OPENAI_CODEX_OAUTH_FILE_ENV_KEY,
-  OPENAI_OAUTH_PROVIDER_ENV_KEY,
-} from './openaiOfficialProvider.js'
 import { sessionService } from './sessionService.js'
 import { diagnosticsService } from './diagnosticsService.js'
+import type { ExecutionMode } from './executionModeService.js'
+import {
+  getWellKnownUserToolchainBins,
+  resolveSelectedLocalCliRuntimeSync,
+  type SelectedLocalCliRuntime,
+} from './localCliRuntimeService.js'
 import {
   isMaterializedWorktreeLaunch,
   prepareSessionWorkspace,
@@ -43,7 +45,16 @@ const MAX_CAPTURED_SDK_MESSAGES = 40
 const MAX_CAPTURED_SDK_SUMMARY = 20
 const CONTROL_READY_POLL_MS = 50
 const AUTO_MEMORY_DIRNAME = 'memory'
+const OPENAI_OAUTH_PROVIDER_ENV_KEY = 'BEYA_OPENAI_OAUTH_PROVIDER'
+const OPENAI_CODEX_OAUTH_FILE_ENV_KEY = 'OPENAI_CODEX_OAUTH_FILE'
 export const DESKTOP_CLI_GRACEFUL_SHUTDOWN_TIMEOUT_MS = 6_000
+
+function quoteWindowsCommandArg(arg: string): string {
+  if (!/[()\][%!^"`<>&|;,\s]/.test(arg)) {
+    return arg
+  }
+  return `"${arg.replace(/(["\\])/g, '\\$1')}"`
+}
 
 type AttachmentRef = {
   type: 'file' | 'image'
@@ -63,7 +74,11 @@ type MaterializedAttachments = {
 }
 
 type SessionProcess = {
-  proc: ReturnType<typeof Bun.spawn>
+  runtimeKind: 'sdk' | 'local_cli'
+  proc?: ReturnType<typeof Bun.spawn>
+  activeLocalCliProc?: ReturnType<typeof Bun.spawn>
+  localCliRuntime?: SelectedLocalCliRuntime
+  localCliModel?: string
   outputCallbacks: Array<(msg: any) => void>
   workDir: string
   permissionMode: string
@@ -103,6 +118,8 @@ type SessionStartOptions = {
   effort?: string
   thinking?: 'enabled' | 'adaptive' | 'disabled'
   providerId?: string | null
+  localCliId?: string | null
+  executionMode?: ExecutionMode
   metadata?: Record<string, unknown>
 }
 
@@ -164,7 +181,7 @@ export class ConversationService {
       '--replay-user-messages',
       ...this.getRuntimeArgs(options),
       ...this.getPermissionArgs(options?.permissionMode, dangerousMode),
-    ])
+    ], options)
   }
 
   async startSession(
@@ -239,6 +256,18 @@ export class ConversationService {
       )
     }
 
+    if (options?.executionMode === 'local_cli') {
+      await this.startLocalCliAdapterSession(
+        sessionId,
+        launchWorkDir,
+        options,
+        launchInfo,
+        launchRepository,
+        shouldReplacePlaceholder,
+      )
+      return
+    }
+
     const args = this.buildSessionCliArgs(
       sessionId,
       sdkUrl,
@@ -295,6 +324,7 @@ export class ConversationService {
     }
 
     const session: SessionProcess = {
+      runtimeKind: 'sdk',
       proc,
       outputCallbacks: [],
       workDir: launchWorkDir,
@@ -380,6 +410,70 @@ export class ConversationService {
     console.log(`[ConversationService] Agent runtime started successfully for ${sessionId}`)
   }
 
+  private async startLocalCliAdapterSession(
+    sessionId: string,
+    launchWorkDir: string,
+    options: SessionStartOptions | undefined,
+    launchInfo: Awaited<ReturnType<typeof sessionService.getSessionLaunchInfo>>,
+    launchRepository: PreparedSessionWorkspace['repository'] | undefined,
+    shouldReplacePlaceholder: boolean,
+  ): Promise<void> {
+    const selectedLocalCliRuntime = resolveSelectedLocalCliRuntimeSync({
+      id: options?.localCliId,
+    })
+    if (!selectedLocalCliRuntime) {
+      throw new ConversationStartupError(
+        'Local CLI execution mode is enabled, but no configured local CLI can be resolved. Choose and configure a local CLI in Settings > Execution Mode.',
+        'CLI_START_FAILED',
+        true,
+      )
+    }
+
+    const session: SessionProcess = {
+      runtimeKind: 'local_cli',
+      localCliRuntime: selectedLocalCliRuntime,
+      localCliModel: options?.model?.trim() || selectedLocalCliRuntime.modelRoles.primary,
+      outputCallbacks: [],
+      workDir: launchWorkDir,
+      permissionMode: options?.permissionMode || 'default',
+      sdkToken: '',
+      sdkSocket: null,
+      pendingOutbound: [],
+      startupPending: false,
+      startupExitCode: null,
+      stdoutLines: [],
+      stderrLines: [],
+      outputDrain: Promise.resolve(),
+      sdkMessages: [],
+      initMessage: {
+        type: 'system',
+        subtype: 'init',
+        model: selectedLocalCliRuntime.displayName,
+      },
+      pendingPermissionRequests: new Map(),
+    }
+
+    this.sessions.set(sessionId, session)
+
+    if (shouldReplacePlaceholder || !launchInfo) {
+      await sessionService.appendSessionMetadata(sessionId, {
+        workDir: launchWorkDir,
+        customTitle: launchInfo?.customTitle ?? null,
+        repository: launchRepository,
+        permissionMode: options?.permissionMode || launchInfo?.permissionMode,
+        runtimeKind: 'local_cli',
+        runtimeProviderId: null,
+        runtimeLocalCliId: selectedLocalCliRuntime.id,
+        runtimeModelId: options?.model?.trim() || selectedLocalCliRuntime.modelRoles.primary,
+        ...(options?.effort ? { effortLevel: options.effort } : {}),
+      })
+    }
+
+    console.log(
+      `[ConversationService] Local CLI runtime ${selectedLocalCliRuntime.id} ready for ${sessionId}, cwd: ${launchWorkDir}`,
+    )
+  }
+
   onOutput(sessionId: string, callback: (msg: any) => void): void {
     const session = this.sessions.get(sessionId)
     if (session) {
@@ -413,6 +507,22 @@ export class ConversationService {
     content: string,
     attachments?: AttachmentRef[],
   ): Promise<boolean> {
+    const session = this.sessions.get(sessionId)
+    if (session?.runtimeKind === 'local_cli') {
+      if (session.activeLocalCliProc) return false
+      void this.runLocalCliTurn(sessionId, session, content).catch((error) => {
+        this.emitToSession(sessionId, {
+          type: 'result',
+          subtype: 'error',
+          is_error: true,
+          result: error instanceof Error ? error.message : String(error),
+          usage: { input_tokens: 0, output_tokens: 0 },
+          session_id: sessionId,
+        })
+      })
+      return true
+    }
+
     const userContent = await this.buildUserContent(content, sessionId, attachments)
     return this.sendSdkMessage(sessionId, {
       type: 'user',
@@ -423,6 +533,365 @@ export class ConversationService {
       parent_tool_use_id: null,
       session_id: '',
     })
+  }
+
+  private emitToSession(sessionId: string, message: Record<string, unknown>): void {
+    const session = this.sessions.get(sessionId)
+    if (!session) return
+    for (const cb of session.outputCallbacks) {
+      cb(message)
+    }
+  }
+
+  private async runLocalCliTurn(
+    sessionId: string,
+    session: SessionProcess,
+    content: string,
+  ): Promise<void> {
+    const runtime = session.localCliRuntime
+    if (!runtime) {
+      throw new Error('No local CLI runtime is selected for this session.')
+    }
+
+    const invocation = this.buildLocalCliTurnInvocation(runtime, session, content)
+    const childEnv = this.buildLocalCliProcessEnv(
+      await this.buildChildEnv(session.workDir, undefined, {
+        executionMode: 'local_cli',
+        localCliId: runtime.id,
+        model: session.localCliModel,
+      }),
+      runtime,
+    )
+    const command = this.wrapLocalCliCommandForPlatform(runtime.launchPath, invocation.args)
+
+    const proc = Bun.spawn(command, {
+      cwd: session.workDir,
+      env: childEnv,
+      stdin: 'pipe',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    })
+    session.activeLocalCliProc = proc
+
+    const stdoutPromise = this.collectLocalCliOutputStream(sessionId, proc.stdout, 'stdout')
+    const stderrPromise = this.collectLocalCliOutputStream(sessionId, proc.stderr, 'stderr')
+
+    try {
+      await this.writeLocalCliStdin(proc, invocation.stdin)
+
+      const exitCode = await proc.exited
+      const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise])
+      const activeSession = this.sessions.get(sessionId)
+      if (activeSession !== session) return
+
+      if (exitCode !== 0) {
+        const detail = this.redactProcessOutput(`${stderr}\n${stdout}`.trim())
+        this.emitToSession(sessionId, {
+          type: 'result',
+          subtype: 'error',
+          is_error: true,
+          result: detail || `${runtime.displayName} exited with code ${exitCode}.`,
+          usage: { input_tokens: 0, output_tokens: 0 },
+          session_id: sessionId,
+        })
+        return
+      }
+
+      const assistantText = this.extractLocalCliAssistantText(runtime.id, stdout) ||
+        stdout.trim()
+      if (assistantText.trim()) {
+        this.emitToSession(sessionId, {
+          type: 'assistant',
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: assistantText.trim() }],
+          },
+          session_id: sessionId,
+        })
+      }
+      this.emitToSession(sessionId, {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: '',
+        usage: { input_tokens: 0, output_tokens: 0 },
+        session_id: sessionId,
+      })
+    } finally {
+      const activeSession = this.sessions.get(sessionId)
+      if (activeSession === session && session.activeLocalCliProc === proc) {
+        session.activeLocalCliProc = undefined
+      }
+    }
+  }
+
+  private async writeLocalCliStdin(
+    proc: ReturnType<typeof Bun.spawn>,
+    input: string,
+  ): Promise<void> {
+    if (!proc.stdin) return
+    const stdin = proc.stdin as unknown as {
+      write?: (chunk: string | Uint8Array) => unknown
+      end?: () => unknown
+      getWriter?: () => {
+        write: (chunk: Uint8Array) => Promise<void>
+        close: () => Promise<void>
+      }
+    }
+
+    try {
+      if (typeof stdin.write === 'function') {
+        if (input.length > 0) stdin.write(input)
+        if (typeof stdin.end === 'function') stdin.end()
+        return
+      }
+
+      if (typeof stdin.getWriter === 'function') {
+        const writer = stdin.getWriter()
+        if (input.length > 0) {
+          await writer.write(new TextEncoder().encode(input))
+        }
+        await writer.close()
+      }
+    } catch (error) {
+      try {
+        proc.kill('SIGKILL')
+      } catch {
+        // ignore cleanup failure
+      }
+      throw error
+    }
+  }
+
+  private buildLocalCliTurnInvocation(
+    runtime: SelectedLocalCliRuntime,
+    session: SessionProcess,
+    content: string,
+  ): { args: string[]; stdin: string } {
+    if (runtime.id === 'codex') {
+      const args = process.platform === 'win32' || process.env.WSL_DISTRO_NAME?.trim()
+        ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']
+        : [
+            'exec',
+            '--json',
+            '--skip-git-repo-check',
+            '--sandbox',
+            'workspace-write',
+            '-c',
+            'sandbox_workspace_write.network_access=true',
+          ]
+      args.push('-c', 'default_permissions=":workspace"')
+      if (session.localCliModel?.trim() && session.localCliModel.trim() !== 'default') {
+        args.push('--model', session.localCliModel.trim())
+      }
+      args.push('-C', session.workDir)
+      return { args, stdin: content }
+    }
+
+    if (runtime.id === 'claude') {
+      const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose']
+      if (session.localCliModel?.trim() && session.localCliModel.trim() !== 'default') {
+        args.push('--model', session.localCliModel.trim())
+      }
+      return {
+        args,
+        stdin: JSON.stringify({
+          type: 'user',
+          message: {
+            role: 'user',
+            content,
+          },
+        }) + '\n',
+      }
+    }
+
+    return { args: [], stdin: content }
+  }
+
+  private buildLocalCliProcessEnv(
+    baseEnv: Record<string, string>,
+    runtime: SelectedLocalCliRuntime,
+  ): Record<string, string> {
+    const env = { ...baseEnv, ...runtime.env }
+
+    const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'PATH'
+    const existingPath = env[pathKey] ?? ''
+    const prepend = [
+      path.dirname(process.execPath),
+      ...runtime.childPathPrepend,
+      path.dirname(runtime.launchPath),
+    ]
+    const append = getWellKnownUserToolchainBins()
+    const normalize = (entry: string) =>
+      process.platform === 'win32'
+        ? entry.replace(/[\\/]+$/, '').toLowerCase()
+        : entry.replace(/[\\/]+$/, '')
+    const seen = new Set<string>()
+    const merged: string[] = []
+    for (const entry of [
+      ...prepend,
+      ...existingPath.split(path.delimiter),
+      ...append,
+    ]) {
+      if (!entry) continue
+      const normalized = normalize(entry)
+      if (seen.has(normalized)) continue
+      seen.add(normalized)
+      merged.push(entry)
+    }
+    env[pathKey] = merged.join(path.delimiter)
+    return env
+  }
+
+  private wrapLocalCliCommandForPlatform(command: string, args: string[]): string[] {
+    const extension = path.extname(command).toLowerCase()
+    if (process.platform === 'win32' && (extension === '.cmd' || extension === '.bat')) {
+      return [
+        'cmd.exe',
+        '/d',
+        '/s',
+        '/c',
+        [quoteWindowsCommandArg(command), ...args.map(quoteWindowsCommandArg)].join(' '),
+      ]
+    }
+    return [command, ...args]
+  }
+
+  private async collectLocalCliOutputStream(
+    sessionId: string,
+    stream: ReadableStream | null | undefined,
+    streamName: 'stdout' | 'stderr',
+  ): Promise<string> {
+    if (!stream) return ''
+    const reader = stream.getReader()
+    const decoder = new TextDecoder()
+    let output = ''
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const text = decoder.decode(value, { stream: true })
+        output += text
+
+        const session = this.sessions.get(sessionId)
+        if (!session) continue
+        for (const line of text
+          .split('\n')
+          .map((entry) => entry.trim())
+          .filter(Boolean)) {
+          const lines =
+            streamName === 'stderr' ? session.stderrLines : session.stdoutLines
+          lines.push(this.redactProcessOutput(line))
+          if (lines.length > MAX_CAPTURED_PROCESS_LINES) {
+            lines.splice(0, lines.length - MAX_CAPTURED_PROCESS_LINES)
+          }
+        }
+      }
+    } catch {
+      // Output capture failure should not kill the session.
+    }
+
+    return output
+  }
+
+  private extractLocalCliAssistantText(runtimeId: string, stdout: string): string {
+    if (runtimeId === 'claude') {
+      const messages = this.parseJsonLines(stdout)
+      return messages
+        .map((message) => this.extractAssistantTextFromCliMessage(message))
+        .filter(Boolean)
+        .join('\n')
+    }
+
+    if (runtimeId === 'codex') {
+      const messages = this.parseJsonLines(stdout)
+      return messages
+        .map((message) => this.extractCodexEventText(message))
+        .filter(Boolean)
+        .join('')
+    }
+
+    return ''
+  }
+
+  private parseJsonLines(stdout: string): unknown[] {
+    const result: unknown[] = []
+    for (const line of stdout.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try {
+        result.push(JSON.parse(trimmed))
+      } catch {
+        // Some CLIs mix progress text with JSON; ignore non-JSON lines here.
+      }
+    }
+    return result
+  }
+
+  private extractAssistantTextFromCliMessage(message: unknown): string {
+    if (!message || typeof message !== 'object') return ''
+    const record = message as Record<string, unknown>
+    if (record.type !== 'assistant') return ''
+    const nested = record.message
+    if (!nested || typeof nested !== 'object') return ''
+    const content = (nested as Record<string, unknown>).content
+    if (!Array.isArray(content)) return ''
+    return content
+      .map((block) => {
+        if (!block || typeof block !== 'object') return ''
+        const blockRecord = block as Record<string, unknown>
+        return blockRecord.type === 'text' && typeof blockRecord.text === 'string'
+          ? blockRecord.text
+          : ''
+      })
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  private extractCodexEventText(message: unknown): string {
+    if (!message || typeof message !== 'object') return ''
+    const record = message as Record<string, unknown>
+    const type = typeof record.type === 'string' ? record.type : ''
+    if (!/(message|output_text|delta|completed)/i.test(type)) return ''
+
+    const directText = this.readTextField(record, ['delta', 'text', 'output_text'])
+    if (directText) return directText
+
+    const item = record.item
+    if (item && typeof item === 'object') {
+      const itemRecord = item as Record<string, unknown>
+      const itemText = this.readTextField(itemRecord, ['text', 'content', 'message'])
+      if (itemText) return itemText
+    }
+
+    const messageValue = record.message
+    if (messageValue && typeof messageValue === 'object') {
+      return this.readTextField(messageValue as Record<string, unknown>, ['text', 'content'])
+    }
+
+    return ''
+  }
+
+  private readTextField(record: Record<string, unknown>, keys: string[]): string {
+    for (const key of keys) {
+      const value = record[key]
+      if (typeof value === 'string') return value
+      if (Array.isArray(value)) {
+        const text = value
+          .map((entry) => {
+            if (typeof entry === 'string') return entry
+            if (entry && typeof entry === 'object') {
+              return this.readTextField(entry as Record<string, unknown>, ['text', 'content'])
+            }
+            return ''
+          })
+          .filter(Boolean)
+          .join('')
+        if (text) return text
+      }
+    }
+    return ''
   }
 
   respondToPermission(
@@ -503,6 +972,13 @@ export class ConversationService {
   }
 
   sendInterrupt(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId)
+    if (session?.runtimeKind === 'local_cli') {
+      if (!session.activeLocalCliProc) return false
+      this.killProcess(sessionId, session, 'SIGTERM')
+      return true
+    }
+
     return this.sendSdkMessage(sessionId, {
       type: 'control_request',
       request_id: crypto.randomUUID(),
@@ -638,6 +1114,7 @@ export class ConversationService {
   ): boolean {
     const session = this.sessions.get(sessionId)
     if (!session) return false
+    if (session.runtimeKind === 'local_cli') return false
 
     session.sdkSocket = socket
     while (session.pendingOutbound.length > 0) {
@@ -781,14 +1258,17 @@ export class ConversationService {
   ): Promise<void> {
     this.killProcess(sessionId, session, 'SIGTERM')
 
+    const proc = session.proc ?? session.activeLocalCliProc
+    if (!proc) return
+
     const exited = await Promise.race([
-      session.proc.exited.then(() => true, () => true),
+      proc.exited.then(() => true, () => true),
       new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
     ])
     if (!exited) {
       this.killProcess(sessionId, session, 'SIGKILL')
       await Promise.race([
-        session.proc.exited.catch(() => undefined),
+        proc.exited.catch(() => undefined),
         new Promise<void>((resolve) => setTimeout(resolve, 500)),
       ])
     }
@@ -800,8 +1280,10 @@ export class ConversationService {
     session: SessionProcess,
     signal?: NodeJS.Signals,
   ): void {
+    const proc = session.proc ?? session.activeLocalCliProc
+    if (!proc) return
     try {
-      session.proc.kill(signal)
+      proc.kill(signal)
     } catch (error) {
       console.warn(
         `[ConversationService] Failed to kill agent runtime process for ${sessionId}: ${
@@ -898,6 +1380,7 @@ export class ConversationService {
   ): boolean {
     const session = this.sessions.get(sessionId)
     if (!session) return false
+    if (session.runtimeKind === 'local_cli') return false
 
     const line = JSON.stringify(payload) + '\n'
     if (session.sdkSocket) {
@@ -910,7 +1393,7 @@ export class ConversationService {
 
   private async handleProcessExit(
     sessionId: string,
-    proc: SessionProcess['proc'],
+    proc: ReturnType<typeof Bun.spawn>,
     code: number,
   ): Promise<void> {
     console.log(
@@ -1014,13 +1497,19 @@ export class ConversationService {
       'CLAUDE_CODE_AUTO_COMPACT_WINDOW',
       'CLAUDE_CODE_ATTRIBUTION_HEADER',
       'CLAUDE_CODE_MODEL_CONTEXT_WINDOWS',
+      'OPENAI_API_KEY',
+      'OPENAI_BASE_URL',
+      'CODEX_API_KEY',
       OPENAI_OAUTH_PROVIDER_ENV_KEY,
       OPENAI_CODEX_OAUTH_FILE_ENV_KEY,
     ] as const
 
     const cleanEnv = await getProcessEnvWithTerminalShellEnvironment()
     delete cleanEnv.CLAUDE_CODE_OAUTH_TOKEN
-    if (this.shouldStripInheritedProviderEnv(options?.providerId)) {
+    if (
+      options?.executionMode === 'local_cli' ||
+      this.shouldStripInheritedProviderEnv(options?.providerId)
+    ) {
       for (const key of PROVIDER_ENV_KEYS) {
         delete cleanEnv[key]
       }
@@ -1037,9 +1526,36 @@ export class ConversationService {
     }
 
     const explicitProviderEnv =
-      typeof options?.providerId === 'string'
+      options?.executionMode !== 'local_cli' && typeof options?.providerId === 'string'
         ? await this.providerService.getProviderRuntimeEnv(options.providerId)
         : null
+    const selectedLocalCliRuntime = options?.executionMode === 'local_cli'
+      ? resolveSelectedLocalCliRuntimeSync({ id: options.localCliId })
+      : null
+    const selectedLocalCliContextEnv: Record<string, string> = {}
+    if (selectedLocalCliRuntime?.autoCompactWindow) {
+      selectedLocalCliContextEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW =
+        String(selectedLocalCliRuntime.autoCompactWindow)
+    }
+    if (
+      selectedLocalCliRuntime?.modelContextWindows &&
+      Object.keys(selectedLocalCliRuntime.modelContextWindows).length > 0
+    ) {
+      selectedLocalCliContextEnv.CLAUDE_CODE_MODEL_CONTEXT_WINDOWS =
+        JSON.stringify(selectedLocalCliRuntime.modelContextWindows)
+    }
+    const selectedLocalCliEnv = selectedLocalCliRuntime
+      ? {
+          BEYA_EXECUTION_MODE: 'local_cli',
+          BEYA_LOCAL_CLI_ID: selectedLocalCliRuntime.id,
+          BEYA_LOCAL_CLI_PATH: selectedLocalCliRuntime.launchPath,
+          BEYA_LOCAL_CLI_SELECTED_PATH: selectedLocalCliRuntime.executablePath,
+          ...selectedLocalCliContextEnv,
+          ...selectedLocalCliRuntime.env,
+        }
+      : options?.executionMode === 'local_cli'
+        ? { BEYA_EXECUTION_MODE: 'local_cli' }
+        : {}
     const networkEnv = buildNetworkEnvironment(await loadNetworkSettings())
     if (explicitProviderEnv && options?.model?.trim()) {
       explicitProviderEnv.ANTHROPIC_MODEL = options.model.trim()
@@ -1088,6 +1604,7 @@ export class ConversationService {
         : {}),
       ...this.buildRuntimeMetadataEnv(options?.metadata),
       ...(explicitProviderEnv ?? {}),
+      ...selectedLocalCliEnv,
       ...networkEnv,
       ...attributionHeaderEnv,
     }
@@ -1137,9 +1654,16 @@ export class ConversationService {
     ).normalize('NFC')
   }
 
-  private resolveCliArgs(baseArgs: string[]): string[] {
+  private resolveCliArgs(baseArgs: string[], options?: SessionStartOptions): string[] {
+    const executionMode = options?.executionMode ?? 'provider'
+    const selectedLocalCliRuntime = executionMode === 'local_cli'
+      ? resolveSelectedLocalCliRuntimeSync({ id: options?.localCliId })
+      : null
+    const selectedSdkCompatibleCliPath = selectedLocalCliRuntime?.id === 'claude'
+      ? selectedLocalCliRuntime.launchPath
+      : null
     const launcher = resolveClaudeCliLauncher({
-      cliPath: process.env.BEYA_CLI_PATH ?? process.env.CLAUDE_CLI_PATH,
+      cliPath: selectedSdkCompatibleCliPath ?? process.env.BEYA_CLI_PATH ?? process.env.CLAUDE_CLI_PATH,
       execPath: process.execPath,
     })
 

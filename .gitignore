@@ -81,3 +81,24 @@ runtime/__pycache__
 # Local AI assistant artifacts (graph, notes)
 CLAUDE.md
 graphify-out/
+
+# Runtime design directories
+runtime/mc-design/
+
+# Temp utility scripts
+fix-tools.cjs
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+*.bak
+
+# Package manager lock files (non-root)
+pnpm-lock.yaml
+yarn.lock

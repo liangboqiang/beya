@@ -177,7 +177,7 @@ export function convertSDKMessage(
       const content = msg.message?.content
       // Tool result messages from the remote server need to be converted so
       // they render and collapse like local tool results. Detect via content
-      // shape (tool_result blocks) â€?parent_tool_use_id is NOT reliable: the
+      // shape (tool_result blocks) â€”parent_tool_use_id is NOT reliable: the
       // agent-side normalizeMessage() hardcodes it to null for top-level
       // tool results, so it can't distinguish tool results from prompt echoes.
       const isToolResult =
@@ -195,7 +195,7 @@ export function convertSDKMessage(
       }
       // When converting historical events, user-typed messages need to be
       // rendered (they weren't added locally by the REPL). Skip tool_results
-      // here â€?already handled above.
+      // here â€”already handled above.
       if (opts?.convertUserTextMessages && !isToolResult) {
         if (typeof content === 'string' || Array.isArray(content)) {
           return {

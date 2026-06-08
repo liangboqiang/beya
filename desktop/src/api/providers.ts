@@ -16,7 +16,7 @@ type CatalogResponse = { catalog: ProviderCatalog }
 type TestResultResponse = { result: ProviderTestResult }
 type AuthStatusResponse = {
   hasAuth: boolean
-  source: 'beya-provider' | 'openai-oauth' | 'env' | 'none'
+  source: 'beya-provider' | 'env' | 'none'
   activeProvider?: string
 }
 
@@ -43,6 +43,10 @@ export const providersApi = {
 
   create(input: CreateProviderInput) {
     return api.post<ProviderResponse>('/api/providers', input)
+  },
+
+  rescan() {
+    return api.post<ProvidersResponse>('/api/providers/rescan')
   },
 
   update(id: string, input: UpdateProviderInput) {

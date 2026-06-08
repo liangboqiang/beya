@@ -24,6 +24,15 @@ function Resolve-Bun {
 }
 
 function Test-PortInUse([string]$Address, [int]$Port) {
+  try {
+    $listeners = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
+    if ($listeners) {
+      return $true
+    }
+  } catch {
+    # Fall back to a socket probe below on older PowerShell environments.
+  }
+
   $client = [System.Net.Sockets.TcpClient]::new()
   try {
     $async = $client.BeginConnect($Address, $Port, $null, $null)
@@ -39,30 +48,60 @@ function Test-PortInUse([string]$Address, [int]$Port) {
   }
 }
 
-function Find-AvailablePort([string]$Address, [int]$StartPort, [int]$ScanCount) {
-  for ($port = $StartPort; $port -le ($StartPort + $ScanCount); $port++) {
-    if (-not (Test-PortInUse $Address $port)) {
-      return $port
+function Read-RecentLogs([string[]]$LogFiles) {
+  $chunks = @()
+  foreach ($logFile in $LogFiles) {
+    if (-not $logFile) {
+      continue
+    }
+
+    $content = Get-Content -Raw -LiteralPath $logFile -ErrorAction SilentlyContinue
+    if ($content) {
+      $chunks += "[$([System.IO.Path]::GetFileName($logFile))]`n$content"
     }
   }
 
-  throw "No available port found in range $StartPort-$($StartPort + $ScanCount)"
+  if ($chunks.Count -eq 0) {
+    return ""
+  }
+
+  return ($chunks -join "`n")
 }
 
-function Wait-Http([string]$Url, [string]$LogFile, [scriptblock]$IsAlive) {
+function Wait-Http([string]$Url, [string[]]$LogFiles, [scriptblock]$IsAlive) {
   for ($i = 0; $i -lt 120; $i++) {
     try {
       Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 2 | Out-Null
       return
     } catch {
       if (-not (& $IsAlive)) {
-        Write-Error "Process exited before $Url became ready. Recent log:`n$(Get-Content -Raw -LiteralPath $LogFile -ErrorAction SilentlyContinue)"
+        Write-Error "Process exited before $Url became ready. Recent log:`n$(Read-RecentLogs -LogFiles $LogFiles)"
       }
       Start-Sleep -Seconds 1
     }
   }
 
-  throw "Timed out waiting for $Url. Recent log:`n$(Get-Content -Raw -LiteralPath $LogFile -ErrorAction SilentlyContinue)"
+  throw "Timed out waiting for $Url. Recent log:`n$(Read-RecentLogs -LogFiles $LogFiles)"
+}
+
+function Test-HttpReady([string]$Url) {
+  try {
+    Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 2 | Out-Null
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Wait-PortAvailable([string]$Address, [int]$Port) {
+  for ($i = 0; $i -lt 30; $i++) {
+    if (-not (Test-PortInUse $Address $Port)) {
+      return
+    }
+    Start-Sleep -Milliseconds 250
+  }
+
+  throw "Port $Port is still in use after stopping the listener."
 }
 
 function Stop-ProcessTree([int]$ProcessId) {
@@ -77,16 +116,20 @@ function Stop-ProcessTree([int]$ProcessId) {
   }
 }
 
-function Stop-ListenerOnPort([int]$Port, [string]$ExpectedRoot) {
+function Stop-ListenerOnPort([int]$Port, [string]$ExpectedRoot, [switch]$ForceAny) {
   $connections = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
   foreach ($connection in $connections) {
     $ownerPid = [int]$connection.OwningProcess
+    if ($ownerPid -eq $PID) {
+      continue
+    }
     $owner = Get-CimInstance Win32_Process -Filter "ProcessId = $ownerPid" -ErrorAction SilentlyContinue
     $commandLine = ""
     if ($owner -and $owner.CommandLine) {
       $commandLine = [string]$owner.CommandLine
     }
-    if ($commandLine.Contains($ExpectedRoot) -or $commandLine.Contains("src/server/index.ts") -or $commandLine.Contains("vite")) {
+    if ($ForceAny -or $commandLine.Contains($ExpectedRoot) -or $commandLine.Contains("src/server/index.ts") -or $commandLine.Contains("vite")) {
+      Write-Host "Stopping process $ownerPid listening on port $Port."
       Stop-ProcessTree -ProcessId $ownerPid
     }
   }
@@ -94,6 +137,43 @@ function Stop-ListenerOnPort([int]$Port, [string]$ExpectedRoot) {
 
 function Quote-PowerShell([string]$Value) {
   return "'" + $Value.Replace("'", "''") + "'"
+}
+
+function Write-WebUiConfig(
+  [string]$ConfigDir,
+  [string]$HostAddress,
+  [int]$ServerPort,
+  [int]$WebPort,
+  [string]$ServerUrl,
+  [string]$WebUrl
+) {
+  $beyaDir = Join-Path $ConfigDir "beya"
+  New-Item -ItemType Directory -Force -Path $beyaDir | Out-Null
+  $configPath = Join-Path $beyaDir "web-ui.json"
+  $config = [ordered]@{}
+
+  if (Test-Path -LiteralPath $configPath) {
+    try {
+      $existing = Get-Content -Raw -LiteralPath $configPath | ConvertFrom-Json
+      foreach ($property in $existing.PSObject.Properties) {
+        $config[$property.Name] = $property.Value
+      }
+    } catch {
+      # Keep going; the launcher owns only the fields below.
+    }
+  }
+
+  $config["hostAddress"] = $HostAddress
+  $config["serverPort"] = $ServerPort
+  $config["webPort"] = $WebPort
+  $config["serverUrl"] = $ServerUrl
+  $config["webUrl"] = $WebUrl
+  $config["updatedAt"] = (Get-Date).ToUniversalTime().ToString("o")
+
+  $tmpPath = "$configPath.tmp.$PID"
+  $config | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $tmpPath -Encoding UTF8
+  Move-Item -LiteralPath $tmpPath -Destination $configPath -Force
+  return $configPath
 }
 
 $rootDir = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")
@@ -110,14 +190,16 @@ if (-not $LogDir) {
 }
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
-$serverPortResolved = Find-AvailablePort $HostAddress $ServerPort $MaxPortScan
-$webPortResolved = Find-AvailablePort $HostAddress $WebPort $MaxPortScan
-if ($webPortResolved -eq $serverPortResolved) {
-  $webPortResolved = Find-AvailablePort $HostAddress ($webPortResolved + 1) $MaxPortScan
+$serverPortResolved = $ServerPort
+$webPortResolved = $WebPort
+if ($serverPortResolved -eq $webPortResolved) {
+  throw "ServerPort and WebPort must be different. Both were set to $serverPortResolved."
 }
 
 $serverUrl = "http://${HostAddress}:$serverPortResolved"
-$webUrl = "http://${HostAddress}:$webPortResolved/?serverUrl=$([uri]::EscapeDataString($serverUrl))"
+$webOrigin = "http://${HostAddress}:$webPortResolved"
+$webStatusUrl = "$webOrigin/__beya_web_ui_status"
+$webUrl = "$webOrigin/?serverUrl=$([uri]::EscapeDataString($serverUrl))"
 $serverLog = Join-Path $LogDir "server.log"
 $serverErr = Join-Path $LogDir "server.err.log"
 $webLog = Join-Path $LogDir "web.log"
@@ -127,32 +209,69 @@ if (-not $beyaConfigDir) {
   $beyaConfigDir = Join-Path $env:USERPROFILE ".beya"
 }
 
-Write-Host "Starting server: $serverUrl"
-$serverCommand = @(
-  "Set-Location -LiteralPath $(Quote-PowerShell $rootDir)"
-  "`$env:SERVER_PORT='$serverPortResolved'"
-  "`$env:DISABLE_TELEMETRY='1'"
-  "`$env:BEYA_CONFIG_DIR=$(Quote-PowerShell $beyaConfigDir)"
-  "`$env:BEYA_CONFIG_DIR=`$env:BEYA_CONFIG_DIR"
-  "& $(Quote-PowerShell $bun) run src/server/index.ts --host $(Quote-PowerShell $HostAddress) --port $serverPortResolved"
-) -join "; "
-$server = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $serverCommand) -RedirectStandardOutput $serverLog -RedirectStandardError $serverErr -WindowStyle Hidden -PassThru
+$server = $null
+$serverOwned = $false
+if (Test-PortInUse $HostAddress $serverPortResolved) {
+  Write-Host "Server port $serverPortResolved is in use; trying to reconnect."
+  if (Test-HttpReady "$serverUrl/api/health") {
+    Write-Host "Reusing existing server: $serverUrl"
+  } else {
+    Write-Host "Existing listener on server port $serverPortResolved is not healthy; stopping it."
+    Stop-ListenerOnPort -Port $serverPortResolved -ExpectedRoot $rootDir -ForceAny
+    Wait-PortAvailable $HostAddress $serverPortResolved
+  }
+}
+
+if (-not (Test-HttpReady "$serverUrl/api/health")) {
+  Write-Host "Starting server: $serverUrl"
+  $serverCommand = @(
+    "Set-Location -LiteralPath $(Quote-PowerShell $rootDir)"
+    "`$env:SERVER_PORT='$serverPortResolved'"
+    "`$env:DISABLE_TELEMETRY='1'"
+    "`$env:BEYA_CONFIG_DIR=$(Quote-PowerShell $beyaConfigDir)"
+    "& $(Quote-PowerShell $bun) run src/server/index.ts --host $(Quote-PowerShell $HostAddress) --port $serverPortResolved"
+  ) -join "; "
+  $server = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $serverCommand) -RedirectStandardOutput $serverLog -RedirectStandardError $serverErr -WindowStyle Hidden -PassThru
+  $serverOwned = $true
+}
 
 try {
-  Wait-Http "$serverUrl/api/health" $serverLog { -not $server.HasExited }
+  if ($serverOwned) {
+    Wait-Http "$serverUrl/api/health" @($serverLog, $serverErr) { -not $server.HasExited }
+  }
 
-  Write-Host "Starting Web UI: http://${HostAddress}:$webPortResolved"
-  $webStartedAt = (Get-Date).ToUniversalTime().ToString("o")
-  $webCommand = @(
-    "Set-Location -LiteralPath $(Quote-PowerShell $desktopDir)"
-    "`$env:VITE_DESKTOP_SERVER_URL='$serverUrl'"
-    "`$env:VITE_BEYA_WEB_STARTED_AT='$webStartedAt'"
-    "`$env:VITE_BEYA_WEB_PORT='$webPortResolved'"
-    "& $(Quote-PowerShell $bun) run dev -- --host $(Quote-PowerShell $HostAddress) --port $webPortResolved --strictPort"
-  ) -join "; "
-  $web = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $webCommand) -RedirectStandardOutput $webLog -RedirectStandardError $webErr -WindowStyle Hidden -PassThru
+  $web = $null
+  $webOwned = $false
+  if (Test-PortInUse $HostAddress $webPortResolved) {
+    Write-Host "Web port $webPortResolved is in use; trying to reconnect."
+    if (Test-HttpReady $webStatusUrl) {
+      Write-Host "Reusing existing Web UI: $webOrigin"
+    } else {
+      Write-Host "Existing listener on web port $webPortResolved is not the Beya Web UI; stopping it."
+      Stop-ListenerOnPort -Port $webPortResolved -ExpectedRoot $rootDir -ForceAny
+      Wait-PortAvailable $HostAddress $webPortResolved
+    }
+  }
 
-  Wait-Http "http://${HostAddress}:$webPortResolved" $webLog { -not $web.HasExited }
+  if (-not (Test-HttpReady $webStatusUrl)) {
+    Write-Host "Starting Web UI: $webOrigin"
+    $webStartedAt = (Get-Date).ToUniversalTime().ToString("o")
+    $webCommand = @(
+      "Set-Location -LiteralPath $(Quote-PowerShell $desktopDir)"
+      "`$env:VITE_DESKTOP_SERVER_URL='$serverUrl'"
+      "`$env:VITE_BEYA_WEB_STARTED_AT='$webStartedAt'"
+      "`$env:VITE_BEYA_WEB_PORT='$webPortResolved'"
+      "& $(Quote-PowerShell $bun) run dev -- --host $(Quote-PowerShell $HostAddress) --port $webPortResolved --strictPort"
+    ) -join "; "
+    $web = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $webCommand) -RedirectStandardOutput $webLog -RedirectStandardError $webErr -WindowStyle Hidden -PassThru
+    $webOwned = $true
+  }
+
+  if ($webOwned) {
+    Wait-Http $webStatusUrl @($webLog, $webErr) { -not $web.HasExited }
+  }
+
+  $configPath = Write-WebUiConfig -ConfigDir $beyaConfigDir -HostAddress $HostAddress -ServerPort $serverPortResolved -WebPort $webPortResolved -ServerUrl $serverUrl -WebUrl $webUrl
 
   Write-Host ""
   Write-Host "Web UI is ready:"
@@ -172,27 +291,38 @@ try {
   Write-Host "Logs:"
   Write-Host "  $serverLog"
   Write-Host "  $webLog"
+  Write-Host "Config:"
+  Write-Host "  $configPath"
   Write-Host ""
   Write-Host "Press Ctrl-C to stop both processes."
 
-  while (-not $server.HasExited -and -not $web.HasExited) {
+  while ($true) {
     Start-Sleep -Seconds 1
-    $server.Refresh()
-    $web.Refresh()
-  }
+    if ($server) {
+      $server.Refresh()
+      if ($server.HasExited) {
+        throw "Server process exited with code $($server.ExitCode). Recent log:`n$(Read-RecentLogs -LogFiles @($serverLog, $serverErr))"
+      }
+    } elseif (-not (Test-HttpReady "$serverUrl/api/health")) {
+      throw "Reused server is no longer reachable: $serverUrl"
+    }
 
-  if ($server.HasExited) {
-    throw "Server process exited with code $($server.ExitCode). Recent log:`n$(Get-Content -Raw -LiteralPath $serverLog -ErrorAction SilentlyContinue)"
+    if ($web) {
+      $web.Refresh()
+      if ($web.HasExited) {
+        throw "Web UI process exited with code $($web.ExitCode). Recent log:`n$(Read-RecentLogs -LogFiles @($webLog, $webErr))"
+      }
+    } elseif (-not (Test-HttpReady $webStatusUrl)) {
+      throw "Reused Web UI is no longer reachable: $webOrigin"
+    }
   }
-
-  throw "Web UI process exited with code $($web.ExitCode). Recent log:`n$(Get-Content -Raw -LiteralPath $webLog -ErrorAction SilentlyContinue)"
 } finally {
-  if ($web) {
+  if ($webOwned -and $web) {
     Stop-ProcessTree -ProcessId $web.Id
+    Stop-ListenerOnPort -Port $webPortResolved -ExpectedRoot $rootDir
   }
-  if ($server) {
+  if ($serverOwned -and $server) {
     Stop-ProcessTree -ProcessId $server.Id
+    Stop-ListenerOnPort -Port $serverPortResolved -ExpectedRoot $rootDir
   }
-  Stop-ListenerOnPort -Port $webPortResolved -ExpectedRoot $rootDir
-  Stop-ListenerOnPort -Port $serverPortResolved -ExpectedRoot $rootDir
 }

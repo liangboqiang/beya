@@ -1,12 +1,10 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+﻿import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import * as fs from 'fs/promises'
 import * as os from 'os'
 import * as path from 'path'
-import { OPENAI_CODEX_API_ENDPOINT } from '../../services/openaiAuth/client.js'
 import { ProviderService } from '../services/providerService.js'
 import { deriveTitle, generateTitle, parseGeneratedTitleText, saveAiTitle } from '../services/titleService.js'
 import { sessionService } from '../services/sessionService.js'
-import { beyaOpenAIOAuthService } from '../services/beyaOpenAIOAuthService.js'
 
 describe('titleService', () => {
   let tmpDir: string
@@ -22,7 +20,6 @@ describe('titleService', () => {
 
   afterEach(async () => {
     globalThis.fetch = originalFetch
-    beyaOpenAIOAuthService.dispose()
     restoreEnv('BEYA_CONFIG_DIR', originalConfigDir)
     await fs.rm(tmpDir, { recursive: true, force: true })
   })
@@ -69,7 +66,7 @@ describe('titleService', () => {
         }, null, 2),
       )
 
-      await expect(generateTitle('请只回复 trace-ok')).resolves.toBe('Trace ok')
+      await expect(generateTitle('trace-ok')).resolves.toBe('Trace ok')
       expect(requestBody?.thinking).toEqual({ type: 'disabled' })
       expect(requestBody?.model).toBe('glm-4.7-flash')
     } finally {
@@ -119,7 +116,7 @@ describe('titleService', () => {
         }, null, 2),
       )
 
-      await expect(generateTitle('请只回复 trace-ok')).resolves.toBe('Trace ok')
+      await expect(generateTitle('trace-ok')).resolves.toBe('Trace ok')
       expect(requestBody?.thinking).toEqual({ type: 'disabled' })
       expect(requestBody?.model).toBe('deepseek-v4-pro')
     } finally {
@@ -131,10 +128,10 @@ describe('titleService', () => {
     const raw = [
       '<command-message>frontend-design</command-message>',
       '<command-name>/frontend-design</command-name>',
-      '<command-args>@website 重新设计首页</command-args>',
+      '<command-args>@website 閲嶆柊璁捐棣栭〉</command-args>',
     ].join('\n')
 
-    expect(deriveTitle(raw)).toBe('/frontend-design @website 重新设计首页')
+    expect(deriveTitle(raw)).toBe('/frontend-design @website 閲嶆柊璁捐棣栭〉')
   })
 
   test('sends cleaned slash-command text to the title model', async () => {
@@ -182,54 +179,31 @@ describe('titleService', () => {
       await expect(generateTitle([
         '<command-message>frontend-design</command-message>',
         '<command-name>/frontend-design</command-name>',
-        '<command-args>@website 重新设计首页</command-args>',
+        '<command-args>@website 閲嶆柊璁捐棣栭〉</command-args>',
       ].join('\n'))).resolves.toBe('Redesign website')
 
-      expect(requestBody?.messages?.[0]?.content).toBe('/frontend-design @website 重新设计首页')
+      expect(requestBody?.messages?.[0]?.content).toBe('/frontend-design @website 閲嶆柊璁捐棣栭〉')
       expect(requestBody?.model).toBe('title-fast')
     } finally {
       server.stop(true)
     }
   })
 
-  test('generates titles when ChatGPT Official OAuth is active', async () => {
-    const providerService = new ProviderService()
-    await providerService.activateProvider('openai-official')
-    await beyaOpenAIOAuthService.saveTokens({
-      accessToken: 'access-for-title',
-      refreshToken: 'refresh-for-title',
-      expiresAt: Date.now() + 60 * 60_000,
-      accountId: 'acct_title',
-      email: 'title@example.com',
-    })
-
-    const upstreamCalls: Array<{
-      url: string
-      headers: Record<string, string>
-      body: Record<string, unknown>
-    }> = []
-    globalThis.fetch = (async (input, init) => {
-      const headers = new Headers(init?.headers)
-      upstreamCalls.push({
-        url: String(input),
-        headers: Object.fromEntries(headers.entries()),
-        body: JSON.parse(String(init?.body)) as Record<string, unknown>,
-      })
-      return new Response([
-        'event: response.completed',
-        'data: {"response":{"id":"resp_title","object":"response","created_at":1779118000,"model":"gpt-5.3-codex","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\\"title\\":\\"Trace ok\\"}"}]}],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}}',
-        '',
-      ].join('\n'), {
-        headers: { 'Content-Type': 'text/event-stream' },
-      })
+  test('does not generate titles from a stale removed ChatGPT Official active id', async () => {
+    await fs.mkdir(path.join(tmpDir, 'beya'), { recursive: true })
+    await fs.writeFile(
+      path.join(tmpDir, 'beya', 'providers.json'),
+      JSON.stringify({ activeId: 'openai-official', providers: [] }),
+      'utf-8',
+    )
+    let fetched = false
+    globalThis.fetch = (async () => {
+      fetched = true
+      return new Response('{}')
     }) as typeof fetch
 
-    await expect(generateTitle('请只回复 trace-ok')).resolves.toBe('Trace ok')
-    expect(upstreamCalls).toHaveLength(1)
-    expect(upstreamCalls[0].url).toBe(OPENAI_CODEX_API_ENDPOINT)
-    expect(upstreamCalls[0].headers.authorization).toBe('Bearer access-for-title')
-    expect(upstreamCalls[0].headers['chatgpt-account-id']).toBe('acct_title')
-    expect(upstreamCalls[0].body.stream).toBe(true)
+    await expect(generateTitle('trace-ok')).resolves.toBeNull()
+    expect(fetched).toBe(false)
   })
 
   test('parses JSON title responses wrapped in markdown fences', () => {

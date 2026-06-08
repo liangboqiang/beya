@@ -138,7 +138,7 @@ export async function checkForAsyncHookResponses(): Promise<
   const pendingCount = pendingHooks.size
   logForDebugging(`Hooks: Found ${pendingCount} total hooks in registry`)
 
-  // Snapshot hooks before processing â€?we'll mutate the map after.
+  // Snapshot hooks before processing â€”we'll mutate the map after.
   const hooks = Array.from(pendingHooks.values())
 
   const settled = await Promise.allSettled(
@@ -233,7 +233,7 @@ export async function checkForAsyncHookResponses(): Promise<
     }),
   )
 
-  // allSettled â€?isolate failures so one throwing callback doesn't orphan
+  // allSettled â€”isolate failures so one throwing callback doesn't orphan
   // already-applied side effects (responseAttachmentSent, finalizeHook) from others.
   let sessionStartCompleted = false
   for (const s of settled) {

@@ -40,6 +40,7 @@ const providerStoreState = {
   isCatalogLoading: false,
   fetchProviders: vi.fn(),
   fetchCatalog: vi.fn(),
+  rescanProviders: vi.fn(),
   deleteProvider: MOCK_DELETE_PROVIDER,
   activateProvider: vi.fn(),
   testProvider: vi.fn(),
@@ -76,16 +77,16 @@ vi.mock('qrcode', () => ({
   },
 }))
 
-vi.mock('../components/settings/ChatGPTOfficialLogin', () => ({
-  ChatGPTOfficialLogin: () => <div data-testid="chatgpt-official-login" />,
-}))
-
 vi.mock('../pages/AdapterSettings', () => ({
   AdapterSettings: () => <div>Adapter Settings Mock</div>,
 }))
 
 vi.mock('../pages/ActivitySettings', () => ({
   ActivitySettings: () => <div>Activity Settings Mock</div>,
+}))
+
+vi.mock('../pages/LocalCliSettings', () => ({
+  LocalCliSettings: () => <div>Local CLI Settings Mock</div>,
 }))
 
 vi.mock('../stores/agentStore', () => ({
@@ -192,6 +193,7 @@ describe('Settings > General tab', () => {
     providerStoreState.isCatalogLoading = false
     providerStoreState.fetchProviders = vi.fn()
     providerStoreState.fetchCatalog = vi.fn()
+    providerStoreState.rescanProviders = vi.fn()
     providerStoreState.activateProvider = vi.fn()
     providerStoreState.testProvider = vi.fn()
     providerStoreState.createProvider = vi.fn()
@@ -1139,7 +1141,11 @@ describe('Settings > Providers tab', () => {
     MOCK_UPDATE_SETTINGS.mockResolvedValue({})
     useSettingsStore.setState({
       locale: 'en',
+      executionMode: 'provider',
       fetchAll: vi.fn().mockResolvedValue(undefined),
+      setExecutionMode: vi.fn().mockImplementation(async (executionMode: 'provider' | 'local_cli') => {
+        useSettingsStore.setState({ executionMode })
+      }),
     })
     providerStoreState.providers = [
       {
@@ -1162,27 +1168,31 @@ describe('Settings > Providers tab', () => {
     providerStoreState.hasLoadedProviders = true
   })
 
-  it('does not query ChatGPT OAuth status before providers finish loading', () => {
-    providerStoreState.providers = []
-    providerStoreState.activeId = 'openai-official'
-    providerStoreState.hasLoadedProviders = false
-
-    render(<Settings />)
-
-    expect(screen.queryByTestId('chatgpt-official-login')).not.toBeInTheDocument()
-  })
-
-  it('shows ChatGPT Official as the active built-in provider', () => {
+  it('does not render a built-in ChatGPT Official provider card', () => {
     providerStoreState.providers = []
     providerStoreState.activeId = 'openai-official'
     providerStoreState.hasLoadedProviders = true
 
     render(<Settings />)
 
-    const openAIProvider = screen.getByTestId('openai-official-provider')
-    expect(within(openAIProvider).getByText('ChatGPT Official')).toBeInTheDocument()
-    expect(within(openAIProvider).getByText('Default')).toBeInTheDocument()
-    expect(screen.getByTestId('chatgpt-official-login')).toBeInTheDocument()
+    expect(screen.queryByTestId('openai-official-provider')).not.toBeInTheDocument()
+    expect(screen.queryByText('ChatGPT Official')).not.toBeInTheDocument()
+  })
+
+  it('switches between provider and local CLI execution mode panels', async () => {
+    render(<Settings />)
+
+    expect(screen.getByRole('tab', { name: /Provider/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('MiniMax-M2.7-highspeed(openai)')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }))
+      await Promise.resolve()
+    })
+
+    expect(useSettingsStore.getState().setExecutionMode).toHaveBeenCalledWith('local_cli')
+    expect(screen.getByText('Local CLI Settings Mock')).toBeInTheDocument()
+    expect(screen.queryByText('MiniMax-M2.7-highspeed(openai)')).not.toBeInTheDocument()
   })
 
   it('requires confirmation before deleting a provider', async () => {
@@ -1238,7 +1248,7 @@ describe('Settings > Providers tab', () => {
     expect(within(dialog).getByText('Requests will be translated via the local proxy')).toBeInTheDocument()
   })
 
-  it('normalizes blank model mappings to the main model when saving a provider', async () => {
+  it('creates a custom provider from a connection test model without showing model mapping controls', async () => {
     providerStoreState.createProvider = vi.fn().mockResolvedValue({
       providerId: 'provider-new',
       displayName: 'Custom',
@@ -1275,7 +1285,8 @@ describe('Settings > Providers tab', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add Provider|添加服务商/i }))
     const dialog = screen.getByRole('dialog')
     fireEvent.change(within(dialog).getByPlaceholderText('sk-...'), { target: { value: 'sk-test' } })
-    fireEvent.change(within(dialog).getByLabelText(/Primary model|主模型/i), { target: { value: 'gpt-5.5' } })
+    expect(within(dialog).queryByTestId('provider-model-primary')).not.toBeInTheDocument()
+    fireEvent.change(within(dialog).getByLabelText(/Connection test model/i), { target: { value: 'gpt-5.5' } })
     fireEvent.click(within(dialog).getByRole('button', { name: /Save|Add|保存|添加/i }))
 
     await waitFor(() => {
@@ -1288,6 +1299,88 @@ describe('Settings > Providers tab', () => {
         },
       }))
     })
+  })
+
+  it('offers catalog model candidates only when configuring a saved provider', async () => {
+    providerStoreState.providers = [{
+      providerId: 'openai',
+      displayName: 'OpenAI',
+      apiKey: '***',
+      baseUrl: 'https://api.openai.com/v1',
+      apiFormat: 'openai_responses',
+      modelRoles: {
+        primary: 'gpt-small',
+        fast: 'gpt-small',
+        balanced: 'gpt-small',
+        powerful: 'gpt-small',
+      },
+      enabledModels: ['gpt-small'],
+    }]
+    providerStoreState.updateProvider = vi.fn().mockResolvedValue(providerStoreState.providers[0])
+    providerStoreState.catalog = makeCatalog([
+      makeCatalogProvider({
+        providerId: 'openai',
+        displayName: 'OpenAI',
+        baseUrl: 'https://api.openai.com/v1',
+        apiFormat: 'openai_responses',
+        defaultModelRoles: {
+          primary: 'gpt-small',
+          fast: 'gpt-small',
+          balanced: 'gpt-small',
+          powerful: 'gpt-small',
+        },
+        models: [
+          {
+            id: 'gpt-small',
+            displayName: 'GPT Small',
+            providerId: 'openai',
+            tier: 'small',
+            contextWindow: 200000,
+            capabilities: ['streaming', 'tools'],
+          },
+          {
+            id: 'gpt-big',
+            displayName: 'GPT Big',
+            providerId: 'openai',
+            tier: 'large',
+            contextWindow: 400000,
+            capabilities: ['streaming', 'tools'],
+          },
+        ],
+        needsApiKey: true,
+        websiteUrl: '',
+      }),
+    ])
+
+    render(<Settings />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Configure/i }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).queryByLabelText(/Base URL/i)).not.toBeInTheDocument()
+    expect(within(dialog).queryByPlaceholderText('sk-...')).not.toBeInTheDocument()
+    fireEvent.focus(within(dialog).getByTestId('provider-model-primary'))
+    fireEvent.click(await within(dialog).findByText('GPT Big (gpt-big)'))
+    fireEvent.click(within(dialog).getByRole('button', { name: /Save|Add/i }))
+
+    await waitFor(() => {
+      expect(providerStoreState.updateProvider).toHaveBeenCalledWith('openai', expect.objectContaining({
+        modelRoles: {
+          primary: 'gpt-big',
+          fast: 'gpt-small',
+          balanced: 'gpt-small',
+          powerful: 'gpt-small',
+        },
+        enabledModels: ['gpt-big', 'gpt-small'],
+      }))
+    })
+  })
+
+  it('runs provider model rescan from the providers toolbar', () => {
+    render(<Settings />)
+
+    fireEvent.click(screen.getByRole('button', { name: /Rescan/i }))
+
+    expect(providerStoreState.rescanProviders).toHaveBeenCalled()
   })
 
   it('hides the API key by default and reveals it from the eye button', () => {

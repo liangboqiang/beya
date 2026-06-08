@@ -70,7 +70,7 @@ export type PersistedStatsCache = {
   hourCounts: { [hour: number]: number }
   // Speculation time saved across all sessions
   totalSpeculationTimeSavedMs: number
-  // Shot distribution: map of shot count â†?number of sessions (ant-only)
+  // Shot distribution: map of shot count â†’number of sessions (ant-only)
   shotDistribution?: { [shotCount: number]: number }
 }
 

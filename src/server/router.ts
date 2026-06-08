@@ -13,6 +13,7 @@ import { handleConversationsApi } from './api/conversations.js'
 import { handleTeamsApi } from './api/teams.js'
 import { handleFilesystemRoute } from './api/filesystem.js'
 import { handleProvidersApi } from './api/providers.js'
+import { handleLocalCliApi } from './api/local-cli.js'
 import { handleAdaptersApi } from './api/adapters.js'
 import { handlePluginsApi } from './api/plugins.js'
 import { handleSkillsApi } from './api/skills.js'
@@ -29,15 +30,23 @@ import { handleDesktopUiApi } from './api/desktop-ui.js'
 import { errorResponse } from './middleware/errorHandler.js'
 import { handleServerTools } from './api/tools.js'
 
-export async function handleApiRequest(req: Request, url: URL): Promise<Response> {
+type ApiRequestOptions = {
+  filesystem?: Parameters<typeof handleFilesystemRoute>[3]
+}
+
+export async function handleApiRequest(
+  req: Request,
+  url: URL,
+  options: ApiRequestOptions = {},
+): Promise<Response> {
   try {
-    return await routeApiRequest(req, url)
+    return await routeApiRequest(req, url, options)
   } catch (error) {
     return errorResponse(error)
   }
 }
 
-async function routeApiRequest(req: Request, url: URL): Promise<Response> {
+async function routeApiRequest(req: Request, url: URL, options: ApiRequestOptions): Promise<Response> {
   const path = url.pathname
   const segments = path.split('/').filter(Boolean) // ['api', 'sessions', ...]
   if (segments[0] !== 'api') {
@@ -120,6 +129,9 @@ async function routeApiRequest(req: Request, url: URL): Promise<Response> {
     case 'providers':
       return handleProvidersApi(req, url, segments)
 
+    case 'local-cli':
+      return handleLocalCliApi(req, url, segments)
+
     case 'beya-openai-oauth':
       return handleBeyaOpenAIOAuthApi(req, url, segments)
 
@@ -163,7 +175,7 @@ async function routeApiRequest(req: Request, url: URL): Promise<Response> {
       return handleDesktopUiApi(req, url, segments)
 
     case 'filesystem':
-      return handleFilesystemRoute(url.pathname, url)
+      return handleFilesystemRoute(url.pathname, url, req, options.filesystem)
 
     default:
       return Response.json(

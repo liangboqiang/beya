@@ -73,10 +73,10 @@ function cleanupTerminalModes(): void {
     //
     // Unmount Ink directly rather than writing EXIT_ALT_SCREEN ourselves.
     // Ink registered its unmount with signal-exit, so it will otherwise run
-    // AGAIN inside forceExit() â†?process.exit(). Two problems with letting
+    // AGAIN inside forceExit() â†’process.exit(). Two problems with letting
     // that happen:
     //   1. If we write 1049l here and unmount writes it again later, the
-    //      second one triggers another DECRC â€?the cursor jumps back over
+    //      second one triggers another DECRC â€”the cursor jumps back over
     //      the resume hint and the shell prompt lands on the wrong line.
     //   2. unmount()'s onRender() must run with altScreenActive=true (alt-
     //      screen cursor math) AND on the alt buffer. Exiting alt-screen
@@ -88,7 +88,7 @@ function cleanupTerminalModes(): void {
       try {
         inst.unmount()
       } catch {
-        // Reconciler/render threw â€?fall back to manual alt-screen exit
+        // Reconciler/render threw â€”fall back to manual alt-screen exit
         // so printResumeHint still hits the main buffer.
         writeSync(1, EXIT_ALT_SCREEN)
       }
@@ -104,7 +104,7 @@ function cleanupTerminalModes(): void {
     // saved cursor position. Safe to skip full unmount: this function already
     // sends all the terminal-reset sequences, and the process is exiting.
     inst?.detachForShutdown()
-    // Disable extended key reporting â€?always send both since terminals
+    // Disable extended key reporting â€”always send both since terminals
     // silently ignore whichever they don't implement
     writeSync(1, DISABLE_MODIFY_OTHER_KEYS)
     writeSync(1, DISABLE_KITTY_KEYBOARD)
@@ -120,7 +120,7 @@ function cleanupTerminalModes(): void {
     // Clear tab status (OSC 21337) so a stale dot doesn't linger
     if (supportsTabStatus()) writeSync(1, wrapForMultiplexer(CLEAR_TAB_STATUS))
     // Clear terminal title so the tab doesn't show stale session info.
-    // Respect CLAUDE_CODE_DISABLE_TERMINAL_TITLE â€?if the user opted out of
+    // Respect CLAUDE_CODE_DISABLE_TERMINAL_TITLE â€”if the user opted out of
     // title changes, don't clear their existing title on exit either.
     if (!isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE)) {
       if (process.platform === 'win32') {
@@ -201,14 +201,14 @@ function forceExit(exitCode: number): never {
   // events already in flight means bytes can arrive during the seconds
   // of async cleanup between then and now. Draining here catches them.
   // Use the Ink class method (not the standalone drainStdin()) so we
-  // drain the instance's stdin â€?when process.stdin is piped,
+  // drain the instance's stdin â€”when process.stdin is piped,
   // getStdinOverride() opens /dev/tty as the real input stream and the
   // class method knows about it; the standalone function defaults to
   // process.stdin which would early-return on isTTY=false.
   try {
     instances.get(process.stdout)?.drainStdin()
   } catch {
-    // Terminal may be gone (SIGHUP). Ignore â€?we are about to exit.
+    // Terminal may be gone (SIGHUP). Ignore â€”we are about to exit.
   }
   try {
     process.exit(exitCode)
@@ -236,26 +236,26 @@ function forceExit(exitCode: number): never {
  */
 export const setupGracefulShutdown = memoize(() => {
   // Work around a Bun bug where process.removeListener(sig, fn) resets the
-  // kernel sigaction for that signal even when other JS listeners remain â€?  // the signal then falls back to its default action (terminate) and our
+  // kernel sigaction for that signal even when other JS listeners remain â€”  // the signal then falls back to its default action (terminate) and our
   // process.on('SIGTERM') handler never runs.
   //
   // Trigger: any short-lived signal-exit v4 subscriber (e.g. execa per child
   // process, or an Ink instance that unmounts). When its unsubscribe runs and
   // it was the last v4 subscriber, v4.unload() calls removeListener on every
-  // signal in its list (SIGTERM, SIGINT, SIGHUP, â€?, tripping the Bun bug and
+  // signal in its list (SIGTERM, SIGINT, SIGHUP, â€”, tripping the Bun bug and
   // nuking our handlers at the kernel level.
   //
   // Fix: pin signal-exit v4 loaded by registering a no-op onExit callback that
   // is never unsubscribed. This keeps v4's internal emitter count > 0 so
   // unload() never runs and removeListener is never called. Harmless under
-  // Node.js â€?the pin also ensures signal-exit's process.exit hook stays
+  // Node.js â€”the pin also ensures signal-exit's process.exit hook stays
   // active for Ink cleanup.
   onExit(() => {})
 
   process.on('SIGINT', () => {
     // In print mode, print.ts registers its own SIGINT handler that aborts
     // the in-flight query and calls gracefulShutdown(0); skip here to
-    // avoid racing with it. Only check print mode â€?other non-interactive
+    // avoid racing with it. Only check print mode â€”other non-interactive
     // sessions (--sdk-url, --init-only, non-TTY) don't register their own
     // SIGINT handler and need gracefulShutdown to run.
     if (process.argv.includes('-p') || process.argv.includes('--print')) {
@@ -279,8 +279,8 @@ export const setupGracefulShutdown = memoize(() => {
     // process alive but unable to read/write. Periodically check stdin validity.
     if (process.stdin.isTTY) {
       orphanCheckInterval = setInterval(() => {
-        // Skip during scroll drain â€?even a cheap check consumes an event
-        // loop tick that scroll frames need. 30s interval â†?missing one is fine.
+        // Skip during scroll drain â€”even a cheap check consumes an event
+        // loop tick that scroll frames need. 30s interval â†’missing one is fine.
         if (getIsScrollDraining()) return
         // process.stdout.writable becomes false when the TTY is revoked
         if (!process.stdout.writable || !process.stdin.readable) {
@@ -431,11 +431,11 @@ export async function gracefulShutdown(
   // This ensures the hint is visible even if the process is killed during
   // cleanup (e.g., SIGKILL during macOS reboot). Without this, the resume
   // hint would only appear after cleanup functions, hooks, and analytics
-  // flush â€?which can take several seconds.
+  // flush â€”which can take several seconds.
   cleanupTerminalModes()
   printResumeHint()
 
-  // Flush session data first â€?this is the most critical cleanup. If the
+  // Flush session data first â€”this is the most critical cleanup. If the
   // terminal is dead (SIGHUP, SSH disconnect), hooks and analytics may hang
   // on I/O to a dead TTY or unreachable network, eating into the
   // failsafe budget. Session persistence must complete before anything else.
@@ -497,7 +497,7 @@ export async function gracefulShutdown(
     })
   }
 
-  // Flush analytics â€?capped at 500ms. Previously unbounded: the 1P exporter
+  // Flush analytics â€”capped at 500ms. Previously unbounded: the 1P exporter
   // awaits all pending axios POSTs (10s each), eating the full failsafe budget.
   // Lost analytics on slow networks are acceptable; a hanging exit is not.
   try {

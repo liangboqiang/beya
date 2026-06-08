@@ -14,6 +14,8 @@ export type WebSearchMode = 'auto' | 'anthropic' | 'tavily' | 'brave' | 'disable
 
 export type ChatSendBehavior = 'enter' | 'modifierEnter'
 
+export type ExecutionMode = 'provider' | 'local_cli'
+
 export type WebSearchSettings = {
   mode?: WebSearchMode
   tavilyApiKey?: string
@@ -85,6 +87,7 @@ export type UserSettings = {
   chatSendBehavior?: ChatSendBehavior
   skipWebFetchPreflight?: boolean
   desktopNotificationsEnabled?: boolean
+  executionMode?: ExecutionMode
   webSearch?: WebSearchSettings
   updateProxy?: Partial<UpdateProxySettings>
   network?: {

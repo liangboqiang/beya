@@ -86,6 +86,16 @@ function h5AccessControlRejectedResponse(): Response {
   )
 }
 
+function localInteractiveFilesystemRejectedResponse(): Response {
+  return Response.json(
+    {
+      error: 'Forbidden',
+      message: 'Interactive filesystem selection is only available from the local desktop app or loopback Web UI.',
+    },
+    { status: 403 },
+  )
+}
+
 function h5AccessDisabledResponse(): Response {
   return Response.json(
     {
@@ -110,6 +120,11 @@ function isH5AccessControlRequest(
   }
 
   return classifyH5Request(req, url, context) !== 'local-trusted'
+}
+
+function isLocalInteractiveFilesystemRequest(url: URL): boolean {
+  return url.pathname === '/api/filesystem/pick-directory' ||
+    url.pathname === '/api/filesystem/register-directory'
 }
 
 function originFromUrl(value: string | null): string | null {
@@ -188,9 +203,16 @@ export function startServer(port = PORT, host = HOST) {
           context: h5RequestContext,
         })
         const h5AccessControlBlocked = isH5AccessControlRequest(req, url, h5RequestContext)
+        const localInteractiveFilesystemBlocked =
+          isLocalInteractiveFilesystemRequest(url) &&
+          classifyH5Request(req, url, h5RequestContext) !== 'local-trusted'
 
         if (h5AccessControlBlocked) {
           return h5AccessControlRejectedResponse()
+        }
+
+        if (localInteractiveFilesystemBlocked) {
+          return localInteractiveFilesystemRejectedResponse()
         }
 
         if (h5AccessDisabledBlocked) {

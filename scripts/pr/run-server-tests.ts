@@ -47,8 +47,12 @@ if (testFiles.length === 0) {
 const failures: string[] = []
 
 for (const testFile of testFiles) {
-  const proc = Bun.spawn(['bun', 'test', testFile], {
+  const proc = Bun.spawn(['bun', 'test', '--timeout', '20000', testFile], {
     cwd: root,
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+    },
     stdout: 'inherit',
     stderr: 'inherit',
   })

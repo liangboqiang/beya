@@ -217,7 +217,7 @@ export type ToolUseContext = {
   setToolJSX?: SetToolJSXFn
   addNotification?: (notif: Notification) => void
   /** Append a UI-only system message to the REPL message list. Stripped at the
-   *  normalizeMessagesForAPI boundary â€?the Exclude<> makes that type-enforced. */
+   *  normalizeMessagesForAPI boundary â€”the Exclude<> makes that type-enforced. */
   appendSystemMessage?: (
     msg: Exclude<SystemMessage, SystemLocalCommandMessage>,
   ) => void
@@ -229,7 +229,7 @@ export type ToolUseContext = {
   nestedMemoryAttachmentTriggers?: Set<string>
   /**
    * BEYA.md paths already injected as nested_memory attachments this
-   * session. Dedup for memoryFilesToAttachments â€?readFileState is an LRU
+   * session. Dedup for memoryFilesToAttachments â€”readFileState is an LRU
    * that evicts entries in busy sessions, so its .has() check alone can
    * re-inject the same BEYA.md dozens of times.
    */
@@ -292,13 +292,13 @@ export type ToolUseContext = {
   preserveToolUseResults?: boolean
   /** Local denial tracking state for async subagents whose setAppState is a
    *  no-op. Without this, the denial counter never accumulates and the
-   *  fallback-to-prompting threshold is never reached. Mutable â€?the
+   *  fallback-to-prompting threshold is never reached. Mutable â€”the
    *  permissions code updates it in place. */
   localDenialTracking?: DenialTrackingState
   /**
    * Per-conversation-thread content replacement state for the tool result
    * budget. When present, query.ts applies the aggregate tool result budget.
-   * Main thread: REPL provisions once (never resets â€?stale UUID keys
+   * Main thread: REPL provisions once (never resets â€”stale UUID keys
    * are inert). Subagents: createSubagentContext clones the parent's state
    * by default (cache-sharing forks need identical decisions), or
    * resumeAgentBackground threads one reconstructed from sidechain records.
@@ -306,7 +306,7 @@ export type ToolUseContext = {
   contentReplacementState?: ContentReplacementState
   /**
    * Parent's rendered system prompt bytes, frozen at turn start.
-   * Used by fork subagents to share the parent's prompt cache â€?re-calling
+   * Used by fork subagents to share the parent's prompt cache â€”re-calling
    * getSystemPrompt() at fork-spawn time can diverge (GrowthBook coldâ†’warm)
    * and bust the cache. See forkSubagent.ts.
    */
@@ -386,7 +386,7 @@ export type Tool<
   /**
    * One-line capability phrase used by ToolSearch for keyword matching.
    * Helps the model find this tool via keyword search when it's deferred.
-   * 3â€?0 words, no trailing period.
+   * 3â€”0 words, no trailing period.
    * Prefer terms not already in the tool name (e.g. 'jupyter' for NotebookEdit).
    */
   searchHint?: string
@@ -422,8 +422,8 @@ export type Tool<
    * What should happen when the user submits a new message while this tool
    * is running.
    *
-   * - `'cancel'` â€?stop the tool and discard its result
-   * - `'block'`  â€?keep running; the new message waits
+   * - `'cancel'` â€”stop the tool and discard its result
+   * - `'block'`  â€”keep running; the new message waits
    *
    * Defaults to `'block'` when not implemented.
    */
@@ -455,7 +455,7 @@ export type Tool<
    */
   readonly shouldDefer?: boolean
   /**
-   * When true, this tool is never deferred â€?its full schema appears in the
+   * When true, this tool is never deferred â€”its full schema appears in the
    * initial prompt even when ToolSearch is enabled. For MCP tools, set via
    * `_meta['anthropic/alwaysLoad']`. Use for tools the model must see on
    * turn 1 without a ToolSearch round-trip.
@@ -490,7 +490,7 @@ export type Tool<
    * transcript, canUseTool, PreToolUse/PostToolUse hooks). Mutate in place
    * to add legacy/derived fields. Must be idempotent. The original API-bound
    * input is never mutated (preserves prompt cache). Not re-applied when a
-   * hook/permission returns a fresh updatedInput â€?those own their shape.
+   * hook/permission returns a fresh updatedInput â€”those own their shape.
    */
   backfillObservableInput?(input: Record<string, unknown>): void
 
@@ -596,16 +596,16 @@ export type Tool<
    * Flattened text of what renderToolResultMessage shows IN TRANSCRIPT
    * MODE (verbose=true, isTranscriptMode=true). For transcript search
    * indexing: the index counts occurrences in this string, the highlight
-   * overlay scans the actual screen buffer. For count â‰?highlight, this
-   * must return the text that ends up visible â€?not the model-facing
+   * overlay scans the actual screen buffer. For count â‰  highlight, this
+   * must return the text that ends up visible â€”not the model-facing
    * serialization from mapToolResultToToolResultBlockParam (which adds
    * system-reminders, persisted-output wrappers).
    *
    * Chrome can be skipped (under-count is fine). "Found 3 files in 12ms"
-   * isn't worth indexing. Phantoms are not fine â€?text that's claimed
+   * isn't worth indexing. Phantoms are not fine â€”text that's claimed
    * here but doesn't render is a countâ‰ highlight bug.
    *
-   * Optional: omitted â†?field-name heuristic in transcriptSearch.ts.
+   * Optional: omitted â†’field-name heuristic in transcriptSearch.ts.
    * Drift caught by test/utils/transcriptSearch.renderFidelity.test.tsx
    * which renders sample outputs and flags text that's indexed-but-not-
    * rendered (phantom) or rendered-but-not-indexed (under-count warning).
@@ -623,7 +623,7 @@ export type Tool<
   /**
    * Returns true when the non-verbose rendering of this output is truncated
    * (i.e., clicking to expand would reveal more content). Gates
-   * click-to-expand in fullscreen â€?only messages where verbose actually
+   * click-to-expand in fullscreen â€”only messages where verbose actually
    * shows more get a hover/click affordance. Unset means never truncated.
    */
   isResultTruncated?(output: Output): boolean
@@ -729,7 +729,7 @@ type DefaultableToolKeys =
 
 /**
  * Tool definition accepted by `buildTool`. Same shape as `Tool` but with the
- * defaultable methods optional â€?`buildTool` fills them in so callers always
+ * defaultable methods optional â€”`buildTool` fills them in so callers always
  * see a complete `Tool`.
  */
 export type ToolDef<
@@ -743,7 +743,7 @@ export type ToolDef<
  * Type-level spread mirroring `{ ...TOOL_DEFAULTS, ...def }`. For each
  * defaultable key: if D provides it (required), D's type wins; if D omits
  * it or has it optional (inherited from Partial<> in the constraint), the
- * default fills in. All other keys come from D verbatim â€?preserving arity,
+ * default fills in. All other keys come from D verbatim â€”preserving arity,
  * optional presence, and literal types exactly as `satisfies Tool` did.
  */
 type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
@@ -760,13 +760,13 @@ type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
  * that defaults live in one place and callers never need `?.() ?? default`.
  *
  * Defaults (fail-closed where it matters):
- * - `isEnabled` â†?`true`
- * - `isConcurrencySafe` â†?`false` (assume not safe)
- * - `isReadOnly` â†?`false` (assume writes)
- * - `isDestructive` â†?`false`
- * - `checkPermissions` â†?`{ behavior: 'allow', updatedInput }` (defer to general permission system)
- * - `toAutoClassifierInput` â†?`''` (skip classifier â€?security-relevant tools must override)
- * - `userFacingName` â†?`name`
+ * - `isEnabled` â†’`true`
+ * - `isConcurrencySafe` â†’`false` (assume not safe)
+ * - `isReadOnly` â†’`false` (assume writes)
+ * - `isDestructive` â†’`false`
+ * - `checkPermissions` â†’`{ behavior: 'allow', updatedInput }` (defer to general permission system)
+ * - `toAutoClassifierInput` â†’`''` (skip classifier â€”security-relevant tools must override)
+ * - `userFacingName` â†’`name`
  */
 const TOOL_DEFAULTS = {
   isEnabled: () => true,
@@ -783,7 +783,7 @@ const TOOL_DEFAULTS = {
 }
 
 // The defaults type is the ACTUAL shape of TOOL_DEFAULTS (optional params so
-// both 0-arg and full-arg call sites type-check â€?stubs varied in arity and
+// both 0-arg and full-arg call sites type-check â€”stubs varied in arity and
 // tests relied on that), not the interface's strict signatures.
 type ToolDefaults = typeof TOOL_DEFAULTS
 

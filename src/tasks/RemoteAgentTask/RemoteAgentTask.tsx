@@ -87,7 +87,7 @@ export function registerCompletionChecker(remoteTaskType: RemoteTaskType, checke
 
 /**
  * Persist a remote-agent metadata entry to the session sidecar.
- * Fire-and-forget â€?persistence failures must not block task registration.
+ * Fire-and-forget â€”persistence failures must not block task registration.
  */
 async function persistRemoteAgentMetadata(meta: RemoteAgentMetadata): Promise<void> {
   try {
@@ -248,7 +248,7 @@ The remote Ultraplan session did not produce a plan (${reason}). Inspect the ses
  * - prompt mode: a real assistant turn wraps the review in the tag.
  *
  * Scans hook_progress first since bughunter is the intended production path
- * and prompt mode is the dev/fallback. Newest-first in both cases â€?the tag
+ * and prompt mode is the dev/fallback. Newest-first in both cases â€”the tag
  * appears once at the end of the run so reverse iteration short-circuits.
  */
 function extractReviewFromLog(log: SDKMessage[]): string | null {
@@ -321,7 +321,7 @@ function extractReviewTagFromLog(log: SDKMessage[]): string | null {
 /**
  * Enqueue a remote-review completion notification. Injects the review text
  * directly into the message queue so the local model receives it on the next
- * turn â€?no file indirection, no mode change. Session is kept alive so the
+ * turn â€”no file indirection, no mode change. Session is kept alive so the
  * claude.ai URL stays a durable record the user can revisit; TTL handles cleanup.
  */
 function enqueueRemoteReviewNotification(taskId: string, reviewContent: string, setAppState: SetAppState): void {
@@ -437,7 +437,7 @@ export function registerRemoteAgentTask(options: {
   registerTask(taskState, context.setAppState);
 
   // Persist identity to the session sidecar so --resume can reconnect to
-  // still-running remote sessions. Status is not stored â€?it's fetched
+  // still-running remote sessions. Status is not stored â€”it's fetched
   // fresh from CCR on restore.
   void persistRemoteAgentMetadata({
     taskId,
@@ -491,7 +491,7 @@ async function restoreRemoteAgentTasksImpl(context: TaskContext): Promise<void> 
       remoteStatus = session.session_status;
     } catch (e) {
       // Only 404 means the CCR session is truly gone. Auth errors (401,
-      // missing OAuth token) are recoverable via /login â€?the remote
+      // missing OAuth token) are recoverable via /login â€”the remote
       // session is still running. fetchSession throws plain Error for all
       // 4xx (validateStatus treats <500 as success), so isTransientNetworkError
       // can't distinguish them; match the 404 message instead.
@@ -556,7 +556,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       const task = appState.tasks?.[taskId] as RemoteAgentTaskState | undefined;
       if (!task || task.status !== 'running') {
         // Task was killed externally (TaskStopTool) or already terminal.
-        // Session left alive so the claude.ai URL stays valid â€?the run_hunt.sh
+        // Session left alive so the claude.ai URL stays valid â€”the run_hunt.sh
         // post_stage() calls land as assistant events there, and the user may
         // want to revisit them after closing the terminal. TTL reaps it.
         return;
@@ -604,7 +604,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       }
 
       // Ultraplan: result(success) fires after every CCR turn, so it must not
-      // drive completion â€?startDetachedPoll owns that via ExitPlanMode scan.
+      // drive completion â€”startDetachedPoll owns that via ExitPlanMode scan.
       // Long-running monitors (autofix-pr) emit result per notification cycle,
       // so the same skip applies.
       const result = task.isUltraplan || task.isLongRunning ? undefined : accumulatedLog.findLast(msg => msg.type === 'result');
@@ -621,7 +621,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       }
       // Parse live progress counts from the orchestrator's heartbeat echoes.
       // hook_progress stdout is cumulative (every echo since hook start), so
-      // each event contains all progress tags. Grab the LAST occurrence â€?      // extractTag returns the first match which would always be the earliest
+      // each event contains all progress tags. Grab the LAST occurrence â€”      // extractTag returns the first match which would always be the earliest
       // value (0/0).
       let newProgress: RemoteAgentTaskState['reviewProgress'];
       if (task.isRemoteReview && logGrew) {
@@ -653,7 +653,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           }
         }
       }
-      // Hook events count as output only for remote-review â€?bughunter's
+      // Hook events count as output only for remote-review â€”bughunter's
       // SessionStart hook produces zero assistant turns so stableIdle would
       // never arm without this.
       const hasAnyOutput = accumulatedLog.some(msg => msg.type === 'assistant' || task.isRemoteReview && msg.type === 'system' && (msg.subtype === 'hook_progress' || msg.subtype === 'hook_response'));
@@ -664,17 +664,17 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       }
       const stableIdle = consecutiveIdlePolls >= STABLE_IDLE_POLLS;
       // stableIdle is a prompt-mode completion signal (Claude stops writing
-      // â†?session idles â†?done). In bughunter mode the session is "idle" the
+      // â†’session idles â†’done). In bughunter mode the session is "idle" the
       // entire time the SessionStart hook runs; the previous guard checked
       // hasAssistantEvents as a prompt-mode proxy, but post_stage() now
       // writes assistant events in bughunter mode too, so that check
       // misfires between heartbeats. Presence of a SessionStart hook event
-      // is the discriminator â€?bughunter mode always has one (run_hunt.sh),
-      // prompt mode never does â€?and it arrives before the kickoff
+      // is the discriminator â€”bughunter mode always has one (run_hunt.sh),
+      // prompt mode never does â€”and it arrives before the kickoff
       // post_stage so there's no race. When the hook is running, only the
       // <remote-review> tag or the 30min timeout complete the task.
       // Filtering on hook_event avoids a (theoretical) non-SessionStart hook
-      // in prompt mode from blocking stableIdle â€?the code_review container
+      // in prompt mode from blocking stableIdle â€”the code_review container
       // only registers SessionStart, but the 30min-hang failure mode is
       // worth defending against.
       const hasSessionStartHook = accumulatedLog.some(m => m.type === 'system' && (m.subtype === 'hook_started' || m.subtype === 'hook_progress' || m.subtype === 'hook_response') && (m as {
@@ -685,7 +685,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       const reviewTimedOut = task.isRemoteReview && Date.now() - task.pollStartedAt > REMOTE_REVIEW_TIMEOUT_MS;
       const newStatus = result ? result.subtype === 'success' ? 'completed' as const : 'failed' as const : sessionDone || reviewTimedOut ? 'completed' as const : accumulatedLog.length > 0 ? 'running' as const : 'starting' as const;
 
-      // Update task state. Guard against terminal states â€?if stopTask raced
+      // Update task state. Guard against terminal states â€”if stopTask raced
       // while pollRemoteSessionEvents was in-flight (status set to 'killed',
       // notified set to true), bail without overwriting status or proceeding to
       // side effects (notification, permission-mode flip).
@@ -695,7 +695,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           raceTerminated = true;
           return prevTask;
         }
-        // No log growth and status unchanged â†?nothing to report. Return
+        // No log growth and status unchanged â†’nothing to report. Return
         // same ref so updateTaskState skips the spread and 18 s.tasks
         // subscribers (REPL, Spinner, PromptInput, ...) don't re-render.
         // newProgress only arrives via log growth (heartbeat echo is a
@@ -708,7 +708,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           ...prevTask,
           status: newStatus === 'starting' ? 'running' : newStatus,
           log: accumulatedLog,
-          // Only re-scan for TodoWrite when log grew â€?log is append-only,
+          // Only re-scan for TodoWrite when log grew â€”log is append-only,
           // so no growth means no new tool_use blocks. Avoids findLast +
           // some + find + safeParse every second when idle.
           todoList: logGrew ? extractTodoListFromLog(accumulatedLog) : prevTask.todoList,
@@ -723,9 +723,9 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
         const finalStatus = result && result.subtype !== 'success' ? 'failed' : 'completed';
 
         // For remote-review tasks: inject the review text directly into the
-        // message queue. No mode change, no file indirection â€?the local model
+        // message queue. No mode change, no file indirection â€”the local model
         // just sees the review appear as a task-notification on its next turn.
-        // Session kept alive â€?run_hunt.sh's post_stage() has already written
+        // Session kept alive â€”run_hunt.sh's post_stage() has already written
         // the formatted findings as an assistant event, so the claude.ai URL
         // stays a durable record the user can revisit. TTL handles cleanup.
         if (task.isRemoteReview) {
@@ -740,12 +740,12 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
             return; // Stop polling
           }
 
-          // No output or remote error â€?mark failed with a review-specific message.
+          // No output or remote error â€”mark failed with a review-specific message.
           updateTaskState(taskId, context.setAppState, t => ({
             ...t,
             status: 'failed'
           }));
-          const reason = result && result.subtype !== 'success' ? 'remote session returned an error' : reviewTimedOut && !sessionDone ? 'remote session exceeded 30 minutes' : 'no review output â€?orchestrator may have exited early';
+          const reason = result && result.subtype !== 'success' ? 'remote session returned an error' : reviewTimedOut && !sessionDone ? 'remote session exceeded 30 minutes' : 'no review output â€”orchestrator may have exited early';
           enqueueRemoteReviewFailureNotification(taskId, reason, context.setAppState);
           void evictTaskOutput(taskId);
           void removeRemoteAgentMetadata(taskId);
@@ -761,7 +761,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
       // Reset so an API error doesn't let non-consecutive idle polls accumulate.
       consecutiveIdlePolls = 0;
 
-      // Check review timeout even when the API call fails â€?without this,
+      // Check review timeout even when the API call fails â€”without this,
       // persistent API errors skip the timeout check and poll forever.
       try {
         const appState = context.getAppState();
@@ -778,7 +778,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
           return; // Stop polling
         }
       } catch {
-        // Best effort â€?if getAppState fails, continue polling
+        // Best effort â€”if getAppState fails, continue polling
       }
     }
 

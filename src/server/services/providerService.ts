@@ -17,11 +17,6 @@ import { openaiChatToAnthropic } from '../proxy/transform/openaiChatToAnthropic.
 import { openaiResponsesToAnthropic } from '../proxy/transform/openaiResponsesToAnthropic.js'
 import type { AnthropicRequest } from '../proxy/transform/types.js'
 import {
-  OPENAI_OFFICIAL_PROVIDER,
-  isOpenAIOfficialProviderId,
-} from './openaiOfficialProvider.js'
-import { beyaOpenAIOAuthService } from './beyaOpenAIOAuthService.js'
-import {
   CURRENT_PROVIDER_INDEX_SCHEMA_VERSION,
   ensurePersistentStorageUpgraded,
 } from './persistentStorageMigrations.js'
@@ -49,8 +44,10 @@ import type {
   TestProviderInput,
   ProviderTestResult,
   ProviderTestStepResult,
+  ProviderDetectedModel,
   ApiFormat,
   ProviderAuthStrategy,
+  ModelRoles,
 } from '../types/provider.js'
 
 const DEFAULT_INDEX: ProvidersIndex = {
@@ -69,6 +66,75 @@ function indexForStorage(index: ProvidersIndex): ProvidersIndex {
     schemaVersion: CURRENT_PROVIDER_INDEX_SCHEMA_VERSION,
     providers: index.providers.map(providerForStorage),
   }
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const value of values) {
+    const trimmed = value.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push(trimmed)
+  }
+  return out
+}
+
+function modelRolesFromPrimary(primary: string): ModelRoles {
+  return { primary, fast: primary, balanced: primary, powerful: primary }
+}
+
+function resolveCreateModelRoles(
+  input: { modelRoles?: ModelRoles; enabledModels?: string[] },
+  fallback?: ModelRoles,
+): ModelRoles {
+  if (input.modelRoles) return resolveModelRoles({ modelRoles: input.modelRoles })
+  if (fallback?.primary) return resolveModelRoles({ modelRoles: fallback })
+
+  const primary = uniqueStrings(input.enabledModels ?? [])[0] ?? ''
+  return modelRolesFromPrimary(primary)
+}
+
+function applyDetectedModelsToProvider(
+  provider: SavedProvider,
+  models: ProviderDetectedModel[],
+): SavedProvider {
+  const enabledModels = uniqueStrings(models.map((model) => model.id))
+  if (enabledModels.length === 0) return provider
+
+  const modelSet = new Set(enabledModels)
+  const firstModel = enabledModels[0]
+  const currentRoles = resolveModelRoles(provider)
+  const pickModel = (modelId: string) => modelSet.has(modelId) ? modelId : firstModel
+  const modelRoles = resolveModelRoles({
+    modelRoles: {
+      primary: pickModel(currentRoles.primary),
+      fast: pickModel(currentRoles.fast),
+      balanced: pickModel(currentRoles.balanced),
+      powerful: pickModel(currentRoles.powerful),
+    },
+  })
+  const detectedContextWindows = Object.fromEntries(
+    models
+      .filter((model): model is ProviderDetectedModel & { contextWindow: number } => typeof model.contextWindow === 'number')
+      .map((model) => [model.id, model.contextWindow]),
+  )
+
+  return {
+    ...provider,
+    enabledModels,
+    modelRoles,
+    ...(Object.keys(detectedContextWindows).length > 0 && {
+      modelContextWindows: {
+        ...(provider.modelContextWindows ?? {}),
+        ...detectedContextWindows,
+      },
+    }),
+  }
+}
+
+function isSuccessfulProviderTest(result: ProviderTestResult): boolean {
+  return result.connectivity.success && result.proxy?.success !== false
 }
 
 export class ProviderService {
@@ -142,20 +208,28 @@ export class ProviderService {
   }
 
   async getProvider(id: string): Promise<SavedProvider> {
-    if (isOpenAIOfficialProviderId(id)) {
-      return OPENAI_OFFICIAL_PROVIDER
-    }
-
     const index = await this.readIndex()
     const provider = index.providers.find((p) => p.providerId === id)
     if (!provider) throw ApiError.notFound(`Provider not found: ${id}`)
     return provider
   }
 
+  private resolveProviderApiKey(
+    provider: SavedProvider,
+    authStrategy: ProviderAuthStrategy,
+  ): string {
+    const presetDefaultEnv = getProviderDefaultEnv(provider.providerId)
+    return provider.apiKey
+      || presetDefaultEnv.ANTHROPIC_AUTH_TOKEN
+      || presetDefaultEnv.ANTHROPIC_API_KEY
+      || (getProviderDefinition(provider.providerId)?.needsApiKey === false ? 'local' : '')
+      || (authStrategy === 'dual_dummy' ? 'dummy' : '')
+  }
+
   async addProvider(input: CreateProviderInput): Promise<SavedProvider> {
     const index = await this.readIndex()
     const definition = getProviderDefinition(input.providerId)
-    const modelRoles = resolveModelRoles(input)
+    const modelRoles = resolveCreateModelRoles(input, definition?.defaultModelRoles)
     if (!modelRoles.primary) {
       throw ApiError.badRequest('Missing primary model role')
     }
@@ -238,26 +312,64 @@ export class ProviderService {
     return updated
   }
 
+  async rescanProviders(): Promise<{ providers: SavedProvider[]; activeId: string | null }> {
+    const index = await this.readIndex()
+    let changed = false
+
+    for (let i = 0; i < index.providers.length; i += 1) {
+      const provider = index.providers[i]
+      const apiFormat = provider.apiFormat ?? 'anthropic'
+      const authStrategy = provider.authStrategy ?? getProviderAuthStrategy(provider.providerId)
+      const apiKey = this.resolveProviderApiKey(provider, authStrategy)
+      if (!provider.baseUrl || !apiKey) continue
+
+      const models = await this.scanProviderModels(
+        provider.baseUrl,
+        apiKey,
+        apiFormat,
+        authStrategy,
+        await loadNetworkSettings(),
+      )
+      if (models.length === 0) continue
+
+      const updated = applyDetectedModelsToProvider(provider, models)
+      index.providers[i] = updated
+      changed = true
+    }
+
+    if (changed) {
+      await this.writeIndex(index)
+      const active = index.activeId
+        ? index.providers.find((provider) => provider.providerId === index.activeId)
+        : null
+      if (active) await this.syncToSettings(active)
+    }
+
+    return { providers: index.providers, activeId: index.activeId }
+  }
+
   async deleteProvider(id: string): Promise<void> {
     const index = await this.readIndex()
     const idx = index.providers.findIndex((p) => p.providerId === id)
     if (idx === -1) throw ApiError.notFound(`Provider not found: ${id}`)
 
-    if (index.activeId === id) {
-      throw ApiError.conflict('Cannot delete the active provider. Switch to another provider first.')
-    }
+    const wasActive = index.activeId === id
 
     index.providers.splice(idx, 1)
+    if (wasActive) {
+      index.activeId = null
+    }
     await this.writeIndex(index)
+    if (wasActive) {
+      await this.clearManagedProviderEnv()
+    }
   }
 
   // --- Activation ---
 
   async activateProvider(id: string): Promise<void> {
     const index = await this.readIndex()
-    const provider = isOpenAIOfficialProviderId(id)
-      ? OPENAI_OFFICIAL_PROVIDER
-      : index.providers.find((p) => p.providerId === id)
+    const provider = index.providers.find((p) => p.providerId === id)
     if (!provider) throw ApiError.notFound(`Provider not found: ${id}`)
 
     index.activeId = id
@@ -336,27 +448,11 @@ export class ProviderService {
   // --- Auth status ---
   async checkAuthStatus(): Promise<{
     hasAuth: boolean
-    source: 'beya-provider' | 'openai-oauth' | 'env' | 'none'
+    source: 'beya-provider' | 'env' | 'none'
     activeProvider?: string
   }> {
     const index = await this.readIndex()
     if (index.activeId) {
-      if (isOpenAIOfficialProviderId(index.activeId)) {
-        const tokens = await beyaOpenAIOAuthService.ensureFreshTokens()
-        if (tokens?.accessToken && tokens.refreshToken) {
-          return {
-            hasAuth: true,
-            source: 'openai-oauth',
-            activeProvider: OPENAI_OFFICIAL_PROVIDER.displayName,
-          }
-        }
-        return {
-          hasAuth: false,
-          source: 'none',
-          activeProvider: OPENAI_OFFICIAL_PROVIDER.displayName,
-        }
-      }
-
       const provider = index.providers.find(p => p.providerId === index.activeId)
       if (provider) {
         const presetDefaultEnv = getProviderDefaultEnv(provider.providerId)
@@ -383,9 +479,6 @@ export class ProviderService {
     apiFormat: ApiFormat
   } | null> {
     if (providerId) {
-      if (isOpenAIOfficialProviderId(providerId)) {
-        return null
-      }
       const provider = await this.getProvider(providerId)
       return {
         baseUrl: normalizeProviderBaseUrl(provider.baseUrl, provider.apiFormat ?? 'anthropic'),
@@ -396,9 +489,6 @@ export class ProviderService {
 
     const index = await this.readIndex()
     if (!index.activeId) return null
-    if (isOpenAIOfficialProviderId(index.activeId)) {
-      return null
-    }
     const provider = await this.getProvider(index.activeId).catch(() => null)
     if (!provider) return null
     return {
@@ -427,23 +517,31 @@ export class ProviderService {
     const modelId = overrides?.modelId || provider.modelRoles.primary
     const apiFormat = overrides?.apiFormat ?? provider.apiFormat ?? 'anthropic'
     const authStrategy = overrides?.authStrategy ?? provider.authStrategy ?? getProviderAuthStrategy(provider.providerId)
-    const presetDefaultEnv = getProviderDefaultEnv(provider.providerId)
-    const apiKey = provider.apiKey
-      || presetDefaultEnv.ANTHROPIC_AUTH_TOKEN
-      || presetDefaultEnv.ANTHROPIC_API_KEY
-      || (getProviderDefinition(provider.providerId)?.needsApiKey === false ? 'local' : '')
-      || (authStrategy === 'dual_dummy' ? 'dummy' : '')
+    const apiKey = this.resolveProviderApiKey(provider, authStrategy)
 
     if (!baseUrl || !apiKey) {
       return { connectivity: { success: false, latencyMs: 0, error: 'Missing baseUrl or apiKey' } }
     }
-    return this.testProviderConfig({
+    const result = await this.testProviderConfig({
       baseUrl,
       apiKey,
       modelId,
       authStrategy,
       apiFormat,
+      scanModels: true,
     })
+    const usesSavedConnection = !overrides?.baseUrl && !overrides?.apiFormat && !overrides?.authStrategy
+    if (usesSavedConnection && isSuccessfulProviderTest(result) && result.availableModels?.length) {
+      const index = await this.readIndex()
+      const idx = index.providers.findIndex((entry) => entry.providerId === id)
+      if (idx !== -1) {
+        const updated = applyDetectedModelsToProvider(index.providers[idx], result.availableModels)
+        index.providers[idx] = updated
+        await this.writeIndex(index)
+        if (index.activeId === id) await this.syncToSettings(updated)
+      }
+    }
+    return result
   }
 
   async testProviderConfig(input: TestProviderInput): Promise<ProviderTestResult> {
@@ -463,14 +561,50 @@ export class ProviderService {
 
     // For native Anthropic format, no proxy pipeline to test
     if (format === 'anthropic') {
-      return { connectivity: step1 }
+      return {
+        connectivity: step1,
+        ...(input.scanModels && {
+          availableModels: await this.scanProviderModels(base, input.apiKey, format, authStrategy, networkSettings),
+        }),
+      }
     }
 
     // ── Step 2: Full proxy pipeline ──────────────────────────
     // Anthropic request → transform → upstream → transform back → validate
     const step2 = await this.testProxyPipeline(base, input.apiKey, input.modelId, format, networkSettings)
 
-    return { connectivity: step1, proxy: step2 }
+    return {
+      connectivity: step1,
+      proxy: step2,
+      ...(input.scanModels && step2.success && {
+        availableModels: await this.scanProviderModels(base, input.apiKey, format, authStrategy, networkSettings),
+      }),
+    }
+  }
+
+  private async scanProviderModels(
+    base: string,
+    apiKey: string,
+    format: ApiFormat,
+    authStrategy: ProviderAuthStrategy,
+    networkSettings: NetworkSettings,
+  ): Promise<ProviderDetectedModel[]> {
+    try {
+      const url = resolveProviderModelsUrl(base, format)
+      const proxyOptions = getProxyFetchOptions({ proxyUrl: getManualNetworkProxyUrl(networkSettings) })
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: buildModelListHeaders(apiKey, format, authStrategy),
+        signal: AbortSignal.timeout(networkSettings.aiRequestTimeoutMs),
+        ...proxyOptions,
+      })
+      if (!response.ok) return []
+
+      const body = await response.json().catch(() => null)
+      return parseProviderModelList(body)
+    } catch {
+      return []
+    }
   }
 
   /** Step 1: Direct upstream call to verify connectivity, auth, and model. */
@@ -624,6 +758,103 @@ function buildDirectTestRequest(
     },
     body: { model: modelId, max_tokens: 16, messages: [{ role: 'user', content: prompt }] },
   }
+}
+
+function resolveProviderModelsUrl(base: string, format: ApiFormat): string {
+  const upstream = resolveProviderUpstreamUrl(base, format)
+  try {
+    const url = new URL(upstream)
+    const path = url.pathname.replace(/\/+$/, '')
+    if (format === 'anthropic') {
+      url.pathname = path.replace(/\/messages$/i, '/models')
+    } else if (format === 'openai_chat') {
+      url.pathname = path.replace(/\/chat\/completions$/i, '/models')
+    } else {
+      url.pathname = path.replace(/\/responses$/i, '/models')
+    }
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    const normalized = normalizeProviderBaseUrl(base, format).replace(/\/+$/, '')
+    return `${normalized}/v1/models`
+  }
+}
+
+function buildModelListHeaders(
+  apiKey: string,
+  format: ApiFormat,
+  authStrategy: ProviderAuthStrategy,
+): Record<string, string> {
+  if (format === 'anthropic') {
+    return {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+      ...buildAnthropicAuthHeaders(apiKey, authStrategy),
+    }
+  }
+
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }
+}
+
+function parseProviderModelList(body: unknown): ProviderDetectedModel[] {
+  if (!body || typeof body !== 'object') return []
+  const record = body as Record<string, unknown>
+  const rawModels = Array.isArray(record.data)
+    ? record.data
+    : Array.isArray(record.models)
+      ? record.models
+      : []
+  const seen = new Set<string>()
+  const models: ProviderDetectedModel[] = []
+
+  for (const rawModel of rawModels) {
+    if (!rawModel || typeof rawModel !== 'object') continue
+    const model = rawModel as Record<string, unknown>
+    const id = stringField(model, ['id', 'slug', 'model', 'name'])
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+
+    const label = stringField(model, ['display_name', 'displayName', 'label', 'name'])
+    const contextWindow = numberField(model, [
+      'context_window',
+      'contextWindow',
+      'context_length',
+      'contextLength',
+      'max_context_length',
+      'maxContextLength',
+      'max_input_tokens',
+      'maxInputTokens',
+    ])
+
+    models.push({
+      id,
+      ...(label && label !== id && { label }),
+      ...(contextWindow !== undefined && { contextWindow }),
+    })
+  }
+
+  return models
+}
+
+function stringField(record: Record<string, unknown>, keys: string[]): string {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+  return ''
+}
+
+function numberField(record: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value)
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) return Math.round(parsed)
+    }
+  }
+  return undefined
 }
 
 function buildAnthropicAuthHeaders(apiKey: string, authStrategy: ProviderAuthStrategy): Record<string, string> {

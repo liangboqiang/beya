@@ -133,7 +133,7 @@ export async function execHttpHook(
   aborted?: boolean
 }> {
   // Enforce URL allowlist before any I/O. Follows allowedMcpServers semantics:
-  // undefined â†?no restriction; [] â†?block all; non-empty â†?must match a pattern.
+  // undefined â†’no restriction; [] â†’block all; non-empty â†’must match a pattern.
   const policy = getHttpHookPolicy()
   if (policy.allowedUrls !== undefined) {
     const matched = policy.allowedUrls.some(p => urlMatchesPattern(hook.url, p))
@@ -177,7 +177,7 @@ export async function execHttpHook(
 
     // Detect env var proxy (HTTP_PROXY / HTTPS_PROXY, respecting NO_PROXY).
     // When set, configureGlobalAgents() has already installed a request
-    // interceptor that sets httpsAgent to an HttpsProxyAgent â€?the proxy
+    // interceptor that sets httpsAgent to an HttpsProxyAgent â€”the proxy
     // handles DNS for the target. Skip the SSRF guard in that case, same
     // as we do for the sandbox proxy, so that we don't accidentally block
     // a corporate proxy sitting on a private IP (e.g. 10.0.0.1:3128).
@@ -210,7 +210,7 @@ export async function execHttpHook(
       proxy: sandboxProxy ?? false,
       // SSRF guard: validate resolved IPs, block private/link-local ranges
       // (but allow loopback for local dev). Skipped when any proxy is in
-      // use â€?the proxy performs DNS for the target, and applying the
+      // use â€”the proxy performs DNS for the target, and applying the
       // guard would instead validate the proxy's own IP, breaking
       // connections to corporate proxies on private networks.
       lookup: sandboxProxy || envProxyActive ? undefined : ssrfGuardedLookup,

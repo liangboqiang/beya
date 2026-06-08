@@ -5,7 +5,7 @@
  * and the env-less core (initEnvLessBridgeCore) can use the same ingress
  * parsing, control-request handling, and echo-dedup machinery.
  *
- * Everything here is pure �?no closure over bridge-specific state. All
+ * Everything here is pure —no closure over bridge-specific state. All
  * collaborators (transport, sessionId, UUID sets, callbacks) are passed
  * as params.
  */
@@ -31,7 +31,7 @@ import type { ReplBridgeTransport } from './replBridgeTransport.js'
 // ─── Type guards ─────────────────────────────────────────────────────────────
 
 /** Type predicate for parsed WebSocket messages. SDKMessage is a
- *  discriminated union on `type` �?validating the discriminant is
+ *  discriminated union on `type` —validating the discriminant is
  *  sufficient for the predicate; callers narrow further via the union. */
 export function isSDKMessage(value: unknown): value is SDKMessage {
   return (
@@ -75,7 +75,7 @@ export function isSDKControlRequest(
  * everything else (tool_result, progress, etc.) is internal REPL chatter.
  */
 export function isEligibleBridgeMessage(m: Message): boolean {
-  // Virtual messages (REPL inner calls) are display-only �?bridge/SDK
+  // Virtual messages (REPL inner calls) are display-only —bridge/SDK
   // consumers see the REPL tool_use/result which summarizes the work.
   if ((m.type === 'user' || m.type === 'assistant') && m.isVirtual) {
     return false
@@ -94,7 +94,7 @@ export function isEligibleBridgeMessage(m: Message): boolean {
  * notifications, channel messages), or pure display-tag content
  * (<ide_opened_file>, <session-start-hook>, etc.).
  *
- * Synthetic interrupts ([Request interrupted by user]) are NOT filtered here �? * isSyntheticMessage lives in messages.ts (heavy import, pulls command
+ * Synthetic interrupts ([Request interrupted by user]) are NOT filtered here — * isSyntheticMessage lives in messages.ts (heavy import, pulls command
  * registry). The initialMessages path in initReplBridge checks it; the
  * writeMessages path reaching an interrupt as the *first* message is
  * implausible (an interrupt implies a prior prompt already flowed through).
@@ -125,7 +125,7 @@ export function extractTitleText(m: Message): string | undefined {
 /**
  * Parse an ingress WebSocket message and route it to the appropriate handler.
  * Ignores messages whose UUID is in recentPostedUUIDs (echoes of what we sent)
- * or in recentInboundUUIDs (re-deliveries we've already forwarded �?e.g.
+ * or in recentInboundUUIDs (re-deliveries we've already forwarded —e.g.
  * server replayed history after a transport swap lost the seq-num cursor).
  */
 export function handleIngressMessage(
@@ -139,7 +139,7 @@ export function handleIngressMessage(
   try {
     const parsed: unknown = normalizeControlMessageKeys(jsonParse(data))
 
-    // control_response is not an SDKMessage �?check before the type guard
+    // control_response is not an SDKMessage —check before the type guard
     if (isSDKControlResponse(parsed)) {
       logForDebugging('[bridge:repl] Ingress message type=control_response')
       onPermissionResponse?.(parsed)
@@ -192,7 +192,7 @@ export function handleIngressMessage(
       logEvent('tengu_bridge_message_received', {
         is_repl: true,
       })
-      // Fire-and-forget �?handler may be async (attachment resolution).
+      // Fire-and-forget —handler may be async (attachment resolution).
       void onInboundMessage?.(parsed)
     } else {
       logForDebugging(
@@ -214,7 +214,7 @@ export type ServerControlRequestHandlers = {
   /**
    * When true, all mutable requests (interrupt, set_model, set_permission_mode,
    * set_max_thinking_tokens) reply with an error instead of false-success.
-   * initialize still replies success �?the server kills the connection otherwise.
+   * initialize still replies success —the server kills the connection otherwise.
    * Used by the outbound-only bridge mode and the SDK's /bridge subpath so claude.ai sees a
    * proper error instead of "action succeeded but nothing happened locally".
    */
@@ -263,7 +263,7 @@ export function handleServerControlRequest(
 
   // Outbound-only: reply error for mutable requests so claude.ai doesn't show
   // false success. initialize must still succeed (server kills the connection
-  // if it doesn't �?see comment above).
+  // if it doesn't —see comment above).
   if (outboundOnly && request.request.subtype !== 'initialize') {
     response = {
       type: 'control_response',
@@ -283,7 +283,7 @@ export function handleServerControlRequest(
 
   switch (request.request.subtype) {
     case 'initialize':
-      // Respond with minimal capabilities �?the REPL handles
+      // Respond with minimal capabilities —the REPL handles
       // commands, models, and account info itself.
       response = {
         type: 'control_response',
@@ -328,7 +328,7 @@ export function handleServerControlRequest(
       // The callback returns a policy verdict so we can send an error
       // control_response without importing isAutoModeGateEnabled /
       // isBypassPermissionsModeDisabled here (bootstrap-isolation). If no
-      // callback is registered (daemon context, which doesn't wire this �?      // see daemonBridge.ts), return an error verdict rather than a silent
+      // callback is registered (daemon context, which doesn't wire this —      // see daemonBridge.ts), return an error verdict rather than a silent
       // false-success: the mode is never actually applied in that context,
       // so success would lie to the client.
       const verdict = onSetPermissionMode?.(request.request.mode) ?? {
@@ -369,7 +369,7 @@ export function handleServerControlRequest(
       break
 
     default:
-      // Unknown subtype �?respond with error so the server doesn't
+      // Unknown subtype —respond with error so the server doesn't
       // hang waiting for a reply that never comes.
       response = {
         type: 'control_response',
@@ -421,7 +421,7 @@ export function makeResultMessage(sessionId: string): SDKResultSuccess {
  *
  * Messages are added in chronological order, so evicted entries are always
  * the oldest. The caller relies on external ordering (the hook's
- * lastWrittenIndexRef) as the primary dedup �?this set is a secondary
+ * lastWrittenIndexRef) as the primary dedup —this set is a secondary
  * safety net for echo filtering and race-condition dedup.
  */
 export class BoundedUUIDSet {

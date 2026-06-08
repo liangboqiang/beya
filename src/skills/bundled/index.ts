@@ -7,6 +7,7 @@ import { registerDebugSkill } from './debug.js'
 import { registerKeybindingsSkill } from './keybindings.js'
 import { registerLoopSkill } from './loop.js'
 import { registerLoremIpsumSkill } from './loremIpsum.js'
+import { registerMcDesignLocalSkill } from './mcDesignLocal.js'
 import { registerRememberSkill } from './remember.js'
 import { registerScheduleRemoteAgentsSkill } from './scheduleRemoteAgents.js'
 import { registerSimplifySkill } from './simplify.js'
@@ -33,6 +34,7 @@ export function initBundledSkills(): void {
   registerSimplifySkill()
   registerBatchSkill()
   registerStuckSkill()
+  registerMcDesignLocalSkill()
 
   if (feature('KAIROS') || feature('KAIROS_DREAM')) {
     void import('./dream.js').then(module => {

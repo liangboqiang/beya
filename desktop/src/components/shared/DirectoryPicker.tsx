@@ -5,6 +5,8 @@ import { filesystemApi } from '../../api/filesystem'
 import { useTranslation } from '../../i18n'
 import { useMobileViewport } from '../../hooks/useMobileViewport'
 import { MobileBottomSheet } from './MobileBottomSheet'
+import { isTauriRuntime } from '../../lib/desktopRuntime'
+import { selectDirectory } from '../../lib/directorySelection'
 
 type Props = {
   value: string
@@ -23,10 +25,6 @@ const DESKTOP_WORKTREE_MARKER = '/.beya/worktrees/'
 const DROPDOWN_WIDTH = 400
 const DROPDOWN_VIEWPORT_MARGIN = 12
 const DROPDOWN_HEIGHT = 380 // approximate max height
-
-function isTauriRuntime() {
-  return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
-}
 
 function projectNameFromPath(filePath: string) {
   const displayRoot = filePath.includes(DESKTOP_WORKTREE_MARKER)
@@ -132,25 +130,25 @@ export function DirectoryPicker({ value, onChange, variant = 'chip', isGitProjec
   }
 
   const handleChooseFolder = async () => {
-    if (isTauriRuntime()) {
-      // Desktop: native OS folder dialog
-      setIsOpen(false)
-      try {
-        const { open } = await import('@tauri-apps/plugin-dialog')
-        const selected = await open({
-          directory: true,
-          multiple: false,
-          title: t('dirPicker.chooseProjectFolder'),
-        })
-        if (selected) onChange(selected)
-      } catch (err) {
-        console.error('[DirectoryPicker] Failed to open folder dialog:', err)
-      }
-    } else {
-      // Web browser: directory tree via backend API
-      setMode('browse')
-      loadBrowseDir(value || undefined)
+    setIsOpen(false)
+    const result = await selectDirectory({
+      title: t('dirPicker.chooseProjectFolder'),
+      initialPath: value || undefined,
+    })
+
+    if (result.kind === 'selected') {
+      onChange(result.path)
+      cachedProjects = null
+      return
     }
+
+    if (result.kind === 'cancelled') return
+
+    // Remote H5 or a headless backend cannot show an OS dialog. Keep the
+    // existing in-app browser as the last-resort path picker.
+    setIsOpen(true)
+    setMode('browse')
+    void loadBrowseDir(value || undefined)
   }
 
   // Find selected project info

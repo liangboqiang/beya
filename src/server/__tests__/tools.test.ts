@@ -128,6 +128,36 @@ describe('Tools API', () => {
       native: false,
       plugin: true,
     }))
+    expect(body.tools).toContainEqual(expect.objectContaining({
+      name: 'mc_design_query_tasks',
+      native: false,
+      plugin: true,
+      executable: true,
+    }))
+    expect(body.tools).toContainEqual(expect.objectContaining({
+      name: 'mc_design_find_nx',
+      native: false,
+      plugin: true,
+      executable: true,
+    }))
+    expect(body.tools).toContainEqual(expect.objectContaining({
+      name: 'mc_design_prepare_nx_plugin',
+      native: false,
+      plugin: true,
+      executable: true,
+    }))
+    expect(body.tools).toContainEqual(expect.objectContaining({
+      name: 'mc_design_list_local_assets',
+      native: false,
+      plugin: true,
+      executable: true,
+    }))
+    expect(body.tools).toContainEqual(expect.objectContaining({
+      name: 'mc_design_run_local_chain_check',
+      native: false,
+      plugin: true,
+      executable: true,
+    }))
   })
 
   it('executes workspace skills through the same native Skill tool surface', async () => {

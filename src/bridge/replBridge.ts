@@ -106,7 +106,7 @@ export type BridgeCoreParams = {
   /**
    * POST /v1/sessions. Injected because `createSession.ts` lazy-loads
    * `auth.ts`/`model.ts`/`oauth/client.ts` and `bun --outfile` inlines
-   * dynamic imports â€?the lazy-load doesn't help, the whole REPL tree ends
+   * dynamic imports â€”the lazy-load doesn't help, the whole REPL tree ends
    * up in the Agent SDK bundle.
    *
    * REPL wrapper passes `createBridgeSession` from `createSession.ts`.
@@ -135,14 +135,14 @@ export type BridgeCoreParams = {
    */
   getCurrentTitle?: () => string
   /**
-   * Converts internal Message[] â†?SDKMessage[] for writeMessages() and the
+   * Converts internal Message[] â†’SDKMessage[] for writeMessages() and the
    * initial-flush/drain paths. REPL wrapper passes the real toSDKMessages
    * from utils/messages/mappers.ts. Daemon callers that only use
-   * writeSdkMessages() and pass no initialMessages can omit this â€?those
+   * writeSdkMessages() and pass no initialMessages can omit this â€”those
    * code paths are unreachable.
    *
    * Injected rather than imported because mappers.ts transitively pulls in
-   * src/commands.ts via messages.ts â†?api.ts â†?prompts.ts, dragging the
+   * src/commands.ts via messages.ts â†’api.ts â†’prompts.ts, dragging the
    * entire command registry + React tree into the Agent SDK bundle.
    */
   toSDKMessages?: (messages: Message[]) => SDKMessage[]
@@ -150,7 +150,7 @@ export type BridgeCoreParams = {
    * OAuth 401 refresh handler passed to createBridgeApiClient. REPL wrapper
    * passes handleOAuth401Error; daemon passes its AuthManager's handler.
    * Injected because utils/auth.ts transitively pulls in the command
-   * registry via config.ts â†?file.ts â†?permissions/filesystem.ts â†?   * sessionStorage.ts â†?commands.ts.
+   * registry via config.ts â†’file.ts â†’permissions/filesystem.ts â†’   * sessionStorage.ts â†’commands.ts.
    */
   onAuth401?: (staleAccessToken: string) => Promise<boolean>
   /**
@@ -169,7 +169,7 @@ export type BridgeCoreParams = {
    * default.
    */
   initialHistoryCap?: number
-  // Same REPL-flush machinery as InitBridgeOptions â€?daemon omits these.
+  // Same REPL-flush machinery as InitBridgeOptions â€”daemon omits these.
   initialMessages?: Message[]
   previouslyFlushedUUIDs?: Set<string>
   onInboundMessage?: (msg: SDKMessage) => void
@@ -182,7 +182,7 @@ export type BridgeCoreParams = {
    * without importing the policy checks itself (bootstrap-isolation constraint).
    * The callback must guard `auto` (isAutoModeGateEnabled) and
    * `bypassPermissions` (isBypassPermissionsModeDisabled AND
-   * isBypassPermissionsModeAvailable) BEFORE calling transitionPermissionMode â€?   * that function's internal auto-gate check is a defensive throw, not a
+   * isBypassPermissionsModeAvailable) BEFORE calling transitionPermissionMode â€”   * that function's internal auto-gate check is a defensive throw, not a
    * graceful guard, and its side-effect order is setAutoModeActive(true) then
    * throw, which corrupts the 3-way invariant documented in src/BEYA.md if
    * the callback lets the throw escape here.
@@ -209,11 +209,11 @@ export type BridgeCoreParams = {
   /** See InitBridgeOptions.perpetual. */
   perpetual?: boolean
   /**
-   * Seeds lastTransportSequenceNum â€?the SSE event-stream high-water mark
+   * Seeds lastTransportSequenceNum â€”the SSE event-stream high-water mark
    * that's carried across transport swaps within one process. Daemon callers
    * pass the value they persisted at shutdown so the FIRST SSE connect of a
    * fresh process sends from_sequence_num and the server doesn't replay full
-   * history. REPL callers omit (fresh session each run â†?0 is correct).
+   * history. REPL callers omit (fresh session each run â†’0 is correct).
    */
   initialSSESequenceNum?: number
 }
@@ -235,7 +235,7 @@ export type BridgeCoreHandle = ReplBridgeHandle & {
 /**
  * Poll error recovery constants. When the work poll starts failing (e.g.
  * server 500s), we use exponential backoff and give up after this timeout.
- * This is deliberately long â€?the server is the authority on when a session
+ * This is deliberately long â€”the server is the authority on when a session
  * is truly dead. As long as the server accepts our poll, we keep waiting
  * for it to re-dispatch the work item.
  */
@@ -247,8 +247,8 @@ const POLL_ERROR_GIVE_UP_MS = 15 * 60 * 1000
 let initSequence = 0
 
 /**
- * Bootstrap-free core: env registration â†?session creation â†?poll loop â†? * ingress WS â†?teardown. Reads nothing from bootstrap/state or
- * sessionStorage â€?all context comes from params. Caller (initReplBridge
+ * Bootstrap-free core: env registration â†’session creation â†’poll loop â†’ * ingress WS â†’teardown. Reads nothing from bootstrap/state or
+ * sessionStorage â€”all context comes from params. Caller (initReplBridge
  * below, or a daemon in PR 4) has already passed entitlement gates and
  * gathered git/auth/title.
  *
@@ -272,7 +272,7 @@ export async function initBridgeCore(
     getCurrentTitle = () => title,
     toSDKMessages = () => {
       throw new Error(
-        'BridgeCoreParams.toSDKMessages not provided. Pass it if you use writeMessages() or initialMessages â€?daemon callers that only use writeSdkMessages() never hit this path.',
+        'BridgeCoreParams.toSDKMessages not provided. Pass it if you use writeMessages() or initialMessages â€”daemon callers that only use writeSdkMessages() never hit this path.',
       )
     },
     onAuth401,
@@ -303,7 +303,7 @@ export async function initBridgeCore(
   // state. The pointer is written unconditionally after session create
   // (crash-recovery for all sessions); perpetual mode just skips the
   // teardown clear so it survives clean exits too. Only reuse 'repl'
-  // pointers â€?a crashed standalone bridge (`claude remote-control`)
+  // pointers â€”a crashed standalone bridge (`claude remote-control`)
   // writes source:'standalone' with a different workerType.
   const rawPrior = perpetual ? await readBridgePointer(dir) : null
   const prior = rawPrior?.source === 'repl' ? rawPrior : null
@@ -354,7 +354,7 @@ export async function initBridgeCore(
       'registration_failed',
       `[bridge:repl] Environment registration failed: ${errorMessage(err)}`,
     )
-    // Stale pointer may be the cause (expired/deleted env) â€?clear it so
+    // Stale pointer may be the cause (expired/deleted env) â€”clear it so
     // the next start doesn't retry the same dead ID.
     if (prior) {
       await clearBridgePointer(dir)
@@ -370,7 +370,7 @@ export async function initBridgeCore(
   /**
    * Reconnect-in-place: if the just-registered environmentId matches what
    * was requested, call reconnectSession to force-stop stale workers and
-   * re-queue the session. Used at init (perpetual mode â€?env is alive but
+   * re-queue the session. Used at init (perpetual mode â€”env is alive but
    * idle after clean teardown) and in doReconnect() Strategy 1 (env lost
    * then resurrected). Returns true on success; caller falls back to
    * fresh session creation on false.
@@ -381,17 +381,17 @@ export async function initBridgeCore(
   ): Promise<boolean> {
     if (environmentId !== requestedEnvId) {
       logForDebugging(
-        `[bridge:repl] Env mismatch (requested ${requestedEnvId}, got ${environmentId}) â€?cannot reconnect in place`,
+        `[bridge:repl] Env mismatch (requested ${requestedEnvId}, got ${environmentId}) â€”cannot reconnect in place`,
       )
       return false
     }
     // The pointer stores what createBridgeSession returned (session_*,
     // compat/convert.go:41). /bridge/reconnect is an environments-layer
-    // endpoint â€?once the server's ccr_v2_compat_enabled gate is on it
+    // endpoint â€”once the server's ccr_v2_compat_enabled gate is on it
     // looks sessions up by their infra tag (cse_*) and returns "Session
     // not found" for the session_* costume. We don't know the gate state
     // pre-poll, so try both; the re-tag is a no-op if the ID is already
-    // cse_* (doReconnect Strategy 1 path â€?currentSessionId never mutates
+    // cse_* (doReconnect Strategy 1 path â€”currentSessionId never mutates
     // to cse_* but future-proof the check).
     const infraId = toInfraSessionId(sessionId)
     const candidates =
@@ -410,7 +410,7 @@ export async function initBridgeCore(
       }
     }
     logForDebugging(
-      '[bridge:repl] reconnectSession exhausted â€?falling through to fresh session',
+      '[bridge:repl] reconnectSession exhausted â€”falling through to fresh session',
     )
     return false
   }
@@ -431,7 +431,7 @@ export async function initBridgeCore(
   // are published before the CCR UI subscribes, so they get lost. Instead,
   // initial messages are flushed via the ingress WebSocket once it connects.
 
-  // Mutable session ID â€?updated when the environment+session pair is
+  // Mutable session ID â€”updated when the environment+session pair is
   // re-created after a connection loss.
   let currentSessionId: string
 
@@ -475,7 +475,7 @@ export async function initBridgeCore(
 
   // Crash-recovery pointer: written now so a kill -9 at any point after
   // this leaves a recoverable trail. Cleared in teardown (non-perpetual)
-  // or left alone (perpetual mode â€?pointer survives clean exit too).
+  // or left alone (perpetual mode â€”pointer survives clean exit too).
   // `claude remote-control --continue` from the same directory will detect
   // it and offer to resume.
   await writeBridgePointer(dir, {
@@ -500,8 +500,8 @@ export async function initBridgeCore(
 
   // Bounded ring buffer of UUIDs for messages we've already sent to the
   // server via the ingress WebSocket. Serves two purposes:
-  //  1. Echo filtering â€?ignore our own messages bouncing back on the WS.
-  //  2. Secondary dedup in writeMessages â€?catch race conditions where
+  //  1. Echo filtering â€”ignore our own messages bouncing back on the WS.
+  //  2. Secondary dedup in writeMessages â€”catch race conditions where
   //     the hook's index-based tracking isn't sufficient.
   //
   // Seeded with initialMessageUUIDs so that when the server echoes back
@@ -523,7 +523,7 @@ export async function initBridgeCore(
   // seq-num carryover below is the primary fix; this is the safety net.
   const recentInboundUUIDs = new BoundedUUIDSet(2000)
 
-  // 7. Start poll loop for work items â€?this is what makes the session
+  // 7. Start poll loop for work items â€”this is what makes the session
   // "live" on claude.ai. When a user types there, the backend dispatches
   // a work item to our environment. We poll for it, get the ingress token,
   // and connect the ingress WebSocket.
@@ -541,24 +541,24 @@ export async function initBridgeCore(
   // Bumped on every onWorkReceived. Captured in createV2ReplTransport's .then()
   // closure to detect stale resolutions: if two calls race while transport is
   // null, both registerWorker() (bumping server epoch), and whichever resolves
-  // SECOND is the correct one â€?but the transport !== null check gets this
+  // SECOND is the correct one â€”but the transport !== null check gets this
   // backwards (first-to-resolve installs, second discards). The generation
   // counter catches it independent of transport state.
   let v2Generation = 0
   // SSE sequence-number high-water mark carried across transport swaps.
   // Without this, each new SSETransport starts at 0, sends no
   // from_sequence_num / Last-Event-ID on its first connect, and the server
-  // replays the entire session event history â€?every prompt ever sent
+  // replays the entire session event history â€”every prompt ever sent
   // re-delivered as fresh inbound messages on every onWorkReceived.
   //
   // Seed only when we actually reconnected the prior session. If
-  // `reusedPriorSession` is false we fell through to `createSession()` â€?  // the caller's persisted seq-num belongs to a dead session and applying
+  // `reusedPriorSession` is false we fell through to `createSession()` â€”  // the caller's persisted seq-num belongs to a dead session and applying
   // it to the fresh stream (starting at 1) silently drops events. Same
   // hazard as doReconnect Strategy 2; same fix as the reset there.
   let lastTransportSequenceNum = reusedPriorSession ? initialSSESequenceNum : 0
   // Track the current work ID so teardown can call stopWork
   let currentWorkId: string | null = null
-  // Session ingress JWT for the current work item â€?used for heartbeat auth.
+  // Session ingress JWT for the current work item â€”used for heartbeat auth.
   let currentIngressToken: string | null = null
   // Signal to wake the at-capacity sleep early when the transport is lost,
   // so the poll loop immediately switches back to fast polling for new work.
@@ -569,9 +569,9 @@ export async function initBridgeCore(
   // races where new messages arrive at the server interleaved with history.
   const flushGate = new FlushGate<Message>()
 
-  // Latch for onUserMessage â€?flips true when the callback returns true
+  // Latch for onUserMessage â€”flips true when the callback returns true
   // (policy says "done deriving"). If no callback, skip scanning entirely
-  // (daemon path â€?no title derivation needed).
+  // (daemon path â€”no title derivation needed).
   let userMessageCallbackDone = !onUserMessage
 
   // Shared counter for environment re-creations, used by both
@@ -581,11 +581,11 @@ export async function initBridgeCore(
   let reconnectPromise: Promise<boolean> | null = null
 
   /**
-   * Recover from onEnvironmentLost (poll returned 404 â€?env was reaped
+   * Recover from onEnvironmentLost (poll returned 404 â€”env was reaped
    * server-side). Tries two strategies in order:
    *
    *   1. Reconnect-in-place: idempotent re-register with reuseEnvironmentId
-   *      â†?if the backend returns the same env ID, call reconnectSession()
+   *      â†’if the backend returns the same env ID, call reconnectSession()
    *      to re-queue the existing session. currentSessionId stays the same;
    *      the URL on the user's phone stays valid; previouslyFlushedUUIDs is
    *      preserved so history isn't re-sent.
@@ -612,7 +612,7 @@ export async function initBridgeCore(
 
   async function doReconnect(): Promise<boolean> {
     environmentRecreations++
-    // Invalidate any in-flight v2 handshake â€?the environment is being
+    // Invalidate any in-flight v2 handshake â€”the environment is being
     // recreated, so a stale transport arriving post-reconnect would be
     // pointed at a dead session.
     v2Generation++
@@ -627,7 +627,7 @@ export async function initBridgeCore(
       return false
     }
 
-    // Close the stale transport. Capture seq BEFORE close â€?if Strategy 1
+    // Close the stale transport. Capture seq BEFORE close â€”if Strategy 1
     // (tryReconnectInPlace) succeeds we keep the SAME session, and the
     // next transport must resume where this one left off, not replay from
     // the last transport-swap checkpoint.
@@ -639,14 +639,14 @@ export async function initBridgeCore(
       transport.close()
       transport = null
     }
-    // Transport is gone â€?wake the poll loop out of its at-capacity
+    // Transport is gone â€”wake the poll loop out of its at-capacity
     // heartbeat sleep so it can fast-poll for re-dispatched work.
     wakePollLoop()
     // Reset flush gate so writeMessages() hits the !transport guard
     // instead of silently queuing into a dead buffer.
     flushGate.drop()
 
-    // Release the current work item (force=false â€?we may want the session
+    // Release the current work item (force=false â€”we may want the session
     // back). Best-effort: the env is probably gone, so this likely 404s.
     if (currentWorkId) {
       const workIdBeingCleared = currentWorkId
@@ -654,15 +654,15 @@ export async function initBridgeCore(
         .stopWork(environmentId, workIdBeingCleared, false)
         .catch(() => {})
       // When doReconnect runs concurrently with the poll loop (ws_closed
-      // handler case â€?void-called, unlike the awaited onEnvironmentLost
+      // handler case â€”void-called, unlike the awaited onEnvironmentLost
       // path), onWorkReceived can fire during the stopWork await and set
       // a fresh currentWorkId. If it did, the poll loop has already
-      // recovered on its own â€?defer to it rather than proceeding to
+      // recovered on its own â€”defer to it rather than proceeding to
       // archiveSession, which would destroy the session its new
       // transport is connected to.
       if (currentWorkId !== workIdBeingCleared) {
         logForDebugging(
-          '[bridge:repl] Poll loop recovered during stopWork await â€?deferring to it',
+          '[bridge:repl] Poll loop recovered during stopWork await â€”deferring to it',
         )
         environmentRecreations = 0
         return true
@@ -694,7 +694,7 @@ export async function initBridgeCore(
       )
       return false
     }
-    // Clear before any await â€?a stale value would poison the next fresh
+    // Clear before any await â€”a stale value would poison the next fresh
     // registration if doReconnect runs again.
     bridgeConfig.reuseEnvironmentId = undefined
 
@@ -716,7 +716,7 @@ export async function initBridgeCore(
     // tryReconnectInPlace/archiveSession kill it server-side.
     if (transport !== null) {
       logForDebugging(
-        '[bridge:repl] Poll loop recovered during registerBridgeEnvironment await â€?deferring to it',
+        '[bridge:repl] Poll loop recovered during registerBridgeEnvironment await â€”deferring to it',
       )
       environmentRecreations = 0
       return true
@@ -730,15 +730,15 @@ export async function initBridgeCore(
       environmentRecreations = 0
       return true
     }
-    // Env differs â†?TTL-expired/reaped; or reconnect failed.
-    // Don't deregister â€?we have a fresh secret for this env either way.
+    // Env differs â†’TTL-expired/reaped; or reconnect failed.
+    // Don't deregister â€”we have a fresh secret for this env either way.
     if (environmentId !== requestedEnvId) {
       logEvent('tengu_bridge_repl_env_expired_fresh_session', {})
     }
 
     // Strategy 2: fresh session on the now-registered environment.
-    // Archive the old session first â€?it's orphaned (bound to a dead env,
-    // or reconnectSession rejected it). Don't deregister the env â€?we just
+    // Archive the old session first â€”it's orphaned (bound to a dead env,
+    // or reconnectSession rejected it). Don't deregister the env â€”we just
     // got a fresh secret for it and are about to use it.
     await archiveSession(currentSessionId)
 
@@ -783,19 +783,19 @@ export async function initBridgeCore(
 
     currentSessionId = newSessionId
     // Re-publish to the PID file so peer dedup (peerRegistry.ts) picks up the
-    // new ID â€?setReplBridgeHandle only fires at init/teardown, not reconnect.
+    // new ID â€”setReplBridgeHandle only fires at init/teardown, not reconnect.
     void updateSessionBridgeId(toCompatSessionId(newSessionId)).catch(() => {})
     // Reset per-session transport state IMMEDIATELY after the session swap,
     // before any await. If this runs after `await writeBridgePointer` below,
     // there's a window where handle.bridgeSessionId already returns session B
-    // but getSSESequenceNum() still returns session A's seq â€?a daemon
+    // but getSSESequenceNum() still returns session A's seq â€”a daemon
     // persistState() in that window writes {bridgeSessionId: B, seq: OLD_A},
     // which PASSES the session-ID validation check and defeats it entirely.
     //
-    // The SSE seq-num is scoped to the session's event stream â€?carrying it
+    // The SSE seq-num is scoped to the session's event stream â€”carrying it
     // over leaves the transport's lastSequenceNum stuck high (seq only
     // advances when received > last), and its next internal reconnect would
-    // send from_sequence_num=OLD_SEQ against a stream starting at 1 â†?all
+    // send from_sequence_num=OLD_SEQ against a stream starting at 1 â†’all
     // events in the gap silently dropped. Inbound UUID dedup is also
     // session-scoped.
     lastTransportSequenceNum = 0
@@ -805,13 +805,13 @@ export async function initBridgeCore(
     // session ID (PATCH lost) and the new session got `currentTitle` captured
     // BEFORE they typed. Reset so the next prompt can re-derive. Self-
     // correcting: if the caller's policy is already done (explicit title or
-    // count â‰?3), it returns true on the first post-reset call and re-latches.
+    // count â‰¥3), it returns true on the first post-reset call and re-latches.
     userMessageCallbackDone = !onUserMessage
     logForDebugging(`[bridge:repl] Re-created session: ${currentSessionId}`)
 
     // Rewrite the crash-recovery pointer with the new IDs so a crash after
     // this point resumes the right session. (The reconnect-in-place path
-    // above doesn't touch the pointer â€?same session, same env.)
+    // above doesn't touch the pointer â€”same session, same env.)
     await writeBridgePointer(dir, {
       sessionId: currentSessionId,
       environmentId,
@@ -824,7 +824,7 @@ export async function initBridgeCore(
 
 
     // Reset the counter so independent reconnections hours apart don't
-    // exhaust the limit â€?it guards against rapid consecutive failures,
+    // exhaust the limit â€”it guards against rapid consecutive failures,
     // not lifetime total.
     environmentRecreations = 0
 
@@ -833,7 +833,7 @@ export async function initBridgeCore(
 
   // Helper: get the current OAuth access token for session ingress auth.
   // Unlike the JWT path, OAuth tokens are refreshed by the standard OAuth
-  // flow â€?no proactive scheduler needed.
+  // flow â€”no proactive scheduler needed.
   function getOAuthToken(): string | undefined {
     return getAccessToken()
   }
@@ -864,7 +864,7 @@ export async function initBridgeCore(
     void transport.writeBatch(events)
   }
 
-  // Teardown reference â€?set after definition below. All callers are async
+  // Teardown reference â€”set after definition below. All callers are async
   // callbacks that run after assignment, so the reference is always valid.
   let doTeardownImpl: (() => Promise<void>) | null = null
   function triggerTeardown(): void {
@@ -889,7 +889,7 @@ export async function initBridgeCore(
     })
     // Capture SSE seq high-water mark before nulling. When called from
     // setOnClose the guard guarantees transport !== null; when fired from
-    // /bridge-kick it may already be null (e.g. fired twice) â€?skip.
+    // /bridge-kick it may already be null (e.g. fired twice) â€”skip.
     if (transport) {
       const closedSeq = transport.getLastSequenceNum()
       if (closedSeq > lastTransportSequenceNum) {
@@ -897,7 +897,7 @@ export async function initBridgeCore(
       }
       transport = null
     }
-    // Transport is gone â€?wake the poll loop out of its at-capacity
+    // Transport is gone â€”wake the poll loop out of its at-capacity
     // heartbeat sleep so it's fast-polling by the time the reconnect
     // below completes and the server re-queues work.
     wakePollLoop()
@@ -905,7 +905,7 @@ export async function initBridgeCore(
     // (with a warning log) instead of silently queuing into a buffer
     // that will never be drained. Unlike onWorkReceived (which
     // preserves pending messages for the new transport), onClose is
-    // a permanent close â€?no new transport will drain these.
+    // a permanent close â€”no new transport will drain these.
     const dropped = flushGate.drop()
     if (dropped > 0) {
       logForDebugging(
@@ -915,7 +915,7 @@ export async function initBridgeCore(
     }
 
     if (closeCode === 1000) {
-      // Clean close â€?session ended normally. Tear down the bridge.
+      // Clean close â€”session ended normally. Tear down the bridge.
       onStateChange?.('failed', 'session ended')
       pollController.abort()
       triggerTeardown()
@@ -947,11 +947,11 @@ export async function initBridgeCore(
       // doReconnect returns false (never throws) on genuine failure.
       // The dangerous case: registerBridgeEnvironment succeeded (so
       // environmentId now points at a fresh valid env) but
-      // createSession failed â€?poll loop would poll a sessionless
+      // createSession failed â€”poll loop would poll a sessionless
       // env getting null work with no errors, never hitting any
       // give-up path. Tear down explicitly.
       logForDebugging(
-        '[bridge:repl] reconnectEnvironmentWithSession resolved false â€?tearing down',
+        '[bridge:repl] reconnectEnvironmentWithSession resolved false â€”tearing down',
       )
       logEvent('tengu_bridge_repl_reconnect_failed', {
         close_code: closeCode,
@@ -961,14 +961,14 @@ export async function initBridgeCore(
     })
   }
 
-  // Ant-only: SIGUSR2 â†?force doReconnect() for manual testing. Skips the
-  // ~30s poll wait â€?fire-and-observe in the debug log immediately.
+  // Ant-only: SIGUSR2 â†’force doReconnect() for manual testing. Skips the
+  // ~30s poll wait â€”fire-and-observe in the debug log immediately.
   // Windows has no USR signals; `process.on` would throw there.
   let sigusr2Handler: (() => void) | undefined
   if (process.env.USER_TYPE === 'ant' && process.platform !== 'win32') {
     sigusr2Handler = () => {
       logForDebugging(
-        '[bridge:repl] SIGUSR2 received â€?forcing doReconnect() for testing',
+        '[bridge:repl] SIGUSR2 received â€”forcing doReconnect() for testing',
       )
       void reconnectEnvironmentWithSession()
     }
@@ -977,7 +977,7 @@ export async function initBridgeCore(
 
   // Ant-only: /bridge-kick fault injection. handleTransportPermanentClose
   // is defined below and assigned into this slot so the slash command can
-  // invoke it directly â€?the real setOnClose callback is buried inside
+  // invoke it directly â€”the real setOnClose callback is buried inside
   // wireTransport which is itself inside onWorkReceived.
   let debugFireClose: ((code: number) => void) | null = null
   if (process.env.USER_TYPE === 'ant') {
@@ -987,11 +987,11 @@ export async function initBridgeCore(
           logForDebugging('[bridge:debug] fireClose: no transport wired yet')
           return
         }
-        logForDebugging(`[bridge:debug] fireClose(${code}) â€?injecting`)
+        logForDebugging(`[bridge:debug] fireClose(${code}) â€”injecting`)
         debugFireClose(code)
       },
       forceReconnect: () => {
-        logForDebugging('[bridge:debug] forceReconnect â€?injecting')
+        logForDebugging('[bridge:debug] forceReconnect â€”injecting')
         void reconnectEnvironmentWithSession()
       },
       injectFault: injectBridgeFault,
@@ -1009,7 +1009,7 @@ export async function initBridgeCore(
     onStateChange,
     getWsState: () => transport?.getStateLabel() ?? 'null',
     // REPL bridge is single-session: having any transport == at capacity.
-    // No need to check isConnectedStatus() â€?even while the transport is
+    // No need to check isConnectedStatus() â€”even while the transport is
     // auto-reconnecting internally (up to 10 min), poll is heartbeat-only.
     isAtCapacity: () => transport !== null,
     capacitySignal,
@@ -1024,15 +1024,15 @@ export async function initBridgeCore(
         sessionToken: currentIngressToken,
       }
     },
-    // Work-item JWT expired (or work gone). The transport is useless â€?    // SSE reconnects and CCR writes use the same stale token. Without
+    // Work-item JWT expired (or work gone). The transport is useless â€”    // SSE reconnects and CCR writes use the same stale token. Without
     // this callback the poll loop would do a 10-min at-capacity backoff,
     // during which the work lease (300s TTL) expires and the server stops
-    // forwarding prompts â†?~25-min dead window observed in daemon logs.
+    // forwarding prompts â†’~25-min dead window observed in daemon logs.
     // Kill the transport + work state so isAtCapacity()=false; the loop
     // fast-polls and picks up the server's re-dispatched work in seconds.
     onHeartbeatFatal: (err: BridgeFatalError) => {
       logForDebugging(
-        `[bridge:repl] heartbeatWork fatal (status=${err.status}) â€?tearing down work item for fast re-dispatch`,
+        `[bridge:repl] heartbeatWork fatal (status=${err.status}) â€”tearing down work item for fast re-dispatch`,
       )
       if (transport) {
         const seq = transport.getLastSequenceNum()
@@ -1043,7 +1043,7 @@ export async function initBridgeCore(
         transport = null
       }
       flushGate.drop()
-      // force=false â†?server re-queues. Likely already expired, but
+      // force=false â†’server re-queues. Likely already expired, but
       // idempotent and makes re-dispatch immediate if not.
       if (currentWorkId) {
         void api
@@ -1077,12 +1077,12 @@ export async function initBridgeCore(
     ) => {
       // When new work arrives while a transport is already open, the
       // server has decided to re-dispatch (e.g. token rotation, server
-      // restart). Close the existing transport and reconnect â€?discarding
+      // restart). Close the existing transport and reconnect â€”discarding
       // the work causes a stuck 'reconnecting' state if the old WS dies
       // shortly after (the server won't re-dispatch a work item it
       // already delivered).
       // ingressToken (JWT) is stored for heartbeat auth (both v1 and v2).
-      // Transport auth diverges â€?see the v1/v2 split below.
+      // Transport auth diverges â€”see the v1/v2 split below.
       if (transport?.isConnectedStatus()) {
         logForDebugging(
           `[bridge:repl] Work received while transport connected, replacing with fresh token (workId=${workId})`,
@@ -1094,15 +1094,15 @@ export async function initBridgeCore(
       )
 
       // Refresh the crash-recovery pointer's mtime. Staleness checks file
-      // mtime (not embedded timestamp) so this re-write bumps the clock â€?      // a 5h+ session that crashes still has a fresh pointer. Fires once
-      // per work dispatch (infrequent â€?bounded by user message rate).
+      // mtime (not embedded timestamp) so this re-write bumps the clock â€”      // a 5h+ session that crashes still has a fresh pointer. Fires once
+      // per work dispatch (infrequent â€”bounded by user message rate).
       void writeBridgePointer(dir, {
         sessionId: currentSessionId,
         environmentId,
         source: 'repl',
       })
 
-      // Reject foreign session IDs â€?the server shouldn't assign sessions
+      // Reject foreign session IDs â€”the server shouldn't assign sessions
       // from other environments. Since we create env+session as a pair,
       // a mismatch indicates an unexpected server-side reassignment.
       //
@@ -1123,7 +1123,7 @@ export async function initBridgeCore(
 
       // Server decides per-session (secret.use_code_sessions from the work
       // secret, threaded through runWorkPollLoop). The env var is an ant-dev
-      // override for forcing v2 before the server flag is on for your user â€?      // requires ccr_v2_compat_enabled server-side or registerWorker 404s.
+      // override for forcing v2 before the server flag is on for your user â€”      // requires ccr_v2_compat_enabled server-side or registerWorker 404s.
       //
       // Kept separate from CLAUDE_CODE_USE_CCR_V2 (the child-SDK transport
       // selector set by sessionRunner/environment-manager) to avoid the
@@ -1135,7 +1135,7 @@ export async function initBridgeCore(
       // Auth is the one place v1 and v2 diverge hard:
       //
       // - v1 (Session-Ingress): accepts OAuth OR JWT. We prefer OAuth
-      //   because the standard OAuth refresh flow handles expiry â€?no
+      //   because the standard OAuth refresh flow handles expiry â€”no
       //   separate JWT refresh scheduler needed.
       //
       // - v2 (CCR /worker/*): REQUIRES the JWT. register_worker.go:32
@@ -1165,7 +1165,7 @@ export async function initBridgeCore(
         const oldTransport = transport
         transport = null
         // Capture the SSE sequence high-water mark so the next transport
-        // resumes the stream instead of replaying from seq 0. Use max() â€?        // a transport that died early (never received any frames) would
+        // resumes the stream instead of replaying from seq 0. Use max() â€”        // a transport that died early (never received any frames) would
         // otherwise reset a non-zero mark back to 0.
         const oldSeq = oldTransport.getLastSequenceNum()
         if (oldSeq > lastTransportSequenceNum) {
@@ -1173,13 +1173,13 @@ export async function initBridgeCore(
         }
         oldTransport.close()
       }
-      // Reset flush state â€?the old flush (if any) is no longer relevant.
+      // Reset flush state â€”the old flush (if any) is no longer relevant.
       // Preserve pending messages so they're drained after the new
       // transport's flush completes (the hook has already advanced its
       // lastWrittenIndex and won't re-send them).
       flushGate.deactivate()
 
-      // Closure adapter over the shared handleServerControlRequest â€?      // captures transport/currentSessionId so the transport.setOnData
+      // Closure adapter over the shared handleServerControlRequest â€”      // captures transport/currentSessionId so the transport.setOnData
       // callback below doesn't need to thread them through.
       const onServerControlRequest = (request: SDKControlRequest): void =>
         handleServerControlRequest(request, {
@@ -1209,7 +1209,7 @@ export async function initBridgeCore(
 
           // Update the env var with the latest OAuth token so POST writes
           // (which read via getSessionIngressAuthToken()) use a fresh token.
-          // v2 skips this â€?createV2ReplTransport already stored the JWT,
+          // v2 skips this â€”createV2ReplTransport already stored the JWT,
           // and overwriting it with OAuth would break subsequent /worker/*
           // requests (session_id claim check).
           if (!useCcrV2) {
@@ -1275,11 +1275,11 @@ export async function initBridgeCore(
                   // If any batch was dropped during this flush (SI down for
                   // maxConsecutiveFailures attempts), flush() still resolved
                   // normally but the events were NOT delivered. Don't mark
-                  // UUIDs as flushed â€?keep them eligible for re-send on the
+                  // UUIDs as flushed â€”keep them eligible for re-send on the
                   // next onWorkReceived (JWT refresh re-dispatch, line ~1144).
                   if (newTransport.droppedBatchCount > dropsBefore) {
                     logForDebugging(
-                      `[bridge:repl] Initial flush dropped ${newTransport.droppedBatchCount - dropsBefore} batch(es) â€?not marking ${sdkMessages.length} UUID(s) as flushed`,
+                      `[bridge:repl] Initial flush dropped ${newTransport.droppedBatchCount - dropsBefore} batch(es) â€”not marking ${sdkMessages.length} UUID(s) as flushed`,
                     )
                     return
                   }
@@ -1296,7 +1296,7 @@ export async function initBridgeCore(
                 )
                 .finally(() => {
                   // Guard: if transport was replaced during the flush,
-                  // don't signal connected or drain â€?the new transport
+                  // don't signal connected or drain â€”the new transport
                   // owns the lifecycle now.
                   if (transport !== newTransport) return
                   drainFlushGate()
@@ -1304,17 +1304,17 @@ export async function initBridgeCore(
                 })
             } else {
               // All initial messages were already flushed (filtered by
-              // previouslyFlushedUUIDs). No flush POST needed â€?clear
+              // previouslyFlushedUUIDs). No flush POST needed â€”clear
               // the flag and signal connected immediately. This is the
               // first connect for this transport (inside !initialFlushDone),
-              // so no flush POST is in-flight â€?the flag was set before
+              // so no flush POST is in-flight â€”the flag was set before
               // connect() and must be cleared here.
               drainFlushGate()
               onStateChange?.('connected')
             }
           } else if (!flushGate.active) {
             // No initial messages or already flushed on first connect.
-            // WS auto-reconnect path â€?only signal connected if no flush
+            // WS auto-reconnect path â€”only signal connected if no flush
             // POST is in-flight. If one is, .finally() owns the lifecycle.
             onStateChange?.('connected')
           }
@@ -1335,7 +1335,7 @@ export async function initBridgeCore(
         // directly via debugFireClose. All referenced closures (transport,
         // wakePollLoop, flushGate, reconnectEnvironmentWithSession, etc.)
         // are already at that scope. The only lexical dependency on
-        // wireTransport was `newTransport.getLastSequenceNum()` â€?but after
+        // wireTransport was `newTransport.getLastSequenceNum()` â€”but after
         // the guard below passes we know transport === newTransport.
         debugFireClose = handleTransportPermanentClose
         newTransport.setOnClose(closeCode => {
@@ -1361,14 +1361,14 @@ export async function initBridgeCore(
         newTransport.connect()
       } // end wireTransport
 
-      // Bump unconditionally â€?ANY new transport (v1 or v2) invalidates an
+      // Bump unconditionally â€”ANY new transport (v1 or v2) invalidates an
       // in-flight v2 handshake. Also bumped in doReconnect().
       v2Generation++
 
       if (useCcrV2) {
         // workSessionId is the cse_* form (infrastructure-layer ID from the
         // work queue), which is what /v1/code/sessions/{id}/worker/* wants.
-        // The session_* form (currentSessionId) is NOT usable here â€?        // handler/convert.go:30 validates TagCodeSession.
+        // The session_* form (currentSessionId) is NOT usable here â€”        // handler/convert.go:30 validates TagCodeSession.
         const sessionUrl = buildCCRv2SdkUrl(baseUrl, workSessionId)
         const thisGen = v2Generation
         logForDebugging(
@@ -1392,7 +1392,7 @@ export async function initBridgeCore(
             // onWorkReceived may have fired again while registerWorker()
             // was in flight (server re-dispatch with a fresh JWT). The
             // transport !== null check alone gets the race wrong when BOTH
-            // attempts saw transport === null â€?it keeps the first resolver
+            // attempts saw transport === null â€”it keeps the first resolver
             // (stale epoch) and discards the second (correct epoch). The
             // generation check catches it regardless of transport state.
             if (thisGen !== v2Generation) {
@@ -1411,7 +1411,7 @@ export async function initBridgeCore(
             )
             logEvent('tengu_bridge_repl_ccr_v2_init_failed', {})
             // If a newer attempt is in flight or already succeeded, don't
-            // touch its work item â€?our failure is irrelevant.
+            // touch its work item â€”our failure is irrelevant.
             if (thisGen !== v2Generation) return
             // Release the work item so the server re-dispatches immediately
             // instead of waiting for its own timeout. currentWorkId was set
@@ -1432,7 +1432,7 @@ export async function initBridgeCore(
         )
       } else {
         // v1: HybridTransport (WS reads + POST writes to Session-Ingress).
-        // autoReconnect is true (default) â€?when the WS dies, the transport
+        // autoReconnect is true (default) â€”when the WS dies, the transport
         // reconnects automatically with exponential backoff. POST writes
         // continue during reconnection (they use getSessionIngressAuthToken()
         // independently of WS state). The poll loop remains as a secondary
@@ -1463,23 +1463,23 @@ export async function initBridgeCore(
               }),
               // Cap retries so a persistently-failing session-ingress can't
               // pin the uploader drain loop for the lifetime of the bridge.
-              // 50 attempts â‰?20 min (15s POST timeout + 8s backoff + jitter
-              // per cycle at steady state). Bridge-only â€?1P keeps indefinite.
+              // 50 attempts â‰ˆ20 min (15s POST timeout + 8s backoff + jitter
+              // per cycle at steady state). Bridge-only â€”1P keeps indefinite.
               {
                 maxConsecutiveFailures: 50,
                 isBridge: true,
                 onBatchDropped: () => {
                   onStateChange?.(
                     'reconnecting',
-                    'Lost sync with Remote Control â€?events could not be delivered',
+                    'Lost sync with Remote Control â€”events could not be delivered',
                   )
                   // SI has been down ~20 min. Wake the poll loop so that when
-                  // SI recovers, next poll â†?onWorkReceived â†?fresh transport
-                  // â†?initial flush succeeds â†?onStateChange('connected') at
+                  // SI recovers, next poll â†’onWorkReceived â†’fresh transport
+                  // â†’initial flush succeeds â†’onStateChange('connected') at
                   // ~line 1420. Without this, state stays 'reconnecting' even
-                  // after SI recovers â€?daemon.ts:437 denies all permissions,
+                  // after SI recovers â€”daemon.ts:437 denies all permissions,
                   // useReplBridge.ts:311 keeps replBridgeSessionActive=false.
-                  // If the env was archived during the outage, poll 404 â†?                  // onEnvironmentLost recovery path handles it.
+                  // If the env was archived during the outage, poll 404 â†’                  // onEnvironmentLost recovery path handles it.
                   wakePollLoop()
                 },
               },
@@ -1492,9 +1492,9 @@ export async function initBridgeCore(
   void startWorkPollLoop(pollOpts)
 
   // Perpetual mode: hourly mtime refresh of the crash-recovery pointer.
-  // The onWorkReceived refresh only fires per user prompt â€?a
+  // The onWorkReceived refresh only fires per user prompt â€”a
   // daemon idle for >4h would have a stale pointer, and the next restart
-  // would clear it (readBridgePointer TTL check) â†?fresh session. The
+  // would clear it (readBridgePointer TTL check) â†’fresh session. The
   // standalone bridge (bridgeMain.ts) has an identical hourly timer.
   const pointerRefreshTimer = perpetual
     ? setInterval(() => {
@@ -1568,7 +1568,7 @@ export async function initBridgeCore(
     pollController.abort()
     logForDebugging('[bridge:repl] Teardown: poll loop aborted')
 
-    // Capture the live transport's seq BEFORE close() â€?close() is sync
+    // Capture the live transport's seq BEFORE close() â€”close() is sync
     // (just aborts the SSE fetch) and does NOT invoke onClose, so the
     // setOnClose capture path never runs for explicit teardown.
     // Without this, getSSESequenceNum() after teardown returns the stale
@@ -1582,7 +1582,7 @@ export async function initBridgeCore(
     }
 
     if (perpetual) {
-      // Perpetual teardown is LOCAL-ONLY â€?do not send result, do not call
+      // Perpetual teardown is LOCAL-ONLY â€”do not send result, do not call
       // stopWork, do not close the transport. All of those signal the
       // server (and any mobile/attach subscribers) that the session is
       // ending. Instead: stop polling, let the socket die with the
@@ -1608,7 +1608,7 @@ export async function initBridgeCore(
     // only enqueues (SerialBatchEventUploader resolves on buffer-add); the
     // stopWork/archive latency (~200-500ms) is the drain window for the
     // result POST. Closing BEFORE archive meant relying on HybridTransport's
-    // void-ed 3s grace period, which nothing awaits â€?forceExit can kill the
+    // void-ed 3s grace period, which nothing awaits â€”forceExit can kill the
     // socket mid-POST. Same reorder as remoteBridgeCore.ts teardown (#22803).
     const teardownTransport = transport
     transport = null
@@ -1646,7 +1646,7 @@ export async function initBridgeCore(
       )
     })
 
-    // Clear the crash-recovery pointer â€?explicit disconnect or clean REPL
+    // Clear the crash-recovery pointer â€”explicit disconnect or clean REPL
     // exit means the user is done with this session. Crash/kill-9 never
     // reaches this line, leaving the pointer for next-launch recovery.
     await clearBridgePointer(dir)
@@ -1694,7 +1694,7 @@ export async function initBridgeCore(
       if (filtered.length === 0) return
 
       // Fire onUserMessage for title derivation. Scan before the flushGate
-      // check â€?prompts are title-worthy even if they queue behind the
+      // check â€”prompts are title-worthy even if they queue behind the
       // initial history flush. Keeps calling on every title-worthy message
       // until the callback returns true; the caller owns the policy.
       if (!userMessageCallbackDone) {
@@ -1746,8 +1746,8 @@ export async function initBridgeCore(
     writeSdkMessages(messages) {
       // Daemon path: query() already yields SDKMessage, skip conversion.
       // Still run echo dedup (server bounces writes back on the WS).
-      // No initialMessageUUIDs filter â€?daemon has no initial messages.
-      // No flushGate â€?daemon never starts it (no initial flush).
+      // No initialMessageUUIDs filter â€”daemon has no initial messages.
+      // No flushGate â€”daemon never starts it (no initial flush).
       const filtered = messages.filter(
         m => !m.uuid || !recentPostedUUIDs.has(m.uuid),
       )
@@ -1833,7 +1833,7 @@ export async function initBridgeCore(
  *
  * When a work item arrives, acknowledges it and calls onWorkReceived
  * with the session ID and ingress token (which connects the ingress
- * WebSocket). Then continues polling â€?the server will dispatch a new
+ * WebSocket). Then continues polling â€”the server will dispatch a new
  * work item if the ingress WebSocket drops, allowing automatic
  * reconnection without tearing down the bridge.
  */
@@ -1873,7 +1873,7 @@ async function startWorkPollLoop({
    * Returns true when the caller cannot accept new work (transport already
    * connected). When true, the loop polls at the configured at-capacity
    * interval as a heartbeat only. Server-side BRIDGE_LAST_POLL_TTL is
-   * 4 hours â€?anything shorter than that is sufficient for liveness.
+   * 4 hours â€”anything shorter than that is sufficient for liveness.
    */
   isAtCapacity?: () => boolean
   /**
@@ -1884,7 +1884,7 @@ async function startWorkPollLoop({
   capacitySignal?: () => CapacitySignal
   /** Called on unrecoverable errors (e.g. server-side expiry) to trigger full teardown. */
   onFatalError?: () => void
-  /** Poll interval config getter â€?defaults to DEFAULT_POLL_CONFIG. */
+  /** Poll interval config getter â€”defaults to DEFAULT_POLL_CONFIG. */
   getPollIntervalConfig?: () => PollIntervalConfig
   /**
    * Returns the current work ID and session ingress token for heartbeat.
@@ -1896,7 +1896,7 @@ async function startWorkPollLoop({
     sessionToken: string
   } | null
   /**
-   * Called when heartbeatWork throws BridgeFatalError (401/403/404/410 â€?   * JWT expired or work item gone). Caller should tear down the transport
+   * Called when heartbeatWork throws BridgeFatalError (401/403/404/410 â€”   * JWT expired or work item gone). Caller should tear down the transport
    * + work state so isAtCapacity() flips to false and the loop fast-polls
    * for the server's re-dispatched work item. When provided, the loop
    * SKIPS the at-capacity backoff sleep (which would otherwise cause a
@@ -1917,7 +1917,7 @@ async function startWorkPollLoop({
   let environmentRecreations = 0
   // Set when the at-capacity sleep overruns its deadline by a large margin
   // (process suspension). Consumed at the top of the next iteration to
-  // force one fast-poll cycle â€?isAtCapacity() is `transport !== null`,
+  // force one fast-poll cycle â€”isAtCapacity() is `transport !== null`,
   // which stays true while the transport auto-reconnects, so the poll
   // loop would otherwise go straight back to a 10-minute sleep on a
   // transport that may be pointed at a dead socket.
@@ -1937,11 +1937,11 @@ async function startWorkPollLoop({
         pollConfig.reclaim_older_than_ms,
       )
 
-      // A successful poll proves the env is genuinely healthy â€?reset the
+      // A successful poll proves the env is genuinely healthy â€”reset the
       // env-loss counter so events hours apart each start fresh. Outside
       // the state-change guard below because onEnvLost's success path
       // already emits 'ready'; emitting again here would be a duplicate.
-      // (onEnvLost returning creds does NOT reset this â€?that would break
+      // (onEnvLost returning creds does NOT reset this â€”that would break
       // oscillation protection when the new env immediately dies.)
       environmentRecreations = 0
 
@@ -1967,11 +1967,11 @@ async function startWorkPollLoop({
           const atCapMs = pollConfig.poll_interval_ms_at_capacity
           // Heartbeat loops WITHOUT polling. When at-capacity polling is also
           // enabled (atCapMs > 0), the loop tracks a deadline and breaks out
-          // to poll at that interval â€?heartbeat and poll compose instead of
+          // to poll at that interval â€”heartbeat and poll compose instead of
           // one suppressing the other. Breaks out when:
           //   - Poll deadline reached (atCapMs > 0 only)
-          //   - Auth fails (JWT expired â†?poll refreshes tokens)
-          //   - Capacity wake fires (transport lost â†?poll for new work)
+          //   - Auth fails (JWT expired â†’poll refreshes tokens)
+          //   - Capacity wake fires (transport lost â†’poll for new work)
           //   - Heartbeat config disabled (GrowthBook update)
           //   - Loop aborted (shutdown)
           if (
@@ -1982,7 +1982,7 @@ async function startWorkPollLoop({
               heartbeat_interval_ms:
                 pollConfig.non_exclusive_heartbeat_interval_ms,
             })
-            // Deadline computed once at entry â€?GB updates to atCapMs don't
+            // Deadline computed once at entry â€”GB updates to atCapMs don't
             // shift an in-flight deadline (next entry picks up the new value).
             const pollDeadline = atCapMs > 0 ? Date.now() + atCapMs : null
             let needsBackoff = false
@@ -2023,7 +2023,7 @@ async function startWorkPollLoop({
                       : 'fatal') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
                   })
                   // JWT expired (401/403) or work item gone (404/410).
-                  // Either way the current transport is dead â€?SSE
+                  // Either way the current transport is dead â€”SSE
                   // reconnects and CCR writes will fail on the same
                   // stale token. If the caller gave us a recovery hook,
                   // tear down work state and skip backoff: isAtCapacity()
@@ -2033,7 +2033,7 @@ async function startWorkPollLoop({
                   if (onHeartbeatFatal) {
                     onHeartbeatFatal(err)
                     logForDebugging(
-                      `[bridge:repl:heartbeat] Fatal (status=${err.status}), work state cleared â€?fast-polling for re-dispatch`,
+                      `[bridge:repl:heartbeat] Fatal (status=${err.status}), work state cleared â€”fast-polling for re-dispatch`,
                     )
                   } else {
                     needsBackoff = true
@@ -2067,7 +2067,7 @@ async function startWorkPollLoop({
 
             // On auth_failed or fatal, backoff before polling to avoid a
             // tight poll+heartbeat loop. Fall through to the shared sleep
-            // below â€?it's the same capacitySignal-wrapped sleep the legacy
+            // below â€”it's the same capacitySignal-wrapped sleep the legacy
             // path uses, and both need the suspension-overrun check.
             if (!needsBackoff) {
               if (exitReason === 'poll_due') {
@@ -2075,13 +2075,13 @@ async function startWorkPollLoop({
                 // so the once-per-10min poll_due poll is invisible at counter=2.
                 // Log it here so verification runs see both endpoints in the debug log.
                 logForDebugging(
-                  `[bridge:repl] Heartbeat poll_due after ${hbCycles} cycles â€?falling through to pollForWork`,
+                  `[bridge:repl] Heartbeat poll_due after ${hbCycles} cycles â€”falling through to pollForWork`,
                 )
               }
               continue
             }
           }
-          // At-capacity sleep â€?reached by both the legacy path (heartbeat
+          // At-capacity sleep â€”reached by both the legacy path (heartbeat
           // disabled) and the heartbeat-backoff path (needsBackoff=true).
           // Merged so the suspension detector covers both; previously the
           // backoff path had no overrun check and could go straight back
@@ -2099,8 +2099,8 @@ async function startWorkPollLoop({
             cap.cleanup()
             // Process-suspension detector. A setTimeout overshooting its
             // deadline by 60s means the process was suspended (laptop lid,
-            // SIGSTOP, VM pause) â€?even a pathological GC pause is seconds,
-            // not minutes. Early aborts (wakePollLoop â†?cap.signal) produce
+            // SIGSTOP, VM pause) â€”even a pathological GC pause is seconds,
+            // not minutes. Early aborts (wakePollLoop â†’cap.signal) produce
             // overrun < 0 and fall through. Note: this only catches sleeps
             // that outlast their deadline; WebSocketTransport's ping
             // interval (10s granularity) is the primary detector for shorter
@@ -2109,7 +2109,7 @@ async function startWorkPollLoop({
             const overrun = Date.now() - sleepStart - sleepMs
             if (overrun > 60_000) {
               logForDebugging(
-                `[bridge:repl] At-capacity sleep overran by ${Math.round(overrun / 1000)}s â€?process suspension detected, forcing one fast-poll cycle`,
+                `[bridge:repl] At-capacity sleep overran by ${Math.round(overrun / 1000)}s â€”process suspension detected, forcing one fast-poll cycle`,
               )
               logEvent('tengu_bridge_repl_suspension_detected', {
                 overrun_ms: overrun,
@@ -2123,7 +2123,7 @@ async function startWorkPollLoop({
         continue
       }
 
-      // Decode before type dispatch â€?need the JWT for the explicit ack.
+      // Decode before type dispatch â€”need the JWT for the explicit ack.
       let secret
       try {
         secret = decodeWorkSecret(work.secret)
@@ -2176,15 +2176,15 @@ async function startWorkPollLoop({
     } catch (err) {
       if (signal.aborted) break
 
-      // Detect permanent "environment deleted" error â€?no amount of
+      // Detect permanent "environment deleted" error â€”no amount of
       // retrying will recover. Re-register a new environment instead.
       // Checked BEFORE the generic BridgeFatalError bail. pollForWork uses
       // validateStatus: s => s < 500, so 404 is always wrapped into a
-      // BridgeFatalError by handleErrorStatus() â€?never an axios-shaped
+      // BridgeFatalError by handleErrorStatus() â€”never an axios-shaped
       // error. The poll endpoint's only path param is the env ID; 404
       // unambiguously means env-gone (no-work is a 200 with null body).
       // The server sends error.type='not_found_error' (standard Anthropic
-      // API shape), not a bridge-specific string â€?but status===404 is
+      // API shape), not a bridge-specific string â€”but status===404 is
       // the real signal and survives body-shape changes.
       if (
         err instanceof BridgeFatalError &&
@@ -2193,11 +2193,11 @@ async function startWorkPollLoop({
       ) {
         // If credentials have already been refreshed by a concurrent
         // reconnection (e.g. WS close handler), the stale poll's error
-        // is expected â€?skip onEnvironmentLost and retry with fresh creds.
+        // is expected â€”skip onEnvironmentLost and retry with fresh creds.
         const currentEnvId = getCredentials().environmentId
         if (envId !== currentEnvId) {
           logForDebugging(
-            `[bridge:repl] Stale poll error for old env=${envId}, current env=${currentEnvId} â€?skipping onEnvironmentLost`,
+            `[bridge:repl] Stale poll error for old env=${envId}, current env=${currentEnvId} â€”skipping onEnvironmentLost`,
           )
           consecutiveErrors = 0
           firstErrorTime = null
@@ -2228,15 +2228,15 @@ async function startWorkPollLoop({
         const newCreds = await onEnvironmentLost()
         // doReconnect() makes several sequential network calls (1-5s).
         // If the user triggered teardown during that window, its internal
-        // abort checks return false â€?but we need to re-check here to
+        // abort checks return false â€”but we need to re-check here to
         // avoid emitting a spurious 'failed' + onFatalError() during
         // graceful shutdown.
         if (signal.aborted) break
         if (newCreds) {
           // Credentials are updated in the outer scope via
-          // reconnectEnvironmentWithSession â€?getCredentials() will
+          // reconnectEnvironmentWithSession â€”getCredentials() will
           // return the fresh values on the next poll iteration.
-          // Do NOT reset environmentRecreations here â€?onEnvLost returning
+          // Do NOT reset environmentRecreations here â€”onEnvLost returning
           // creds only proves we tried to fix it, not that the env is
           // healthy. A successful poll (above) is the reset point; if the
           // new env immediately dies again we still want the limit to fire.
@@ -2257,7 +2257,7 @@ async function startWorkPollLoop({
         break
       }
 
-      // Fatal errors (401/403/404/410) â€?no point retrying
+      // Fatal errors (401/403/404/410) â€”no point retrying
       if (err instanceof BridgeFatalError) {
         const isExpiry = isExpiredErrorType(err.errorType)
         const isSuppressible = isSuppressible403(err)
@@ -2275,7 +2275,7 @@ async function startWorkPollLoop({
           { status: err.status, error_type: err.errorType },
         )
         // Cosmetic 403 errors (e.g., external_poll_sessions scope,
-        // environments:manage permission) â€?suppress user-visible error
+        // environments:manage permission) â€”suppress user-visible error
         // but always trigger teardown so cleanup runs.
         if (!isSuppressible) {
           onStateChange?.(
@@ -2285,7 +2285,7 @@ async function startWorkPollLoop({
               : err.message,
           )
         }
-        // Always trigger teardown â€?matches bridgeMain.ts where fatalExit=true
+        // Always trigger teardown â€”matches bridgeMain.ts where fatalExit=true
         // is unconditional and post-loop cleanup always runs.
         onFatalError?.()
         break
@@ -2330,7 +2330,7 @@ async function startWorkPollLoop({
         elapsedMs: elapsed,
       } as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
 
-      // Only transition to 'reconnecting' on the first error â€?stay
+      // Only transition to 'reconnecting' on the first error â€”stay
       // there until a successful poll (avoid flickering the UI state).
       if (consecutiveErrors === 1) {
         onStateChange?.('reconnecting', errMsg)
@@ -2351,7 +2351,7 @@ async function startWorkPollLoop({
         break
       }
 
-      // Exponential backoff: 2s â†?4s â†?8s â†?16s â†?32s â†?60s (cap)
+      // Exponential backoff: 2s â†’4s â†’8s â†’16s â†’32s â†’60s (cap)
       const backoff = Math.min(
         POLL_ERROR_INITIAL_DELAY_MS * 2 ** (consecutiveErrors - 1),
         POLL_ERROR_MAX_DELAY_MS,
@@ -2370,7 +2370,7 @@ async function startWorkPollLoop({
               info.sessionToken,
             )
           } catch {
-            // Best-effort â€?if heartbeat also fails the lease dies, same as
+            // Best-effort â€”if heartbeat also fails the lease dies, same as
             // pre-poll_due behavior (where the only heartbeat-loop exits were
             // ones where the lease was already dying).
           }

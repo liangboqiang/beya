@@ -9,6 +9,7 @@ import { useTabStore, SETTINGS_TAB_ID, SCHEDULED_TAB_ID } from '../../stores/tab
 import { useChatStore } from '../../stores/chatStore'
 import { useOpenTargetStore } from '../../stores/openTargetStore'
 import { desktopUiPreferencesApi, type SidebarProjectPreferences } from '../../api/desktopUiPreferences'
+import { selectDirectory } from '../../lib/directorySelection'
 
 const isTauri = typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)
 const isWindows = typeof navigator !== 'undefined' && /Win/.test(navigator.platform)
@@ -345,27 +346,15 @@ export function Sidebar({ isMobile = false, onRequestClose }: SidebarProps) {
   const createSessionFromExistingFolder = useCallback(async () => {
     setProjectHeaderMenu(null)
     setProjectHeaderSubmenu(null)
-    if (!isTauri) {
+    const result = await selectDirectory({ title: t('sidebar.useExistingFolder') })
+    if (result.kind === 'selected') {
+      await createSessionForWorkDir(result.path)
+      return
+    }
+    if (result.kind === 'unavailable') {
       addToast({
         type: 'error',
         message: t('sidebar.chooseProjectFolderUnavailable'),
-      })
-      return
-    }
-    try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: t('sidebar.useExistingFolder'),
-      })
-      if (typeof selected === 'string' && selected.trim()) {
-        await createSessionForWorkDir(selected)
-      }
-    } catch (error) {
-      addToast({
-        type: 'error',
-        message: error instanceof Error ? error.message : t('sidebar.sessionListFailed'),
       })
     }
   }, [addToast, createSessionForWorkDir, t])

@@ -1,5 +1,6 @@
 import { toolDefinitionToBeyaTool } from 'src/server/services/beyaToolDefinitions.js'
 import { loadInstalledBeyaPlugins } from 'src/server/services/beyaPluginRuntime.js'
+import { getMcDesignLocalToolDefinitions } from 'src/server/services/mcDesignLocalTools.js'
 import type { ToolDefinition } from 'src/server/types/serverRuntime.js'
 import type { Tools } from 'src/Tool.js'
 
@@ -20,7 +21,10 @@ export function parseRuntimeMetadata(
 
 export async function loadRuntimePluginToolDefinitions(): Promise<ToolDefinition[]> {
   const plugins = await loadInstalledBeyaPlugins()
-  return plugins.flatMap(plugin => plugin.tools)
+  return [
+    ...plugins.flatMap(plugin => plugin.tools),
+    ...getMcDesignLocalToolDefinitions(),
+  ]
 }
 
 export async function loadRuntimePluginTools(options: {

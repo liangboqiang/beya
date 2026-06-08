@@ -25,7 +25,6 @@ export type ProviderAuthStrategy = z.infer<typeof ProviderAuthStrategySchema>
 
 export const ProviderRuntimeKindSchema = z.enum([
   'anthropic_compatible',
-  'openai_oauth',
 ])
 export type ProviderRuntimeKind = z.infer<typeof ProviderRuntimeKindSchema>
 
@@ -80,7 +79,7 @@ export const CreateProviderSchema = z.object({
   baseUrl: z.string(),
   apiFormat: ApiFormatSchema.default('anthropic'),
   runtimeKind: ProviderRuntimeKindSchema.default('anthropic_compatible'),
-  modelRoles: ModelRolesSchema,
+  modelRoles: ModelRolesSchema.optional(),
   enabledModels: z.array(z.string().min(1)).optional(),
   connectionOverrides: ConnectionOverridesSchema,
   autoCompactWindow: AutoCompactWindowSchema.optional(),
@@ -109,6 +108,7 @@ export const TestProviderSchema = z.object({
   modelId: z.string().min(1),
   authStrategy: ProviderAuthStrategySchema.optional(),
   apiFormat: ApiFormatSchema.default('anthropic'),
+  scanModels: z.boolean().optional(),
 })
 
 // TypeScript types
@@ -129,9 +129,17 @@ export interface ProviderTestStepResult {
   httpStatus?: number
 }
 
+export interface ProviderDetectedModel {
+  id: string
+  label?: string
+  contextWindow?: number
+}
+
 export interface ProviderTestResult {
   /** Step 1: Basic connectivity - API reachable, key valid, model exists */
   connectivity: ProviderTestStepResult
   /** Step 2: Proxy pipeline - full Anthropic/OpenAI/Anthropic round trip (only for openai_* formats) */
   proxy?: ProviderTestStepResult
+  /** Dynamic model candidates returned by the upstream /models endpoint when requested. */
+  availableModels?: ProviderDetectedModel[]
 }

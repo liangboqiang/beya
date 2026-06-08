@@ -43,7 +43,7 @@ export function extractInboundMessageFields(
  * Normalize image content blocks from bridge clients. iOS/web clients may
  * send `mediaType` (camelCase) instead of `media_type` (snake_case), or
  * omit the field entirely. Without normalization, the bad block poisons
- * the session â€?every subsequent API call fails with
+ * the session â€”every subsequent API call fails with
  * "media_type: Field required".
  *
  * Fast-path scan returns the original array reference when no

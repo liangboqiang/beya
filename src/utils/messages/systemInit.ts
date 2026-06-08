@@ -17,7 +17,7 @@ import { getFastModeState } from '../fastMode.js'
 import { getSettings_DEPRECATED } from '../settings/settings.js'
 
 // TODO(next-minor): remove this translation once SDK consumers have migrated
-// to the 'Agent' tool name. The wire name was renamed Task â†?Agent in #19647,
+// to the 'Agent' tool name. The wire name was renamed Task â†’Agent in #19647,
 // but emitting the new name in init/result events broke SDK consumers on a
 // patch-level release. Keep emitting 'Task' until the next minor.
 export function sdkCompatToolName(name: string): string {
@@ -39,14 +39,14 @@ export type SystemInitInputs = {
 }
 
 /**
- * Build the `system/init` SDKMessage â€?the first message on the SDK stream
+ * Build the `system/init` SDKMessage â€”the first message on the SDK stream
  * carrying session metadata (cwd, tools, model, commands, etc.) that remote
  * clients use to render pickers and gate UI.
  *
  * Called from two paths that must produce identical shapes:
- *   - QueryEngine (spawn-bridge / print-mode / SDK) â€?yielded as the first
+ *   - QueryEngine (spawn-bridge / print-mode / SDK) â€”yielded as the first
  *     stream message per query turn
- *   - useReplBridge (REPL Remote Control) â€?sent via writeSdkMessages() on
+ *   - useReplBridge (REPL Remote Control) â€”sent via writeSdkMessages() on
  *     bridge connect, since REPL uses query() directly and never hits the
  *     QueryEngine SDKMessage layer
  */
@@ -84,7 +84,7 @@ export function buildSystemInitMessage(inputs: SystemInitInputs): SDKMessage {
     })),
     uuid: randomUUID(),
   }
-  // Hidden from public SDK types â€?ant-only UDS messaging socket path
+  // Hidden from public SDK types â€”ant-only UDS messaging socket path
   if (feature('UDS_INBOX')) {
     /* eslint-disable @typescript-eslint/no-require-imports */
     ;(initMessage as Record<string, unknown>).messaging_socket_path =

@@ -12,7 +12,10 @@ import { execFileNoThrowWithCwd } from '../../utils/execFileNoThrow.js'
 import { findGitRoot, gitExe } from '../../utils/git.js'
 import { ripGrep } from '../../utils/ripgrep.js'
 import { getInitialSettings } from '../../utils/settings/settings.js'
-import { isWithinRegisteredFilesystemRoot } from '../services/filesystemAccessRoots.js'
+import {
+  isWithinRegisteredFilesystemRoot,
+  registerFilesystemAccessRoot,
+} from '../services/filesystemAccessRoots.js'
 import {
   isSameOrInsidePathForPlatform,
   normalizeDriveRootPathForPlatform,
@@ -29,8 +32,69 @@ type ScoredFilesystemEntry = FilesystemEntry & {
   score: number
 }
 
+type PickDirectoryFn = (initialPath?: string) => Promise<string | null>
+
+type FilesystemRouteOptions = {
+  pickDirectory?: PickDirectoryFn
+}
+
+type DirectoryPickerCommandOptions = {
+  cancelSignals?: string[]
+}
+
+type DirectoryPickerCommandRunner = (
+  command: string,
+  args: string[],
+  initialPath: string,
+  options?: DirectoryPickerCommandOptions,
+) => Promise<string | null>
+
+type DirectoryPickerAvailability = (command: string) => Promise<boolean>
+
+type SystemDirectoryPickerOptions = {
+  platform?: NodeJS.Platform
+  runCommand?: DirectoryPickerCommandRunner
+  isCommandAvailable?: DirectoryPickerAvailability
+  homeDir?: string
+}
+
 const FILE_SEARCH_TIMEOUT_MS = 10_000
+const DIRECTORY_PICKER_TIMEOUT_MS = 10 * 60_000
 const VCS_METADATA_DIRECTORY_NAMES = new Set(['.git', '.svn', '.hg', '.bzr', '.jj', '.sl'])
+const DIRECTORY_PICKER_INITIAL_ENV = 'BEYA_PICK_DIRECTORY_INITIAL'
+
+const WINDOWS_DIRECTORY_PICKER_SCRIPT = `
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = 'Choose project folder'
+$dialog.ShowNewFolderButton = $true
+if ($dialog.PSObject.Properties.Name -contains 'AutoUpgradeEnabled') {
+  $dialog.AutoUpgradeEnabled = $true
+}
+$initialPath = [Environment]::GetEnvironmentVariable('${DIRECTORY_PICKER_INITIAL_ENV}')
+if ($initialPath -and [System.IO.Directory]::Exists($initialPath)) {
+  $dialog.SelectedPath = $initialPath
+}
+$result = $dialog.ShowDialog()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+  [Console]::WriteLine($dialog.SelectedPath)
+}
+`.trim()
+
+const MACOS_DIRECTORY_PICKER_SCRIPT = `
+set initialPath to system attribute "${DIRECTORY_PICKER_INITIAL_ENV}"
+try
+  if initialPath is not "" then
+    set pickedFolder to choose folder default location (POSIX file initialPath)
+  else
+    set pickedFolder to choose folder
+  end if
+  POSIX path of pickedFolder
+on error number -128
+  return ""
+end try
+`.trim()
 
 const IMAGE_MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -72,7 +136,12 @@ export function isAllowedFilesystemPath(targetPath: string): boolean {
   return false
 }
 
-export async function handleFilesystemRoute(pathname: string, url: URL): Promise<Response> {
+export async function handleFilesystemRoute(
+  pathname: string,
+  url: URL,
+  req: Request = new Request(url.toString()),
+  options: FilesystemRouteOptions = {},
+): Promise<Response> {
   if (pathname === '/api/filesystem/browse') {
     return handleBrowse(url)
   }
@@ -81,7 +150,211 @@ export async function handleFilesystemRoute(pathname: string, url: URL): Promise
     return handleServeFile(url)
   }
 
+  if (pathname === '/api/filesystem/pick-directory') {
+    return handlePickDirectory(req, options.pickDirectory ?? pickSystemDirectory)
+  }
+
+  if (pathname === '/api/filesystem/register-directory') {
+    return handleRegisterDirectory(req)
+  }
+
   return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 })
+}
+
+async function handlePickDirectory(req: Request, pickDirectory: PickDirectoryFn): Promise<Response> {
+  if (req.method !== 'POST') {
+    return json({ error: 'Method not allowed' }, 405)
+  }
+
+  const body = await readJsonBody(req)
+  const initialPath = typeof body?.initialPath === 'string' ? body.initialPath : undefined
+  const selectedPath = await pickDirectory(initialPath)
+  if (!selectedPath) {
+    return json({ selectedPath: null })
+  }
+
+  return registerSelectedDirectory(selectedPath)
+}
+
+async function handleRegisterDirectory(req: Request): Promise<Response> {
+  if (req.method !== 'POST') {
+    return json({ error: 'Method not allowed' }, 405)
+  }
+
+  const body = await readJsonBody(req)
+  const selectedPath = typeof body?.path === 'string' ? body.path : undefined
+  if (!selectedPath) {
+    return json({ error: 'path is required' }, 400)
+  }
+
+  return registerSelectedDirectory(selectedPath)
+}
+
+function registerSelectedDirectory(selectedPath: string): Response {
+  const resolvedPath = path.resolve(normalizeDriveRootPathForPlatform(selectedPath))
+  try {
+    const stat = fs.statSync(resolvedPath)
+    if (!stat.isDirectory()) {
+      return json({ error: 'Not a directory', path: resolvedPath }, 400)
+    }
+  } catch {
+    return json({ error: 'Directory not found', path: resolvedPath }, 404)
+  }
+
+  registerFilesystemAccessRoot(resolvedPath)
+  return json({ selectedPath: resolvedPath })
+}
+
+async function readJsonBody(req: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const body = await req.json()
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+export async function pickSystemDirectory(
+  initialPath?: string,
+  options: SystemDirectoryPickerOptions = {},
+): Promise<string | null> {
+  const pickerInitialPath = normalizeInitialDirectory(initialPath)
+  const platform = options.platform ?? process.platform
+  const runCommand = options.runCommand ?? runDirectoryPickerCommand
+
+  if (platform === 'win32') {
+    return runCommand(
+      'powershell.exe',
+      ['-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-Command', WINDOWS_DIRECTORY_PICKER_SCRIPT],
+      pickerInitialPath,
+      { cancelSignals: ['OperationCanceledException'] },
+    )
+  }
+
+  if (platform === 'darwin') {
+    return runCommand(
+      'osascript',
+      ['-e', MACOS_DIRECTORY_PICKER_SCRIPT],
+      pickerInitialPath,
+      { cancelSignals: ['User canceled', '(-128)'] },
+    )
+  }
+
+  return pickLinuxDirectory(pickerInitialPath, {
+    runCommand,
+    isCommandAvailable: options.isCommandAvailable ?? isDirectoryPickerCommandAvailable,
+    homeDir: options.homeDir ?? os.homedir(),
+  })
+}
+
+export function normalizeInitialDirectory(initialPath?: string): string {
+  if (!initialPath) return ''
+
+  const resolvedPath = path.resolve(normalizeDriveRootPathForPlatform(initialPath))
+  try {
+    return fs.statSync(resolvedPath).isDirectory() ? resolvedPath : ''
+  } catch {
+    return ''
+  }
+}
+
+export async function pickLinuxDirectory(
+  initialPath: string,
+  options: {
+    runCommand?: DirectoryPickerCommandRunner
+    isCommandAvailable?: DirectoryPickerAvailability
+    homeDir?: string
+  } = {},
+): Promise<string | null> {
+  const runCommand = options.runCommand ?? runDirectoryPickerCommand
+  const isCommandAvailable = options.isCommandAvailable ?? isDirectoryPickerCommandAvailable
+  const homeDir = options.homeDir ?? os.homedir()
+  const candidates = [
+    {
+      command: 'zenity',
+      args: [
+        '--file-selection',
+        '--directory',
+        '--title',
+        'Choose project folder',
+        ...(initialPath ? ['--filename', ensureTrailingPathSeparator(initialPath)] : []),
+      ],
+    },
+    {
+      command: 'kdialog',
+      args: ['--getexistingdirectory', initialPath || homeDir],
+    },
+  ]
+
+  for (const candidate of candidates) {
+    const available = await isCommandAvailable(candidate.command)
+    if (!available) continue
+
+    return runCommand(candidate.command, candidate.args, initialPath)
+  }
+
+  throw new Error('No native directory picker is available on this Linux system.')
+}
+
+async function isDirectoryPickerCommandAvailable(command: string): Promise<boolean> {
+  const available = await execFileNoThrowWithCwd('which', [command], {
+    timeout: 2_000,
+    preserveOutputOnError: false,
+  })
+  return available.code === 0
+}
+
+export async function runDirectoryPickerCommand(
+  command: string,
+  args: string[],
+  initialPath: string,
+  options: DirectoryPickerCommandOptions = {},
+): Promise<string | null> {
+  const result = await execFileNoThrowWithCwd(command, args, {
+    timeout: DIRECTORY_PICKER_TIMEOUT_MS,
+    preserveOutputOnError: true,
+    stdin: 'ignore',
+    env: {
+      ...process.env,
+      [DIRECTORY_PICKER_INITIAL_ENV]: initialPath,
+    },
+  })
+  const pickedPath = normalizePickedDirectoryOutput(result.stdout)
+  if (result.code === 0) {
+    return pickedPath
+  }
+
+  const errorText = `${result.stderr}\n${result.error ?? ''}`
+  if (!pickedPath && isPickerCancel(errorText, options.cancelSignals)) {
+    return null
+  }
+
+  if (pickedPath) {
+    return pickedPath
+  }
+
+  throw new Error(errorText.trim() || `Directory picker failed with exit code ${result.code}`)
+}
+
+export function normalizePickedDirectoryOutput(output: string): string | null {
+  const firstPath = output
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .find(Boolean)
+  return firstPath ?? null
+}
+
+export function isPickerCancel(errorText: string, cancelSignals: string[] = []): boolean {
+  const trimmed = errorText.trim()
+  return !trimmed || cancelSignals.some(signal => trimmed.includes(signal))
+}
+
+export function ensureTrailingPathSeparator(filePath: string): string {
+  return filePath.endsWith(path.sep) || filePath.endsWith('/')
+    ? filePath
+    : `${filePath}${path.sep}`
 }
 
 async function handleServeFile(url: URL): Promise<Response> {

@@ -14,11 +14,6 @@ import { attributionHeaderEnvForModel } from '../services/attributionHeaderPolic
 import { ApiError, errorResponse } from '../middleware/errorHandler.js'
 import { hasOpenAIAuthLogin } from '../../utils/auth.js'
 import { OPENAI_CODEX_MODEL_CATALOG } from '../../services/openaiAuth/models.js'
-import {
-  OPENAI_OFFICIAL_PROVIDER_ID,
-  OPENAI_OFFICIAL_PROVIDER_NAME,
-  isOpenAIOfficialProviderId,
-} from '../services/openaiOfficialProvider.js'
 import { getProviderModels, type ModelDefinition } from '../config/providerCatalog.js'
 
 // Model catalogs come from the active provider, explicit env config, or OpenAI auth.
@@ -209,16 +204,6 @@ export async function handleModelsApi(
 
 async function handleModelsList(): Promise<Response> {
   const { providers, activeId } = await providerService.listProviders()
-  if (isOpenAIOfficialProviderId(activeId)) {
-    return Response.json({
-      models: buildOpenAIModelList(),
-      provider: {
-        id: OPENAI_OFFICIAL_PROVIDER_ID,
-        name: OPENAI_OFFICIAL_PROVIDER_NAME,
-      },
-    })
-  }
-
   const activeProvider = activeId ? providers.find((p) => p.providerId === activeId) : null
   if (activeProvider) {
     const modelList = buildProviderModelList(activeProvider)
@@ -234,9 +219,8 @@ async function handleCurrentModel(req: Request): Promise<Response> {
   if (req.method === 'GET') {
     // Build the model list from the active provider, otherwise from explicit standalone config.
     const { providers, activeId } = await providerService.listProviders()
-    const isOpenAIProviderActive = isOpenAIOfficialProviderId(activeId)
     const activeProvider = activeId ? providers.find((p) => p.providerId === activeId) : null
-    const settings = activeProvider || isOpenAIProviderActive
+    const settings = activeProvider
       ? await providerService.getManagedSettings()
       : await settingsService.getUserSettings()
     const explicitModel = (settings.model as string) || ''
@@ -247,10 +231,7 @@ async function handleCurrentModel(req: Request): Promise<Response> {
     let currentModelId: string
     let currentModelName: string
 
-    if (isOpenAIProviderActive) {
-      currentModelId = explicitModel || env.ANTHROPIC_MODEL || 'gpt-5.3-codex'
-      currentModelName = currentModelId
-    } else if (activeProvider) {
+    if (activeProvider) {
       // Provider is active — only use the provider-managed beya settings.
       // This avoids leaking global ~/.beya/settings.json model choices into
       // the active provider flow.
@@ -271,11 +252,9 @@ async function handleCurrentModel(req: Request): Promise<Response> {
     const lookupId = contextTier ? `${currentModelId}:${contextTier}` : currentModelId
 
     // Build available models for name lookup
-    const availableModels = isOpenAIProviderActive
-      ? buildOpenAIModelList()
-      : activeProvider
-        ? buildProviderModelList(activeProvider)
-        : getStandaloneModelList()
+    const availableModels = activeProvider
+      ? buildProviderModelList(activeProvider)
+      : getStandaloneModelList()
 
     const modelEntry = availableModels.find((m) => m.id === lookupId)
       || availableModels.find((m) => m.id === currentModelId)

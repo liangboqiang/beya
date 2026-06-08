@@ -5,10 +5,6 @@ import { providersApi } from '../api/providers'
 import { useChatStore } from './chatStore'
 import { useSessionRuntimeStore } from './sessionRuntimeStore'
 import { useSettingsStore } from './settingsStore'
-import {
-  OPENAI_OFFICIAL_DEFAULT_MODEL_ID,
-  OPENAI_OFFICIAL_PROVIDER_ID,
-} from '../constants/openaiOfficialProvider'
 import { getProviderModelRoles } from '../lib/modelRoles'
 import type {
   SavedProvider,
@@ -32,6 +28,7 @@ type ProviderStore = {
   fetchProviders: () => Promise<void>
   fetchCatalog: () => Promise<void>
   createProvider: (input: CreateProviderInput) => Promise<SavedProvider>
+  rescanProviders: () => Promise<void>
   updateProvider: (id: string, input: UpdateProviderInput) => Promise<SavedProvider>
   deleteProvider: (id: string) => Promise<void>
   activateProvider: (id: string) => Promise<void>
@@ -57,7 +54,9 @@ function resolveRuntimeRefreshSelection(
     const modelIds = providerModelIds(provider)
     const modelRoles = getProviderModelRoles(provider)
     return {
+      kind: 'provider',
       providerId: provider.providerId,
+      localCliId: null,
       modelId: modelIds.has(currentSelection.modelId)
         ? currentSelection.modelId
         : modelRoles.primary,
@@ -68,7 +67,9 @@ function resolveRuntimeRefreshSelection(
   if (!currentSelection && activeId === provider.providerId) {
     const modelRoles = getProviderModelRoles(provider)
     return {
+      kind: 'provider',
       providerId: provider.providerId,
+      localCliId: null,
       modelId: modelRoles.primary,
     }
   }
@@ -135,6 +136,19 @@ export const useProviderStore = create<ProviderStore>((set, get) => ({
     return provider
   },
 
+  rescanProviders: async () => {
+    set({ isLoading: true, error: null })
+    try {
+      const { providers, activeId } = await providersApi.rescan()
+      set({ providers, activeId, hasLoadedProviders: true, isLoading: false })
+    } catch (err) {
+      set({
+        isLoading: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  },
+
   updateProvider: async (id, input) => {
     const { provider } = await providersApi.update(id, input)
     await get().fetchProviders()
@@ -153,20 +167,18 @@ export const useProviderStore = create<ProviderStore>((set, get) => ({
     // 更新默认 provider 时，同步刷新默认 model，避免 settings.json 里残留
     // 旧 provider 的 model id 导致默认选择指向不存在的模型。
     const settings = useSettingsStore.getState()
-    if (id === OPENAI_OFFICIAL_PROVIDER_ID) {
-      await settings.setModel(OPENAI_OFFICIAL_DEFAULT_MODEL_ID)
-      await settings.fetchAll()
-      return
-    }
-
     const provider = get().providers.find((p) => p.providerId === id)
     if (!provider) return
+    await settings.setExecutionMode('provider')
     await settings.setModel(getProviderModelRoles(provider).primary)
     await settings.fetchAll()
   },
 
   testProvider: async (id, overrides?) => {
     const { result } = await providersApi.test(id, overrides)
+    if (result.availableModels?.length) {
+      await get().fetchProviders()
+    }
     return result
   },
 

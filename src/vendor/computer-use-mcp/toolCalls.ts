@@ -2451,7 +2451,7 @@ async function handleType(
     return okText("Typed (via clipboard).");
   }
 
-  // §6 item 7 — grapheme-cluster iteration. Prevents ZWJ emoji → �.
+  // §6 item 7 — grapheme-cluster iteration. Prevents ZWJ emoji from turning into replacement characters.
   // §6 item 4 — 8ms between graphemes (125 Hz USB polling). Battle-tested:
   // sleep BEFORE each keystroke, not after.
   //

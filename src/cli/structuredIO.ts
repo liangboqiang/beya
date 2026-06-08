@@ -149,7 +149,7 @@ export class StructuredIO {
   // Tracks tool_use IDs that have been resolved through the normal permission
   // flow (or aborted by a hook). When a duplicate control_response arrives
   // after the original was already handled, this Set prevents the orphan
-  // handler from re-processing it â€?which would push duplicate assistant
+  // handler from re-processing it â€”which would push duplicate assistant
   // messages into mutableMessages and cause a 400 "tool_use ids must be unique"
   // error from the API.
   private readonly resolvedToolUseIds = new Set<string>()
@@ -198,7 +198,7 @@ export class StructuredIO {
 
   /**
    * Queue a user turn to be yielded before the next message from this.input.
-   * Works before iteration starts and mid-stream â€?read() re-checks
+   * Works before iteration starts and mid-stream â€”read() re-checks
    * prependedLines between each yielded message.
    */
   prependUserMessage(content: string): void {
@@ -278,7 +278,7 @@ export class StructuredIO {
    * SDK permission flow.
    *
    * Also sends a control_cancel_request to the SDK consumer so its canUseTool
-   * callback is aborted via the signal â€?otherwise the callback hangs.
+   * callback is aborted via the signal â€”otherwise the callback hangs.
    */
   injectControlResponse(response: SDKControlResponse): void {
     const requestId = response.response?.request_id
@@ -287,7 +287,7 @@ export class StructuredIO {
     if (!request) return
     this.trackResolvedToolUseId(request.request)
     this.pendingRequests.delete(requestId)
-    // Cancel the SDK consumer's canUseTool callback â€?the bridge won.
+    // Cancel the SDK consumer's canUseTool callback â€”the bridge won.
     void this.write({
       type: 'control_cancel_request',
       request_id: requestId,
@@ -361,7 +361,7 @@ export class StructuredIO {
       }
       if (message.type === 'control_response') {
         // Close lifecycle for every control_response, including duplicates
-        // and orphans â€?orphans don't yield to print.ts's main loop, so this
+        // and orphans â€”orphans don't yield to print.ts's main loop, so this
         // is the only path that sees them. uuid is server-injected into the
         // payload.
         const uuid =
@@ -612,13 +612,13 @@ export class StructuredIO {
 
         if (winner.source === 'hook') {
           if (winner.decision) {
-            // Hook decided â€?abort the pending SDK request.
+            // Hook decided â€”abort the pending SDK request.
             // Suppress the expected AbortError rejection from sdkPromise.
             sdkPromise.catch(() => {})
             hookAbortController.abort()
             return winner.decision
           }
-          // Hook passed through (no decision) â€?wait for the SDK prompt
+          // Hook passed through (no decision) â€”wait for the SDK prompt
           const sdkResult = await sdkPromise
           return permissionPromptToolResultToPermissionDecision(
             sdkResult.result,
@@ -628,7 +628,7 @@ export class StructuredIO {
           )
         }
 
-        // SDK prompt responded first â€?use its result (hook still running
+        // SDK prompt responded first â€”use its result (hook still running
         // in background but its result will be ignored)
         return permissionPromptToolResultToPermissionDecision(
           winner.result,
