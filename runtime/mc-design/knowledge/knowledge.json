@@ -1,0 +1,138 @@
+[
+  {
+    "id": "CONROD-PARAM-CR_A_CEN",
+    "component": "conrod",
+    "category": "experience_formula",
+    "paramId": "CR_A_CEN",
+    "standardName": "conrod center distance",
+    "aliases": ["connecting rod length", "big-small end center distance"],
+    "unit": "mm",
+    "formula": "body_height_mm + head_gasket_thickness_mm - compression_clearance_mm - crank_radius_mm - piston_compression_height_mm",
+    "physicalMeaning": "Distance between big-end center and small-end center.",
+    "source": "nx-parameter-formula-dictionary-conrod.xlsx"
+  },
+  {
+    "id": "CONROD-PARAM-CR_B_DIA",
+    "component": "conrod",
+    "category": "experience_formula",
+    "paramId": "CR_B_DIA",
+    "standardName": "conrod big-end diameter",
+    "aliases": ["big end bore diameter"],
+    "unit": "mm",
+    "formula": "rod_journal_diameter_mm + 2 * rod_bearing_thickness_mm",
+    "source": "key-parameters-experience-table.xlsx"
+  },
+  {
+    "id": "CONROD-PARAM-CR_S_DIA",
+    "component": "conrod",
+    "category": "experience_formula",
+    "paramId": "CR_S_DIA",
+    "standardName": "conrod small-end diameter",
+    "aliases": ["small end bore diameter"],
+    "unit": "mm",
+    "formula": "piston_pin_diameter_mm + 2 * small_end_bushing_thickness_mm",
+    "source": "conrod-design/SKILL.md"
+  },
+  {
+    "id": "CONROD-CHECK-LAMBDA",
+    "component": "conrod",
+    "category": "check_rule",
+    "standardName": "conrod ratio check",
+    "aliases": ["lambda", "crank radius center distance ratio"],
+    "rule": "crank_radius_mm / CR_A_CEN should be in [0.25, 0.3125].",
+    "source": "nx-parameter-formula-dictionary-conrod.xlsx"
+  },
+  {
+    "id": "CONROD-CHECK-HB",
+    "component": "conrod",
+    "category": "check_rule",
+    "standardName": "beam section H/B ratio",
+    "aliases": ["H/B", "section ratio"],
+    "rule": "CR_R_LEN / CR_R_W should be in [1.4, 1.8].",
+    "source": "nx-parameter-formula-dictionary-conrod.xlsx"
+  },
+  {
+    "id": "CRANK-PARAM-CS_M_DIA",
+    "component": "crankshaft",
+    "category": "experience_formula",
+    "paramId": "CS_M_DIA",
+    "standardName": "main journal diameter",
+    "aliases": ["crankshaft main journal diameter"],
+    "unit": "mm",
+    "formula": "0.8 * bore_mm",
+    "source": "key-parameters-experience-table.xlsx"
+  },
+  {
+    "id": "CRANK-PARAM-CR_J_AX_DIA",
+    "component": "crankshaft",
+    "category": "experience_formula",
+    "paramId": "CR_J_AX_DIA",
+    "standardName": "rod journal diameter",
+    "aliases": ["crank pin diameter"],
+    "unit": "mm",
+    "formula": "0.68 * bore_mm",
+    "source": "key-parameters-experience-table.xlsx"
+  },
+  {
+    "id": "CRANK-PARAM-CS_Q_RAD",
+    "component": "crankshaft",
+    "category": "experience_formula",
+    "paramId": "CS_Q_RAD",
+    "standardName": "crank radius",
+    "aliases": ["throw radius"],
+    "unit": "mm",
+    "formula": "0.5 * stroke_mm",
+    "source": "nx-parameter-formula-dictionary-crankshaft.xlsx"
+  },
+  {
+    "id": "CRANK-CHECK-OVERLAP",
+    "component": "crankshaft",
+    "category": "check_rule",
+    "standardName": "journal overlap",
+    "aliases": ["overlap"],
+    "rule": "(CS_M_DIA + CR_J_AX_DIA - stroke_mm) / 2 should be in [10, 20] for the local design range.",
+    "source": "nx-parameter-formula-dictionary-crankshaft.xlsx"
+  },
+  {
+    "id": "CAM-PARAM-CAM_BASE_DIA",
+    "component": "camshaft",
+    "category": "experience_formula",
+    "paramId": "CAM_BASE_DIA",
+    "standardName": "cam base circle diameter",
+    "aliases": ["base circle"],
+    "unit": "mm",
+    "formula": "base_circle_diameter_mm",
+    "source": "X14N_1006001_01_camshaft.prt local template metadata"
+  },
+  {
+    "id": "CAM-PARAM-CAM_LIFT",
+    "component": "camshaft",
+    "category": "experience_formula",
+    "paramId": "CAM_LIFT",
+    "standardName": "cam lift",
+    "aliases": ["valve lift"],
+    "unit": "mm",
+    "formula": "cam_lift_mm",
+    "source": "X14N_1006001_01_camshaft.prt local template metadata"
+  },
+  {
+    "id": "CAM-PARAM-CAM_NOSE_RAD",
+    "component": "camshaft",
+    "category": "experience_formula",
+    "paramId": "CAM_NOSE_RAD",
+    "standardName": "cam nose radius",
+    "aliases": ["nose radius"],
+    "unit": "mm",
+    "formula": "max(2.5, 0.28 * cam_lift_mm + 0.035 * base_circle_diameter_mm)",
+    "source": "local camshaft engineering heuristic"
+  },
+  {
+    "id": "CAM-CHECK-LIFT-BASE",
+    "component": "camshaft",
+    "category": "check_rule",
+    "standardName": "cam lift to base-circle ratio",
+    "aliases": ["lift/base"],
+    "rule": "cam_lift_mm / base_circle_diameter_mm should be in [0.2, 0.32].",
+    "source": "local camshaft engineering heuristic"
+  }
+]

@@ -1,0 +1,300 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{0D9BE28B-9D1C-4AC7-8D74-00AFAAC34CC3}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>NXTools</RootNamespace>
+    <AssemblyName>NXTools</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <ProjectTypeTag>extension</ProjectTypeTag>
+    <LanguageTag>csharp</LanguageTag>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>..\..\tools\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>..\..\tools\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=13.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Include="NXOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\NXOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="NXOpen.UF, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\NXOpen.UF.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="NXOpen.Utilities, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\NXOpen.Utilities.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="NXOpenUI, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\NXOpenUI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="CaeDseWorkflowOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\CaeDseWorkflowOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="CLDCommonOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\CLDCommonOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="CLDKinOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\CLDKinOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="CLDMfgModelOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\CLDMfgModelOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="CLDReportOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\CLDReportOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="CoatingsOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\CoatingsOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="CompositesOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\CompositesOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ContactlessInspectionOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\ContactlessInspectionOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="DMUOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\DMUOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="DocumentOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\DocumentOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="DSEDesignWorkflowOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\DSEDesignWorkflowOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="DSEOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\DSEOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="DSEPlatformOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\DSEPlatformOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="EclassStandardOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\EclassStandardOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="FabricOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\FabricOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="FalconOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\FalconOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="InspectorOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\InspectorOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="JoinOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\JoinOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="LineDesignerOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\LineDesignerOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MBDOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\MBDOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="mfgamopen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\mfgamopen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MfgMlpOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\MfgMlpOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MFGViewMakerOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\MFGViewMakerOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MoldCoolingOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\MoldCoolingOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="MPAOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\MPAOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="NXOpen.Guide, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\NXOpen.Guide.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="NXSDK">
+      <HintPath>..\..\sdk\NXSDK.dll</HintPath>
+    </Reference>
+    <Reference Include="PartMfgOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\PartMfgOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PIDOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\PIDOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PlasticDesignerOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\PlasticDesignerOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="RuleOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\RuleOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SimplifyOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\SimplifyOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="StageModelOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\StageModelOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="StageModelTemplateOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\StageModelTemplateOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="TDPOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\TDPOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ToolDesignerOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\ToolDesignerOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ALPOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\ALPOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AMEOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\AMEOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AnimationDesignerOpen, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>$(UGII_BASE_DIR)\nxbin\managed\AnimationDesignerOpen.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="NXSigningResource.res" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="AnimationTools.cs" />
+    <Compile Include="CamshaftTools.cs" />
+    <Compile Include="CamshaftDesignTools.cs" />
+    <Compile Include="ModelingTools.cs" />
+    <Compile Include="ModelingBaseTools.cs" />
+    <Compile Include="ObjectQueryTools.cs" />
+    <Compile Include="OptimizationTools.cs" />
+    <Compile Include="ExpressionTools.cs" />
+    <Compile Include="FileTools.cs" />
+    <Compile Include="NxFileBridgeTools.cs" />
+    <Compile Include="PartAttributeTools.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TestTool.cs" />
+    <Compile Include="ViewTools.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <PropertyGroup>
+    <PostBuildEvent>
+		if exist "%UGII_BASE_DIR%\ugopen\NXOpenAuxillaryActions.bat" "%UGII_BASE_DIR%\ugopen\NXOpenAuxillaryActions.bat" DotNet $(TargetDir) $(TargetFileName) $(ProjectDir) $(ProjectName)
+	</PostBuildEvent>
+  </PropertyGroup>
+  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
+       Other similar extension points exist, see Microsoft.Common.targets.
+  <Target Name="BeforeBuild">
+  </Target>
+  <Target Name="AfterBuild">
+  </Target>
+  -->
+</Project>

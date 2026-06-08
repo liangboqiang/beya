@@ -1,0 +1,825 @@
+{
+  "generated_by": "package/windows/generate_nx_manifest.py",
+  "registration_time": "package-build",
+  "tools": [
+    {
+      "name": "nx_batch_update_params",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "批量更新表达式参数值（每项包含 std_id/value）",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "BatchUpdateParams",
+      "category": "Expression",
+      "parameters": [
+        {
+          "name": "expressions",
+          "type": "List<ExpressionUpdateItem>",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "expressions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List<ExpressionUpdateItem>"
+          }
+        },
+        "required": [
+          "expressions"
+        ]
+      }
+    },
+    {
+      "name": "nx_create_image",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "导出图片",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "CreateImage",
+      "category": "File",
+      "parameters": [
+        {
+          "name": "filePath",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "color",
+          "type": "UFDisp.BackgroundColor",
+          "isOptional": true
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "filePath": {
+            "type": "string",
+            "description": "string"
+          },
+          "color": {
+            "type": "object",
+            "description": "UFDisp.BackgroundColor"
+          }
+        },
+        "required": [
+          "filePath"
+        ]
+      }
+    },
+    {
+      "name": "nx_create_new_part",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "创建一个新的空 prt 文件并切换为当前工作部件（WorkPart）",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "CreateNewPart",
+      "category": "File",
+      "parameters": [
+        {
+          "name": "folder_path",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "part_name",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "overwrite",
+          "type": "bool",
+          "isOptional": true
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "folder_path": {
+            "type": "string",
+            "description": "string"
+          },
+          "part_name": {
+            "type": "string",
+            "description": "string"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "bool"
+          }
+        },
+        "required": [
+          "folder_path",
+          "part_name"
+        ]
+      }
+    },
+    {
+      "name": "nx_create_param",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "创建表达式参数（std_id=value）",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "CreateParam",
+      "category": "Expression",
+      "parameters": [
+        {
+          "name": "std_id",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "std_id": {
+            "type": "string",
+            "description": "string"
+          },
+          "value": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "std_id",
+          "value"
+        ]
+      }
+    },
+    {
+      "name": "nx_exit_animation",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "退场动画",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "ExitAnimation",
+      "category": "Animation",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_find_params",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "按 std_id 查找表达式参数",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "FindParams",
+      "category": "Expression",
+      "parameters": [
+        {
+          "name": "std_id",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "std_id": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "std_id"
+        ]
+      }
+    },
+    {
+      "name": "nx_fit_view",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "自动缩放视图以适应模型显示",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "FitView",
+      "category": "View",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_fs_copy",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "复制文件（可覆盖）",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "fs_copy",
+      "category": "NxFileBridge",
+      "parameters": [
+        {
+          "name": "src_path",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "dst_path",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "overwrite",
+          "type": "bool",
+          "isOptional": true
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "src_path": {
+            "type": "string",
+            "description": "string"
+          },
+          "dst_path": {
+            "type": "string",
+            "description": "string"
+          },
+          "overwrite": {
+            "type": "boolean",
+            "description": "bool"
+          }
+        },
+        "required": [
+          "src_path",
+          "dst_path"
+        ]
+      }
+    },
+    {
+      "name": "nx_fs_exists",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "检查文件是否存在",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "fs_exists",
+      "category": "NxFileBridge",
+      "parameters": [
+        {
+          "name": "path",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "nx_fs_read_bytes",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "读取文件并返回字节（base64）",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "fs_read_bytes",
+      "category": "NxFileBridge",
+      "parameters": [
+        {
+          "name": "path",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "nx_fs_write_bytes",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "写入文件字节（base64），覆盖写",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "fs_write_bytes",
+      "category": "NxFileBridge",
+      "parameters": [
+        {
+          "name": "path",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "base64",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "string"
+          },
+          "base64": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "path",
+          "base64"
+        ]
+      }
+    },
+    {
+      "name": "nx_get_all_params_list",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "获取全部表达式参数列表",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "GetAllParamsList",
+      "category": "Expression",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_get_all_view_names",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "获取全部视图名称",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "GetAllViewNames",
+      "category": "View",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_get_drawing_sheet_name_list",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "读取当前工作部件所有图纸页名称",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "GetDrawingSheetNameList",
+      "category": "File",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_get_drive_params_list",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "获取驱动参数表达式列表（基于 group_name 过滤：包含“驱动”或“driver”）",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "GetDriveParamsList",
+      "category": "Expression",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_get_view_style",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "获取当前 NX 视图显示模式",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "GetViewStyle",
+      "category": "View",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_get_work_part_info",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "读取 Work Part 信息",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "GetWorkPartInfo",
+      "category": "File",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_high_light_dim",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "高亮表达式对应尺寸",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "HighLightDim",
+      "category": "Expression",
+      "parameters": [
+        {
+          "name": "expName",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "isHighAssoOBjI",
+          "type": "bool",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "expName": {
+            "type": "string",
+            "description": "string"
+          },
+          "isHighAssoOBjI": {
+            "type": "boolean",
+            "description": "bool"
+          }
+        },
+        "required": [
+          "expName",
+          "isHighAssoOBjI"
+        ]
+      }
+    },
+    {
+      "name": "nx_open_drawing_sheet",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "打开当前工作部件中指定名称的图纸页；不从 Teamcenter 定位或打开图纸数据集。",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "OpenDrawingSheet",
+      "category": "File",
+      "parameters": [
+        {
+          "name": "drawSheetName",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "drawSheetName": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "drawSheetName"
+        ]
+      }
+    },
+    {
+      "name": "nx_open_part",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "打开本地或明确 NX 文件路径的部件；TC 主模型优先用 nx_open_tcpart，TC 已有二维图优先用 nx_open_tc_drawing。",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "OpenPart",
+      "category": "File",
+      "parameters": [
+        {
+          "name": "path",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "nx_open_tc_drawing",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "打开 TC 已有二维图数据集：使用 Teamcenter 查询和用户选择得到的 tc_db_path，或由 item_id、item_rev_id、dataset_name、dataset_rev 组装 specification 路径；打开后进入 Drafting。",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "OpenTcDrawing",
+      "category": "File",
+      "parameters": [
+        {
+          "name": "tc_db_path",
+          "type": "string",
+          "isOptional": true
+        },
+        {
+          "name": "item_id",
+          "type": "string",
+          "isOptional": true
+        },
+        {
+          "name": "item_rev_id",
+          "type": "string",
+          "isOptional": true
+        },
+        {
+          "name": "dataset_name",
+          "type": "string",
+          "isOptional": true
+        },
+        {
+          "name": "dataset_rev",
+          "type": "string",
+          "isOptional": true
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "tc_db_path": {
+            "type": "string",
+            "description": "string"
+          },
+          "item_id": {
+            "type": "string",
+            "description": "string"
+          },
+          "item_rev_id": {
+            "type": "string",
+            "description": "string"
+          },
+          "dataset_name": {
+            "type": "string",
+            "description": "string"
+          },
+          "dataset_rev": {
+            "type": "string",
+            "description": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "nx_open_tcpart",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "打开 TC 主模型/主部件：根据 itemID 和可选 itemRev 使用 @DB/<item>/<rev> 打开；itemRev 为空时打开最新版本。不用于 specification/drawing 数据集。",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "OpenTCPart",
+      "category": "File",
+      "parameters": [
+        {
+          "name": "itemID",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "itemRev",
+          "type": "string",
+          "isOptional": true
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "itemID": {
+            "type": "string",
+            "description": "string"
+          },
+          "itemRev": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "itemID"
+        ]
+      }
+    },
+    {
+      "name": "nx_rotate_and_scale_view",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "旋转缩放 NX 视图",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "RotateAndScaleView",
+      "category": "View",
+      "parameters": [
+        {
+          "name": "yawDeg",
+          "type": "double",
+          "isOptional": false
+        },
+        {
+          "name": "pitchDeg",
+          "type": "double",
+          "isOptional": false
+        },
+        {
+          "name": "rollDeg",
+          "type": "double",
+          "isOptional": false
+        },
+        {
+          "name": "scaleRatio",
+          "type": "double",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "yawDeg": {
+            "type": "number",
+            "description": "double"
+          },
+          "pitchDeg": {
+            "type": "number",
+            "description": "double"
+          },
+          "rollDeg": {
+            "type": "number",
+            "description": "double"
+          },
+          "scaleRatio": {
+            "type": "number",
+            "description": "double"
+          }
+        },
+        "required": [
+          "yawDeg",
+          "pitchDeg",
+          "rollDeg",
+          "scaleRatio"
+        ]
+      }
+    },
+    {
+      "name": "nx_set_view_style",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "设置 NX 视图显示模式",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "SetViewStyle",
+      "category": "View",
+      "parameters": [
+        {
+          "name": "style_type",
+          "type": "int",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "style_type": {
+            "type": "integer",
+            "description": "int"
+          }
+        },
+        "required": [
+          "style_type"
+        ]
+      }
+    },
+    {
+      "name": "nx_switch_view",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "切换 NX 视图",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "SwitchView",
+      "category": "View",
+      "parameters": [
+        {
+          "name": "view_name",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "view_name": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "view_name"
+        ]
+      }
+    },
+    {
+      "name": "nx_test",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "测试检查",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "Test",
+      "category": "TestTool",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_update_param",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "更新表达式参数值（按 std_id 定位）",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "UpdateParam",
+      "category": "Expression",
+      "parameters": [
+        {
+          "name": "std_id",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "isOptional": false
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "std_id": {
+            "type": "string",
+            "description": "string"
+          },
+          "value": {
+            "type": "string",
+            "description": "string"
+          }
+        },
+        "required": [
+          "std_id",
+          "value"
+        ]
+      }
+    }
+  ]
+}

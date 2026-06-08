@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "cached": true,
+  "runtime": "E:\\A0_Projects\\A1_Dynamics_Design_LM\\mc-design\\mc-design-nx\\.runtime\\python-3.8.10-embed-amd64",
+  "python_exe": "E:\\A0_Projects\\A1_Dynamics_Design_LM\\mc-design\\mc-design-nx\\.runtime\\python-3.8.10-embed-amd64\\python.exe",
+  "python_version": "3.8.10",
+  "arch": "amd64",
+  "source_type": "bundled_prepared_runtime",
+  "archive": "E:\\A0_Projects\\A1_Dynamics_Design_LM\\mc-design\\mc-design-nx\\package\\windows\\runtime\\python-3.8.10-embed-amd64-mcdesign-runtime.zip",
+  "prepared_at_epoch": 1780711906,
+  "verification": {
+    "python": "3.8.10 (tags/v3.8.10:3d8993a, May  3 2021, 11:48:03) [MSC v.1928 64 bit (AMD64)]",
+    "version_info": [
+      3,
+      8,
+      10
+    ],
+    "bits": 64,
+    "websockets": "10.4"
+  },
+  "note": "Runtime is extracted from package/windows/runtime and copied into the customer package as client/python."
+}

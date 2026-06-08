@@ -1,0 +1,545 @@
+[
+  {
+    "id": "IPM-CONROD-001",
+    "source": "ipm",
+    "title": "K08 baseline conrod parameterized design",
+    "projectCode": "YC-D4-LOCAL",
+    "projectName": "Local four-cylinder diesel design chain",
+    "component": "conrod",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete conrod design from local template library. body height 248mm, head gasket thickness 1.5mm, compression clearance 0.8mm, piston compression height 48mm, rod journal diameter 58mm, piston pin diameter 34mm, rod bearing thickness 2mm, crank radius 45mm, stroke 90mm, bore 95mm, small end bushing thickness 1.2mm.",
+    "explicitParameters": {
+      "body_height_mm": 248,
+      "head_gasket_thickness_mm": 1.5,
+      "compression_clearance_mm": 0.8,
+      "piston_compression_height_mm": 48,
+      "rod_journal_diameter_mm": 58,
+      "piston_pin_diameter_mm": 34,
+      "rod_bearing_thickness_mm": 2,
+      "crank_radius_mm": 45,
+      "stroke_mm": 90,
+      "bore_mm": 95,
+      "small_end_bushing_thickness_mm": 1.2
+    },
+    "performanceParameters": {
+      "peak_tensile_load_kn": 92,
+      "safety_factor_target": 1.8
+    },
+    "sourceFields": {
+      "ipm_project_id": "IPM-2026-0601",
+      "layout_drawing_no": "LAY-D4-0001",
+      "task_phase": "concept_design",
+      "prototype_item_id": "K08_1004201_21",
+      "similar_item_id": "K08_1004201_19"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "local-reviewer",
+      "approver": "local-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-A/K08_1004201_21_conrod_body_A.prt",
+      "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-A/K08_1004201_21_conrod_assembly_A.prt"
+    ]
+  },
+  {
+    "id": "IPM-CONROD-002",
+    "source": "ipm",
+    "title": "Long-stroke conrod parameterized design",
+    "projectCode": "YC-D4-LS-LOCAL",
+    "projectName": "Local long-stroke conrod design",
+    "component": "conrod",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete long-stroke conrod design with full boundary parameters.",
+    "explicitParameters": {
+      "body_height_mm": 265,
+      "head_gasket_thickness_mm": 1.6,
+      "compression_clearance_mm": 0.9,
+      "piston_compression_height_mm": 50,
+      "rod_journal_diameter_mm": 62,
+      "piston_pin_diameter_mm": 36,
+      "rod_bearing_thickness_mm": 2.2,
+      "crank_radius_mm": 52,
+      "stroke_mm": 104,
+      "bore_mm": 98,
+      "small_end_bushing_thickness_mm": 1.4
+    },
+    "performanceParameters": {
+      "peak_tensile_load_kn": 105,
+      "fatigue_life_cycles": 12000000
+    },
+    "sourceFields": {
+      "ipm_project_id": "IPM-2026-0602",
+      "layout_drawing_no": "LAY-D4-LS-0008",
+      "task_phase": "detailed_design"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "local-reviewer",
+      "approver": "local-chief"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-B/K08_1004201_21_conrod_body_B.prt"
+    ]
+  },
+  {
+    "id": "ECS-CONROD-003",
+    "source": "ecs",
+    "title": "Heavy-duty conrod reuse and optimization",
+    "projectCode": "YC-D6-HD-LOCAL",
+    "projectName": "Local heavy-duty conrod design",
+    "component": "conrod",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete heavy-duty conrod design and run local parameter optimization.",
+    "explicitParameters": {
+      "body_height_mm": 300,
+      "head_gasket_thickness_mm": 1.8,
+      "compression_clearance_mm": 1,
+      "piston_compression_height_mm": 56,
+      "rod_journal_diameter_mm": 70,
+      "piston_pin_diameter_mm": 42,
+      "rod_bearing_thickness_mm": 2.5,
+      "crank_radius_mm": 62.5,
+      "stroke_mm": 125,
+      "bore_mm": 110,
+      "small_end_bushing_thickness_mm": 1.6
+    },
+    "performanceParameters": {
+      "peak_tensile_load_kn": 135,
+      "mass_limit_g": 1280
+    },
+    "sourceFields": {
+      "ecs_change_package": "ECS-HD-2026-011",
+      "baseline_item_id": "K08_1004201_21",
+      "reuse_strategy": "scale_from_baseline"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "ecs-reviewer",
+      "approver": "ecs-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-C/K08_1004201_21_conrod_body_C.prt"
+    ]
+  },
+  {
+    "id": "TC-CONROD-004",
+    "source": "tc",
+    "title": "High-speed light conrod template reuse",
+    "projectCode": "YC-G4-HS-LOCAL",
+    "projectName": "Local high-speed light conrod design",
+    "component": "conrod",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete high-speed light conrod design using the local template library.",
+    "explicitParameters": {
+      "body_height_mm": 235,
+      "head_gasket_thickness_mm": 1.2,
+      "compression_clearance_mm": 0.7,
+      "piston_compression_height_mm": 45,
+      "rod_journal_diameter_mm": 52,
+      "piston_pin_diameter_mm": 30,
+      "rod_bearing_thickness_mm": 1.8,
+      "crank_radius_mm": 43,
+      "stroke_mm": 86,
+      "bore_mm": 86,
+      "small_end_bushing_thickness_mm": 1
+    },
+    "performanceParameters": {
+      "max_engine_speed_rpm": 6200,
+      "mass_limit_g": 760
+    },
+    "sourceFields": {
+      "tc_folder": "smart-body-template-library",
+      "item_id": "CONROD_PARAM_TEMPLATE_D",
+      "item_revision_id": "D"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "tc-reviewer",
+      "approver": "tc-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-D/K08_1004201_21_conrod_body_D.prt"
+    ]
+  },
+  {
+    "id": "ECR-CONROD-005",
+    "source": "ecr",
+    "title": "Conrod small-end bushing durability change",
+    "projectCode": "YC-D4-ECR-CONROD",
+    "projectName": "Local conrod ECR change",
+    "component": "conrod",
+    "owner": "ecr-owner",
+    "status": "confirmed",
+    "requirementText": "Apply ECR change to improve small-end bushing durability while keeping K08 installation envelope.",
+    "explicitParameters": {
+      "body_height_mm": 248,
+      "head_gasket_thickness_mm": 1.5,
+      "compression_clearance_mm": 0.8,
+      "piston_compression_height_mm": 48,
+      "rod_journal_diameter_mm": 58,
+      "piston_pin_diameter_mm": 34,
+      "rod_bearing_thickness_mm": 2,
+      "crank_radius_mm": 45,
+      "stroke_mm": 90,
+      "bore_mm": 95,
+      "small_end_bushing_thickness_mm": 1.6
+    },
+    "performanceParameters": {
+      "small_end_contact_pressure_mpa": 72,
+      "fatigue_life_cycles": 15000000
+    },
+    "sourceFields": {
+      "ecr_no": "ECR-2026-CONROD-005",
+      "change_reason": "Increase bushing durability for local endurance target.",
+      "affected_item_id": "K08_1004201_21",
+      "old_revision": "A",
+      "target_revision": "B"
+    },
+    "processPersonnel": {
+      "designer": "ecr-owner",
+      "reviewer": "ecr-reviewer",
+      "approver": "ecr-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-A/K08_1004201_21_conrod_body_A.prt"
+    ]
+  },
+  {
+    "id": "QPP-CONROD-006",
+    "source": "qpp",
+    "title": "Conrod performance target design",
+    "projectCode": "YC-QPP-CONROD",
+    "projectName": "Local QPP conrod performance design",
+    "component": "conrod",
+    "owner": "qpp-owner",
+    "status": "confirmed",
+    "requirementText": "Design conrod from QPP performance targets and local package dimensions.",
+    "explicitParameters": {
+      "body_height_mm": 258,
+      "head_gasket_thickness_mm": 1.5,
+      "compression_clearance_mm": 0.8,
+      "piston_compression_height_mm": 49,
+      "rod_journal_diameter_mm": 60,
+      "piston_pin_diameter_mm": 35,
+      "rod_bearing_thickness_mm": 2.1,
+      "crank_radius_mm": 50,
+      "stroke_mm": 100,
+      "bore_mm": 96,
+      "small_end_bushing_thickness_mm": 1.3
+    },
+    "performanceParameters": {
+      "peak_tensile_load_kn": 118,
+      "max_engine_speed_rpm": 5200,
+      "mass_limit_g": 980
+    },
+    "sourceFields": {
+      "qpp_target_id": "QPP-CONROD-2026-006",
+      "target_metric": "durability_and_mass",
+      "layout_drawing_no": "LAY-QPP-CONROD-006"
+    },
+    "processPersonnel": {
+      "designer": "qpp-owner",
+      "reviewer": "qpp-reviewer",
+      "approver": "qpp-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-B/K08_1004201_21_conrod_body_B.prt"
+    ]
+  },
+  {
+    "id": "ECS-CRANK-001",
+    "source": "ecs",
+    "title": "Six-cylinder crankshaft parameterized design",
+    "projectCode": "YC-D6-LOCAL",
+    "projectName": "Local six-cylinder diesel crankshaft",
+    "component": "crankshaft",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete crankshaft template recommendation and parameter estimation. bore 110mm, stroke 125mm, cylinder count 6, burst pressure 18MPa, cylinder center distance 135mm, thrust washer diameter 92mm, thrust washer thickness 3mm.",
+    "explicitParameters": {
+      "bore_mm": 110,
+      "stroke_mm": 125,
+      "cylinder_count": 6,
+      "burst_pressure_mpa": 18,
+      "cylinder_center_distance_mm": 135,
+      "thrust_washer_diameter_mm": 92,
+      "thrust_washer_thickness_mm": 3
+    },
+    "performanceParameters": {
+      "torsional_safety_factor": 1.7,
+      "target_balance_grade": 6.3
+    },
+    "sourceFields": {
+      "ecs_change_package": "ECS-CRANK-D6-001",
+      "layout_drawing_no": "LAY-D6-CRANK-001"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "ecs-reviewer",
+      "approver": "ecs-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-B/K17N_1005001_01SF2_01_crankshaft_B.prt"
+    ]
+  },
+  {
+    "id": "IPM-CRANK-002",
+    "source": "ipm",
+    "title": "Four-cylinder crankshaft balanced design",
+    "projectCode": "YC-D4-CRANK-LOCAL",
+    "projectName": "Local four-cylinder crankshaft design",
+    "component": "crankshaft",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete balanced four-cylinder crankshaft design.",
+    "explicitParameters": {
+      "bore_mm": 98,
+      "stroke_mm": 110,
+      "cylinder_count": 4,
+      "burst_pressure_mpa": 16,
+      "cylinder_center_distance_mm": 128,
+      "thrust_washer_diameter_mm": 86,
+      "thrust_washer_thickness_mm": 2.8
+    },
+    "performanceParameters": {
+      "torsional_safety_factor": 1.6,
+      "target_balance_grade": 6.3
+    },
+    "sourceFields": {
+      "ipm_project_id": "IPM-CRANK-2026-002",
+      "layout_drawing_no": "LAY-D4-CRANK-002"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "ipm-reviewer",
+      "approver": "ipm-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-A/K17N_1005001_01SF2_01_crankshaft_A.prt"
+    ]
+  },
+  {
+    "id": "TC-CRANK-003",
+    "source": "tc",
+    "title": "High-torque crankshaft local design",
+    "projectCode": "YC-D6-HT-LOCAL",
+    "projectName": "Local high-torque crankshaft design",
+    "component": "crankshaft",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete high-torque crankshaft design and optimization.",
+    "explicitParameters": {
+      "bore_mm": 115,
+      "stroke_mm": 132,
+      "cylinder_count": 6,
+      "burst_pressure_mpa": 20,
+      "cylinder_center_distance_mm": 142,
+      "thrust_washer_diameter_mm": 96,
+      "thrust_washer_thickness_mm": 3.2
+    },
+    "performanceParameters": {
+      "max_torque_nm": 1280,
+      "torsional_safety_factor": 1.8
+    },
+    "sourceFields": {
+      "tc_folder": "smart-body-template-library",
+      "item_id": "CRANK_PARAM_TEMPLATE_C",
+      "item_revision_id": "C"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "tc-reviewer",
+      "approver": "tc-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-C/K17N_1005001_01SF2_01_crankshaft_C.prt"
+    ]
+  },
+  {
+    "id": "QPP-CRANK-004",
+    "source": "qpp",
+    "title": "Six-cylinder crankshaft QPP performance target",
+    "projectCode": "YC-QPP-CRANK",
+    "projectName": "Local QPP crankshaft performance design",
+    "component": "crankshaft",
+    "owner": "qpp-owner",
+    "status": "confirmed",
+    "requirementText": "Design crankshaft from QPP performance targets. bore 110mm, stroke 125mm, cylinder count 6, burst pressure 18MPa.",
+    "explicitParameters": {
+      "bore_mm": 110,
+      "stroke_mm": 125,
+      "cylinder_count": 6,
+      "burst_pressure_mpa": 18,
+      "cylinder_center_distance_mm": 135,
+      "thrust_washer_diameter_mm": 92,
+      "thrust_washer_thickness_mm": 3
+    },
+    "performanceParameters": {
+      "max_torque_nm": 1080,
+      "target_balance_grade": 6.3,
+      "torsional_safety_factor": 1.75
+    },
+    "sourceFields": {
+      "qpp_target_id": "QPP-CRANK-2026-004",
+      "target_metric": "torque_and_balance",
+      "layout_drawing_no": "LAY-QPP-CRANK-004"
+    },
+    "processPersonnel": {
+      "designer": "qpp-owner",
+      "reviewer": "qpp-reviewer",
+      "approver": "qpp-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-B/K17N_1005001_01SF2_01_crankshaft_B.prt"
+    ]
+  },
+  {
+    "id": "IPM-CAM-001",
+    "source": "ipm",
+    "title": "X14N baseline camshaft parameterized design",
+    "projectCode": "YC-X14N-CAM-LOCAL",
+    "projectName": "Local X14N camshaft design",
+    "component": "camshaft",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete baseline camshaft design. cam lift 8.5mm, base circle diameter 34mm, valve duration 230deg, valve count 16, shaft journal diameter 28mm, cam lobe width 14mm.",
+    "explicitParameters": {
+      "cam_lift_mm": 8.5,
+      "base_circle_diameter_mm": 34,
+      "valve_duration_deg": 230,
+      "valve_count": 16,
+      "shaft_journal_diameter_mm": 28,
+      "cam_lobe_width_mm": 14
+    },
+    "performanceParameters": {
+      "volumetric_efficiency_target": 0.92,
+      "max_valve_acceleration_m_s2": 3800
+    },
+    "sourceFields": {
+      "ipm_project_id": "IPM-CAM-2026-001",
+      "layout_drawing_no": "LAY-X14N-CAM-001"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "ipm-reviewer",
+      "approver": "ipm-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CAM-A/X14N_1006001_01_camshaft_A.prt"
+    ]
+  },
+  {
+    "id": "ECS-CAM-002",
+    "source": "ecs",
+    "title": "High-lift camshaft parameterized design",
+    "projectCode": "YC-X14N-CAM-HL-LOCAL",
+    "projectName": "Local high-lift camshaft design",
+    "component": "camshaft",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete high-lift camshaft design and optimization.",
+    "explicitParameters": {
+      "cam_lift_mm": 10.2,
+      "base_circle_diameter_mm": 36,
+      "valve_duration_deg": 250,
+      "valve_count": 16,
+      "shaft_journal_diameter_mm": 30,
+      "cam_lobe_width_mm": 15
+    },
+    "performanceParameters": {
+      "volumetric_efficiency_target": 0.96,
+      "max_valve_acceleration_m_s2": 4300
+    },
+    "sourceFields": {
+      "ecs_change_package": "ECS-CAM-HL-002",
+      "baseline_item_id": "X14N_1006001_01"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "ecs-reviewer",
+      "approver": "ecs-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CAM-B/X14N_1006001_01_camshaft_B.prt"
+    ]
+  },
+  {
+    "id": "TC-CAM-003",
+    "source": "tc",
+    "title": "Economy camshaft parameterized design",
+    "projectCode": "YC-X14N-CAM-ECO-LOCAL",
+    "projectName": "Local economy camshaft design",
+    "component": "camshaft",
+    "owner": "local-designer",
+    "status": "confirmed",
+    "requirementText": "Complete economy camshaft design.",
+    "explicitParameters": {
+      "cam_lift_mm": 7.6,
+      "base_circle_diameter_mm": 32,
+      "valve_duration_deg": 215,
+      "valve_count": 16,
+      "shaft_journal_diameter_mm": 26,
+      "cam_lobe_width_mm": 13
+    },
+    "performanceParameters": {
+      "fuel_economy_target_pct": 3.2,
+      "max_valve_acceleration_m_s2": 3300
+    },
+    "sourceFields": {
+      "tc_folder": "smart-body-template-library",
+      "item_id": "CAM_PARAM_TEMPLATE_C",
+      "item_revision_id": "C"
+    },
+    "processPersonnel": {
+      "designer": "local-designer",
+      "reviewer": "tc-reviewer",
+      "approver": "tc-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CAM-C/X14N_1006001_01_camshaft_C.prt"
+    ]
+  },
+  {
+    "id": "ECR-CAM-004",
+    "source": "ecr",
+    "title": "Camshaft lift change for intake performance",
+    "projectCode": "YC-X14N-CAM-ECR",
+    "projectName": "Local camshaft ECR change",
+    "component": "camshaft",
+    "owner": "ecr-owner",
+    "status": "confirmed",
+    "requirementText": "Apply ECR camshaft lift change using template-only parameterization.",
+    "explicitParameters": {
+      "cam_lift_mm": 9.8,
+      "base_circle_diameter_mm": 35,
+      "valve_duration_deg": 242,
+      "valve_count": 16,
+      "shaft_journal_diameter_mm": 29,
+      "cam_lobe_width_mm": 14.5
+    },
+    "performanceParameters": {
+      "volumetric_efficiency_target": 0.95,
+      "max_valve_acceleration_m_s2": 4100
+    },
+    "sourceFields": {
+      "ecr_no": "ECR-2026-CAM-004",
+      "change_reason": "Increase intake flow while staying below valve acceleration limit.",
+      "affected_item_id": "X14N_1006001_01",
+      "old_revision": "A",
+      "target_revision": "B"
+    },
+    "processPersonnel": {
+      "designer": "ecr-owner",
+      "reviewer": "ecr-reviewer",
+      "approver": "ecr-approver"
+    },
+    "attachments": [
+      "runtime/mc-design/dependencies/templates/TC-TPL-CAM-B/X14N_1006001_01_camshaft_B.prt"
+    ]
+  }
+]

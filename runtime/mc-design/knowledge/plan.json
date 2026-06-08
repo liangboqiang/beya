@@ -1,0 +1,28 @@
+{
+  "id": "mc-design-local-chain-plan",
+  "title": "零部件设计智能体本地链路计划",
+  "scope": [
+    "任务抓取",
+    "需求模式识别",
+    "本地 TC 模板库推荐",
+    "模板确认",
+    "参数推算",
+    "人工确认",
+    "真实本机 NX 参数化验证",
+    "本地报告和 DFMEA artifact",
+    "本地 TC 回传 receipt"
+  ],
+  "localizationRules": [
+    "链路在 desktop 和本机上完成。",
+    "外部业务系统资料放入本地资料库，并通过模拟查询工具读取。",
+    "不依赖云端 AI 服务、k8s 或真实外部系统。",
+    "真实 NX 是本地链路的一部分；NX mock artifact 不能替代真实 NX plugin 证据。"
+  ],
+  "doneCriteria": [
+    "本地任务能够被查询并识别需求模式。",
+    "模板库返回可追溯到项目内依赖文件的模板。",
+    "参数推算结果能映射到当前 NX WorkPart 的核心驱动表达式。",
+    "NX plugin health、WorkPart 读取、驱动参数读取、同值写入校验成功。",
+    "报告和 DFMEA artifact 记录真实 NX 证据与剩余 warning/blocker。"
+  ]
+}

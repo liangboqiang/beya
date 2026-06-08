@@ -1,0 +1,89 @@
+{
+  "output_path": "design_reports/output/example-conversation/K17N_1005001_design_report.docx",
+  "slots": {
+    "标题名称": {
+      "value": "连杆体",
+      "source": "teamcenter_get_parts_from_specified_folder"
+    },
+    "文件编号": {
+      "value": "K17N_1005001",
+      "source": "teamcenter_get_parts_from_specified_folder"
+    },
+    "版本号": {
+      "value": "A",
+      "source": "teamcenter_get_parts_from_specified_folder"
+    },
+    "设计员": {
+      "value": "88000044",
+      "source": "user/profile"
+    },
+    "审核": {
+      "value": "审核员A",
+      "source": "teamcenter_get_process_personnel_information"
+    },
+    "批准": {
+      "value": "批准员A",
+      "source": "teamcenter_get_process_personnel_information"
+    },
+    "设计目的(QPP/IPM/ECR)": {
+      "value": "根据 QPP/IPM/ECR 任务要求完成连杆体参数化更新。",
+      "source": "connect_qpp/query_ipm_list/query_ecr_list"
+    },
+    "设计原型": {
+      "value": "K17N_1005000 连杆体 A",
+      "source": "teamcenter_get_parts_from_specified_folder"
+    },
+    "技术交底": {
+      "value": "方案：优化设计；理由：根据边界参数更新中心距、大头直径和小头直径。",
+      "source": "logic-expression-design"
+    },
+    "相似度最高零部件图号": {
+      "value": "K17N_1005000 连杆体 A",
+      "source": "teamcenter_get_parts_from_specified_folder"
+    },
+    "整机布置图编号": {
+      "value": "LAYOUT-2026-001",
+      "source": "query_ipm_list"
+    },
+    "三维主视图": {
+      "image_path": "design_reports/images/example-conversation/front.png",
+      "source": "nx_switch_view + nx_create_image"
+    },
+    "右视图": {
+      "image_path": "design_reports/images/example-conversation/right.png",
+      "source": "nx_switch_view + nx_create_image"
+    },
+    "左视图": {
+      "image_path": "design_reports/images/example-conversation/left.png",
+      "source": "nx_switch_view + nx_create_image"
+    },
+    "方案说明": {
+      "value": "新旧零件主要参数完成对比，变更点包括中心距、大小头直径和厚度。",
+      "source": "logic-expression-design/user-confirmed calculation"
+    },
+    "新零件截图": {
+      "image_path": "design_reports/images/example-conversation/new_part.png",
+      "source": "nx_create_image"
+    },
+    "旧零件截图": {
+      "image_path": "design_reports/images/example-conversation/old_part.png",
+      "source": "nx_create_image"
+    },
+    "版本号/图号号": {
+      "value": "K17N_1005001/A",
+      "source": "teamcenter_get_parts_from_specified_folder"
+    },
+    "更改原因": {
+      "value": "优化设计",
+      "source": "user confirmation"
+    },
+    "设计原型图号": {
+      "value": "K17N_1005000/A",
+      "source": "teamcenter_get_parts_from_specified_folder"
+    },
+    "新图号/版本号": {
+      "value": "K17N_1005001/A；更新后参数见方案说明。",
+      "source": "teamcenter_get_parts_from_specified_folder + logic-expression-design"
+    }
+  }
+}

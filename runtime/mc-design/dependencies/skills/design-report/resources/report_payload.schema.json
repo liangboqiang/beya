@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mc-design.design-report.report-payload.schema.json",
+  "title": "mc-design design report payload",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "output_path": {
+      "type": "string",
+      "description": "Workspace-relative DOCX output path. The generator rejects paths outside workspace."
+    },
+    "slots": {
+      "description": "Slot values keyed by template slot name or section. Values may be scalar strings/numbers or structured slot entries.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/slotEntry"
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slotEntry"
+          }
+        }
+      ]
+    },
+    "slot_values": {
+      "description": "Compatibility alias for slots.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/slotEntry"
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/slotEntry"
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "slotEntry": {
+      "description": "A report slot entry. The template slot itself decides prompt, format, and optional strategy.",
+      "oneOf": [
+        {
+          "type": ["string", "number", "boolean"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "section": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["auto", "needs_evidence", "missing", "pending", "todo", "confirmed_missing"]
+            },
+            "value": {},
+            "text": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "image_path": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "file_path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "confirmation_source": {
+              "type": "string",
+              "description": "Use user when the user explicitly confirms a missing slot."
+            },
+            "reason": {
+              "type": "string"
+            },
+            "caption": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

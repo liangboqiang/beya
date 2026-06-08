@@ -1,0 +1,16 @@
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\application\runtimes\win-x64\native\WebView2Loader.dll
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\application\AIWebForm.dll
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\application\AIWebForm.pdb
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXUi\obj\x64\Release\McDesign.NXUi.csproj.AssemblyReference.cache
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXUi\obj\x64\Release\McDesign.NXUi.csproj.CoreCompileInputs.cache
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXUi\obj\x64\Release\McDesign.NXUi.csproj.CopyComplete
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXUi\obj\x64\Release\AIWebForm.dll
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXUi\obj\x64\Release\AIWebForm.pdb
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\application\runtimes\win-x64\native\WebView2Loader.dll
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\application\AIWebForm.dll
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\application\AIWebForm.pdb
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXUi\obj\x64\Release\McDesign.NXUi.csproj.AssemblyReference.cache
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXUi\obj\x64\Release\McDesign.NXUi.csproj.CoreCompileInputs.cache
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXUi\obj\x64\Release\McDesign.NXUi.csproj.CopyComplete
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXUi\obj\x64\Release\AIWebForm.dll
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXUi\obj\x64\Release\AIWebForm.pdb

@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "description": "Project-local mc-design knowledge and dependency source index.",
+  "sources": [
+    {
+      "id": "legacy-mc-design",
+      "type": "reference_project",
+      "originalPath": "E:\\A0_Projects\\A1_Dynamics_Design_LM\\mc-design",
+      "projectPath": "runtime/mc-design/dependencies",
+      "usage": [
+        "NX tool manifest",
+        "NX plugin payload",
+        "agent-loop skills",
+        "agent-loop tool docs"
+      ]
+    },
+    {
+      "id": "local-plan-archive",
+      "type": "planning_and_knowledge_archive",
+      "originalPath": "F:\\Desktop\\压缩包归档",
+      "projectPath": "runtime/mc-design/knowledge",
+      "usage": [
+        "local plan",
+        "parameter dictionaries",
+        "experience formulas",
+        "model parameterization standard"
+      ],
+      "projectCopies": [
+        "runtime/mc-design/dependencies/source-documents/plans/local-chain-plan-2026-06-10.docx",
+        "runtime/mc-design/dependencies/source-documents/plans/knowledge-build-plan.docx",
+        "runtime/mc-design/dependencies/source-documents/knowledge-standards/nx-parameter-formula-dictionary-conrod.xlsx",
+        "runtime/mc-design/dependencies/source-documents/knowledge-standards/nx-parameter-formula-dictionary-crankshaft.xlsx",
+        "runtime/mc-design/dependencies/source-documents/knowledge-standards/key-parameters-experience-table.xlsx",
+        "runtime/mc-design/dependencies/source-documents/knowledge-standards/model-parameterization-standard.pptx"
+      ]
+    },
+    {
+      "id": "local-conrod-nx-template",
+      "type": "nx_template",
+      "originalPath": "F:\\Desktop\\连杆2+图纸",
+      "projectPath": "runtime/mc-design/dependencies/templates",
+      "usage": [
+        "real local NX template",
+        "current conrod work part smoke input"
+      ]
+    }
+  ],
+  "runtimeRules": [
+    "Do not call cloud AI services or Kubernetes for the local chain.",
+    "Do not query real IPM, ECS, Teamcenter, or MySQL in the local chain.",
+    "Use local fixture data for external business-system lookups.",
+    "Use real local Siemens NX and the local NX plugin when validating NX execution.",
+    "Treat mock artifacts as auxiliary evidence only, not real NX execution."
+  ]
+}

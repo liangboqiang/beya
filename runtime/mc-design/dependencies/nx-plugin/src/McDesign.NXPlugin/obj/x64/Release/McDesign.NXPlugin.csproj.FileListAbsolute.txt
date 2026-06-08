@@ -1,0 +1,14 @@
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\startup\NXServer.dll
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\startup\NXServer.pdb
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\McDesign.NXPlugin.csproj.AssemblyReference.cache
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\McDesign.NXPlugin.csproj.CoreCompileInputs.cache
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\McDesign.NXPlugin.csproj.CopyComplete
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\NXServer.dll
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\NXServer.pdb
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\McDesign.NXPlugin.csproj.AssemblyReference.cache
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\McDesign.NXPlugin.csproj.CoreCompileInputs.cache
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\NXServer.dll
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\NXServer.pdb
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\startup\NXServer.dll
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\startup\NXServer.pdb
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\obj\x64\Release\McDesign.NXPlugin.csproj.CopyComplete

@@ -1,0 +1,14 @@
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\tools\NXTools.dll
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\tools\NXTools.pdb
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXTools\obj\x64\Release\McDesign.NXTools.csproj.AssemblyReference.cache
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXTools\obj\x64\Release\McDesign.NXTools.csproj.CoreCompileInputs.cache
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXTools\obj\x64\Release\McDesign.NXTools.csproj.CopyComplete
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXTools\obj\x64\Release\NXTools.dll
+E:\A0_Projects\A1_Dynamics_Design_LM\mc-design\mc-design-nx\nx-plugin\src\McDesign.NXTools\obj\x64\Release\NXTools.pdb
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\tools\NXTools.dll
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXTools\obj\x64\Release\McDesign.NXTools.csproj.AssemblyReference.cache
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXTools\obj\x64\Release\McDesign.NXTools.csproj.CoreCompileInputs.cache
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXTools\obj\x64\Release\McDesign.NXTools.csproj.CopyComplete
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXTools\obj\x64\Release\NXTools.dll
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXTools\obj\x64\Release\NXTools.pdb
+F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\tools\NXTools.pdb

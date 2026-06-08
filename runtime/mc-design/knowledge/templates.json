@@ -1,0 +1,458 @@
+[
+  {
+    "id": "TC-TPL-CONROD-A",
+    "folderName": "smart-body-template-library",
+    "itemId": "CONROD_PARAM_TEMPLATE_A",
+    "revisionId": "A",
+    "name": "K08 conrod body parametric template - baseline",
+    "component": "conrod",
+    "partFamily": "connecting_rod",
+    "datasetName": "K08_1004201_21_conrod_body_A.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-A",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-A/K08_1004201_21_conrod_body_A.prt",
+    "localDrawingTemplatePath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-A/K08_1004201_21_conrod_assembly_A.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 4,
+      "duty": "baseline",
+      "templateLevel": "parametric-master"
+    },
+    "nominalParameters": {
+      "bore_mm": 95,
+      "stroke_mm": 90,
+      "rod_journal_diameter_mm": 58,
+      "piston_pin_diameter_mm": 34,
+      "body_height_mm": 248
+    },
+    "nxDriveParameters": [
+      "CR_A_CEN",
+      "CR_B_DIA",
+      "CR_S_DIA",
+      "CR_R_W",
+      "CR_R_LEN",
+      "CR_BLT_CEN"
+    ],
+    "requiredNxMappings": [
+      "CR_A_CEN",
+      "CR_B_DIA",
+      "CR_S_DIA",
+      "CR_R_W",
+      "CR_R_LEN"
+    ],
+    "optionalNxMappings": [
+      "CR_BLT_CEN"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-A/K08_1004201_21_conrod_body_A.prt"
+  },
+  {
+    "id": "TC-TPL-CONROD-B",
+    "folderName": "smart-body-template-library",
+    "itemId": "CONROD_PARAM_TEMPLATE_B",
+    "revisionId": "B",
+    "name": "K08 conrod body parametric template - long stroke",
+    "component": "conrod",
+    "partFamily": "connecting_rod",
+    "datasetName": "K08_1004201_21_conrod_body_B.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-B",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-B/K08_1004201_21_conrod_body_B.prt",
+    "localDrawingTemplatePath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-B/K08_1004201_21_conrod_assembly_B.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 4,
+      "duty": "long-stroke",
+      "templateLevel": "dimension-variant"
+    },
+    "nominalParameters": {
+      "bore_mm": 98,
+      "stroke_mm": 104,
+      "rod_journal_diameter_mm": 62,
+      "piston_pin_diameter_mm": 36,
+      "body_height_mm": 265
+    },
+    "nxDriveParameters": [
+      "CR_A_CEN",
+      "CR_B_DIA",
+      "CR_S_DIA",
+      "CR_R_W",
+      "CR_R_LEN",
+      "CR_BLT_CEN"
+    ],
+    "requiredNxMappings": [
+      "CR_A_CEN",
+      "CR_B_DIA",
+      "CR_S_DIA",
+      "CR_R_W",
+      "CR_R_LEN"
+    ],
+    "optionalNxMappings": [
+      "CR_BLT_CEN"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-B/K08_1004201_21_conrod_body_B.prt"
+  },
+  {
+    "id": "TC-TPL-CONROD-C",
+    "folderName": "smart-body-template-library",
+    "itemId": "CONROD_PARAM_TEMPLATE_C",
+    "revisionId": "C",
+    "name": "K08 conrod body parametric template - heavy duty",
+    "component": "conrod",
+    "partFamily": "connecting_rod",
+    "datasetName": "K08_1004201_21_conrod_body_C.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-C",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-C/K08_1004201_21_conrod_body_C.prt",
+    "localDrawingTemplatePath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-C/K08_1004201_21_conrod_assembly_C.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 6,
+      "duty": "heavy-duty",
+      "templateLevel": "dimension-variant"
+    },
+    "nominalParameters": {
+      "bore_mm": 110,
+      "stroke_mm": 125,
+      "rod_journal_diameter_mm": 70,
+      "piston_pin_diameter_mm": 42,
+      "body_height_mm": 300
+    },
+    "nxDriveParameters": [
+      "CR_A_CEN",
+      "CR_B_DIA",
+      "CR_S_DIA",
+      "CR_R_W",
+      "CR_R_LEN",
+      "CR_BLT_CEN"
+    ],
+    "requiredNxMappings": [
+      "CR_A_CEN",
+      "CR_B_DIA",
+      "CR_S_DIA",
+      "CR_R_W",
+      "CR_R_LEN"
+    ],
+    "optionalNxMappings": [
+      "CR_BLT_CEN"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-C/K08_1004201_21_conrod_body_C.prt"
+  },
+  {
+    "id": "TC-TPL-CONROD-D",
+    "folderName": "smart-body-template-library",
+    "itemId": "CONROD_PARAM_TEMPLATE_D",
+    "revisionId": "D",
+    "name": "K08 conrod body parametric template - high speed light",
+    "component": "conrod",
+    "partFamily": "connecting_rod",
+    "datasetName": "K08_1004201_21_conrod_body_D.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-D",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-D/K08_1004201_21_conrod_body_D.prt",
+    "localDrawingTemplatePath": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-D/K08_1004201_21_conrod_assembly_D.prt",
+    "classificationAttributes": {
+      "engineType": "gasoline",
+      "cylinderCount": 4,
+      "duty": "high-speed-light",
+      "templateLevel": "dimension-variant"
+    },
+    "nominalParameters": {
+      "bore_mm": 86,
+      "stroke_mm": 86,
+      "rod_journal_diameter_mm": 52,
+      "piston_pin_diameter_mm": 30,
+      "body_height_mm": 235
+    },
+    "nxDriveParameters": [
+      "CR_A_CEN",
+      "CR_B_DIA",
+      "CR_S_DIA",
+      "CR_R_W",
+      "CR_R_LEN",
+      "CR_BLT_CEN"
+    ],
+    "requiredNxMappings": [
+      "CR_A_CEN",
+      "CR_B_DIA",
+      "CR_S_DIA",
+      "CR_R_W",
+      "CR_R_LEN"
+    ],
+    "optionalNxMappings": [
+      "CR_BLT_CEN"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CONROD-D/K08_1004201_21_conrod_body_D.prt"
+  },
+  {
+    "id": "TC-TPL-CRANK-A",
+    "folderName": "smart-body-template-library",
+    "itemId": "CRANK_PARAM_TEMPLATE_A",
+    "revisionId": "A",
+    "name": "K17N crankshaft parametric template - four cylinder",
+    "component": "crankshaft",
+    "partFamily": "crankshaft",
+    "datasetName": "K17N_1005001_01SF2_01_crankshaft_A.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-A",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-A/K17N_1005001_01SF2_01_crankshaft_A.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 4,
+      "duty": "balanced",
+      "templateLevel": "parametric-master"
+    },
+    "nominalParameters": {
+      "bore_mm": 98,
+      "stroke_mm": 110,
+      "cylinder_count": 4,
+      "burst_pressure_mpa": 16
+    },
+    "nxDriveParameters": [
+      "CS_Q_RAD",
+      "CS_M_DIA",
+      "CR_J_AX_DIA",
+      "CS_M_GRD_W",
+      "CS_C_W",
+      "WB_T",
+      "WB_RAD"
+    ],
+    "requiredNxMappings": [
+      "CS_Q_RAD",
+      "CS_M_DIA",
+      "CR_J_AX_DIA",
+      "CS_M_GRD_W",
+      "CS_C_W",
+      "WB_T",
+      "WB_RAD"
+    ],
+    "optionalNxMappings": [
+      "WB_QTY",
+      "CS_THROW_ANGLE"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-A/K17N_1005001_01SF2_01_crankshaft_A.prt"
+  },
+  {
+    "id": "TC-TPL-CRANK-B",
+    "folderName": "smart-body-template-library",
+    "itemId": "CRANK_PARAM_TEMPLATE_B",
+    "revisionId": "B",
+    "name": "K17N crankshaft parametric template - six cylinder",
+    "component": "crankshaft",
+    "partFamily": "crankshaft",
+    "datasetName": "K17N_1005001_01SF2_01_crankshaft_B.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-B",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-B/K17N_1005001_01SF2_01_crankshaft_B.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 6,
+      "duty": "balanced",
+      "templateLevel": "dimension-variant"
+    },
+    "nominalParameters": {
+      "bore_mm": 110,
+      "stroke_mm": 125,
+      "cylinder_count": 6,
+      "burst_pressure_mpa": 18
+    },
+    "nxDriveParameters": [
+      "CS_Q_RAD",
+      "CS_M_DIA",
+      "CR_J_AX_DIA",
+      "CS_M_GRD_W",
+      "CS_C_W",
+      "WB_T",
+      "WB_RAD"
+    ],
+    "requiredNxMappings": [
+      "CS_Q_RAD",
+      "CS_M_DIA",
+      "CR_J_AX_DIA",
+      "CS_M_GRD_W",
+      "CS_C_W",
+      "WB_T",
+      "WB_RAD"
+    ],
+    "optionalNxMappings": [
+      "WB_QTY",
+      "CS_THROW_ANGLE"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-B/K17N_1005001_01SF2_01_crankshaft_B.prt"
+  },
+  {
+    "id": "TC-TPL-CRANK-C",
+    "folderName": "smart-body-template-library",
+    "itemId": "CRANK_PARAM_TEMPLATE_C",
+    "revisionId": "C",
+    "name": "K17N crankshaft parametric template - high torque",
+    "component": "crankshaft",
+    "partFamily": "crankshaft",
+    "datasetName": "K17N_1005001_01SF2_01_crankshaft_C.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-C",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-C/K17N_1005001_01SF2_01_crankshaft_C.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 6,
+      "duty": "high-torque",
+      "templateLevel": "dimension-variant"
+    },
+    "nominalParameters": {
+      "bore_mm": 115,
+      "stroke_mm": 132,
+      "cylinder_count": 6,
+      "burst_pressure_mpa": 20
+    },
+    "nxDriveParameters": [
+      "CS_Q_RAD",
+      "CS_M_DIA",
+      "CR_J_AX_DIA",
+      "CS_M_GRD_W",
+      "CS_C_W",
+      "WB_T",
+      "WB_RAD"
+    ],
+    "requiredNxMappings": [
+      "CS_Q_RAD",
+      "CS_M_DIA",
+      "CR_J_AX_DIA",
+      "CS_M_GRD_W",
+      "CS_C_W",
+      "WB_T",
+      "WB_RAD"
+    ],
+    "optionalNxMappings": [
+      "WB_QTY",
+      "CS_THROW_ANGLE"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CRANK-C/K17N_1005001_01SF2_01_crankshaft_C.prt"
+  },
+  {
+    "id": "TC-TPL-CAM-A",
+    "folderName": "smart-body-template-library",
+    "itemId": "CAM_PARAM_TEMPLATE_A",
+    "revisionId": "A",
+    "name": "X14N camshaft parametric template - baseline",
+    "component": "camshaft",
+    "partFamily": "camshaft",
+    "datasetName": "X14N_1006001_01_camshaft_A.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-A",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-A/X14N_1006001_01_camshaft_A.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 4,
+      "duty": "baseline",
+      "templateLevel": "parametric-master"
+    },
+    "nominalParameters": {
+      "cam_lift_mm": 8.5,
+      "base_circle_diameter_mm": 34,
+      "valve_duration_deg": 230,
+      "valve_count": 16,
+      "shaft_journal_diameter_mm": 28
+    },
+    "nxDriveParameters": [
+      "CAM_BASE_DIA",
+      "CAM_LIFT",
+      "CAM_NOSE_RAD",
+      "CAM_LOBE_W",
+      "CAM_J_DIA",
+      "CAM_PHASE"
+    ],
+    "requiredNxMappings": [
+      "CAM_BASE_DIA",
+      "CAM_LIFT",
+      "CAM_NOSE_RAD",
+      "CAM_LOBE_W",
+      "CAM_J_DIA"
+    ],
+    "optionalNxMappings": [
+      "CAM_PHASE",
+      "CAM_RAMP_ANGLE"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-A/X14N_1006001_01_camshaft_A.prt"
+  },
+  {
+    "id": "TC-TPL-CAM-B",
+    "folderName": "smart-body-template-library",
+    "itemId": "CAM_PARAM_TEMPLATE_B",
+    "revisionId": "B",
+    "name": "X14N camshaft parametric template - high lift",
+    "component": "camshaft",
+    "partFamily": "camshaft",
+    "datasetName": "X14N_1006001_01_camshaft_B.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-B",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-B/X14N_1006001_01_camshaft_B.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 4,
+      "duty": "high-lift",
+      "templateLevel": "dimension-variant"
+    },
+    "nominalParameters": {
+      "cam_lift_mm": 10.2,
+      "base_circle_diameter_mm": 36,
+      "valve_duration_deg": 250,
+      "valve_count": 16,
+      "shaft_journal_diameter_mm": 30
+    },
+    "nxDriveParameters": [
+      "CAM_BASE_DIA",
+      "CAM_LIFT",
+      "CAM_NOSE_RAD",
+      "CAM_LOBE_W",
+      "CAM_J_DIA",
+      "CAM_PHASE"
+    ],
+    "requiredNxMappings": [
+      "CAM_BASE_DIA",
+      "CAM_LIFT",
+      "CAM_NOSE_RAD",
+      "CAM_LOBE_W",
+      "CAM_J_DIA"
+    ],
+    "optionalNxMappings": [
+      "CAM_PHASE",
+      "CAM_RAMP_ANGLE"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-B/X14N_1006001_01_camshaft_B.prt"
+  },
+  {
+    "id": "TC-TPL-CAM-C",
+    "folderName": "smart-body-template-library",
+    "itemId": "CAM_PARAM_TEMPLATE_C",
+    "revisionId": "C",
+    "name": "X14N camshaft parametric template - economy",
+    "component": "camshaft",
+    "partFamily": "camshaft",
+    "datasetName": "X14N_1006001_01_camshaft_C.prt",
+    "localFolderPath": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-C",
+    "localPartPath": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-C/X14N_1006001_01_camshaft_C.prt",
+    "classificationAttributes": {
+      "engineType": "diesel",
+      "cylinderCount": 4,
+      "duty": "economy",
+      "templateLevel": "dimension-variant"
+    },
+    "nominalParameters": {
+      "cam_lift_mm": 7.6,
+      "base_circle_diameter_mm": 32,
+      "valve_duration_deg": 215,
+      "valve_count": 16,
+      "shaft_journal_diameter_mm": 26
+    },
+    "nxDriveParameters": [
+      "CAM_BASE_DIA",
+      "CAM_LIFT",
+      "CAM_NOSE_RAD",
+      "CAM_LOBE_W",
+      "CAM_J_DIA",
+      "CAM_PHASE"
+    ],
+    "requiredNxMappings": [
+      "CAM_BASE_DIA",
+      "CAM_LIFT",
+      "CAM_NOSE_RAD",
+      "CAM_LOBE_W",
+      "CAM_J_DIA"
+    ],
+    "optionalNxMappings": [
+      "CAM_PHASE",
+      "CAM_RAMP_ANGLE"
+    ],
+    "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-C/X14N_1006001_01_camshaft_C.prt"
+  }
+]

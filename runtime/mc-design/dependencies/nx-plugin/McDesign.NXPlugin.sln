@@ -1,0 +1,49 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.36227.6
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDesign.NXPlugin", "src\McDesign.NXPlugin\McDesign.NXPlugin.csproj", "{F4CE390D-F5D4-4523-97DA-7E9CB68D25E2}"
+	ProjectSection(ProjectDependencies) = postProject
+		{384F3AEB-1B9D-4C86-AB5A-18E6B76FA871} = {384F3AEB-1B9D-4C86-AB5A-18E6B76FA871}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDesign.NXTools", "src\McDesign.NXTools\McDesign.NXTools.csproj", "{0D9BE28B-9D1C-4AC7-8D74-00AFAAC34CC3}"
+	ProjectSection(ProjectDependencies) = postProject
+		{384F3AEB-1B9D-4C86-AB5A-18E6B76FA871} = {384F3AEB-1B9D-4C86-AB5A-18E6B76FA871}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDesign.NXSDK", "src\McDesign.NXSDK\McDesign.NXSDK.csproj", "{384F3AEB-1B9D-4C86-AB5A-18E6B76FA871}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "McDesign.NXUi", "src\McDesign.NXUi\McDesign.NXUi.csproj", "{A65DF8B4-0FB5-4D7B-9E2C-ACBA3C3D8F2E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{F4CE390D-F5D4-4523-97DA-7E9CB68D25E2}.Debug|x64.ActiveCfg = Debug|x64
+		{F4CE390D-F5D4-4523-97DA-7E9CB68D25E2}.Debug|x64.Build.0 = Debug|x64
+		{F4CE390D-F5D4-4523-97DA-7E9CB68D25E2}.Release|x64.ActiveCfg = Release|x64
+		{F4CE390D-F5D4-4523-97DA-7E9CB68D25E2}.Release|x64.Build.0 = Release|x64
+		{0D9BE28B-9D1C-4AC7-8D74-00AFAAC34CC3}.Debug|x64.ActiveCfg = Debug|x64
+		{0D9BE28B-9D1C-4AC7-8D74-00AFAAC34CC3}.Debug|x64.Build.0 = Debug|x64
+		{0D9BE28B-9D1C-4AC7-8D74-00AFAAC34CC3}.Release|x64.ActiveCfg = Release|x64
+		{0D9BE28B-9D1C-4AC7-8D74-00AFAAC34CC3}.Release|x64.Build.0 = Release|x64
+		{384F3AEB-1B9D-4C86-AB5A-18E6B76FA871}.Debug|x64.ActiveCfg = Debug|x64
+		{384F3AEB-1B9D-4C86-AB5A-18E6B76FA871}.Debug|x64.Build.0 = Debug|x64
+		{384F3AEB-1B9D-4C86-AB5A-18E6B76FA871}.Release|x64.ActiveCfg = Release|x64
+		{384F3AEB-1B9D-4C86-AB5A-18E6B76FA871}.Release|x64.Build.0 = Release|x64
+		{A65DF8B4-0FB5-4D7B-9E2C-ACBA3C3D8F2E}.Debug|x64.ActiveCfg = Debug|x64
+		{A65DF8B4-0FB5-4D7B-9E2C-ACBA3C3D8F2E}.Debug|x64.Build.0 = Debug|x64
+		{A65DF8B4-0FB5-4D7B-9E2C-ACBA3C3D8F2E}.Release|x64.ActiveCfg = Release|x64
+		{A65DF8B4-0FB5-4D7B-9E2C-ACBA3C3D8F2E}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {B869078A-09CE-4C6D-B31F-5756781E7AA0}
+	EndGlobalSection
+EndGlobal

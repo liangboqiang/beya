@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mc-design.design-report.template-slot.schema.json",
+  "title": "mc-design design report template slot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "name", "section", "prompt", "schema", "format", "token"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["text", "image"]
+    },
+    "name": {
+      "type": "string"
+    },
+    "section": {
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Main strategy text. The report generator treats this as the source of slot policy and evidence instructions."
+    },
+    "schema": {
+      "description": "Optional lightweight slot policy declared inside the DOCX placeholder.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "options": {},
+            "output_format": {
+              "type": "string"
+            },
+            "auto_fill": {
+              "type": "string",
+              "enum": ["date", "time", "datetime", "current_date", "current_time"]
+            },
+            "allow_confirmed_missing": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "format": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "width_mm": {
+          "type": "number"
+        },
+        "align": {
+          "type": "string"
+        },
+        "caption": {
+          "type": "string"
+        }
+      }
+    },
+    "token": {
+      "type": "string"
+    }
+  }
+}
