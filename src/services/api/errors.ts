@@ -948,11 +948,19 @@ export function getAssistantMessageFromError(
       })
     }
 
+    const prefix = getIsNonInteractiveSession()
+      ? `Failed to authenticate. ${API_ERROR_MESSAGE_PREFIX}`
+      : `Please run /login — ${API_ERROR_MESSAGE_PREFIX}`
+    const suffix =
+      error.status === 403 &&
+      (error.message?.includes('Request not allowed') ||
+        error.message?.includes('forbidden'))
+        ? `\n\nThis may be a transient access issue. Try again — the request will use a refreshed token.`
+        : ''
+
     return createAssistantAPIErrorMessage({
       error: 'authentication_failed',
-      content: getIsNonInteractiveSession()
-        ? `Failed to authenticate. ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`
-        : `Please run /login · ${API_ERROR_MESSAGE_PREFIX}: ${error.message}`,
+      content: `${prefix}: ${error.message}${suffix}`,
     })
   }
 

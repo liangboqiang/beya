@@ -2535,7 +2535,7 @@ async function* queryModel(
         isEnvTruthy(process.env.CLAUDE_CODE_DISABLE_NONSTREAMING_FALLBACK) ||
         getFeatureValue_CACHED_MAY_BE_STALE(
           "tengu_disable_streaming_to_non_streaming_fallback",
-          false,
+          true,
         );
 
       if (disableFallback) {

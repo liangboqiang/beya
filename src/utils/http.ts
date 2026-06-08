@@ -97,7 +97,7 @@ export function getAuthHeaders(): AuthHeaders {
 }
 
 /**
- * Wrapper that handles OAuth 401 errors by force-refreshing the token and
+ * Wrapper that handles OAuth 401/403 errors by force-refreshing the token and
  * retrying once. Addresses clock drift scenarios where the local expiration
  * check disagrees with the server.
  *
@@ -109,10 +109,13 @@ export function getAuthHeaders(): AuthHeaders {
  *
  * @param opts.also403Revoked - Also retry on 403 with "OAuth token has been
  *   revoked" body (some endpoints signal revocation this way instead of 401).
+ * @param opts.retryAll403 - Also retry on any 403 (not just "revoked").
+ *   Generic 403s like "Request not allowed" can be transient token validation
+ *   issues that resolve on retry with a fresh token.
  */
 export async function withOAuth401Retry<T>(
   request: () => Promise<T>,
-  opts?: { also403Revoked?: boolean },
+  opts?: { also403Revoked?: boolean; retryAll403?: boolean },
 ): Promise<T> {
   try {
     return await request()
@@ -121,6 +124,7 @@ export async function withOAuth401Retry<T>(
     const status = err.response?.status
     const isAuthError =
       status === 401 ||
+      (opts?.retryAll403 && status === 403) ||
       (opts?.also403Revoked &&
         status === 403 &&
         typeof err.response?.data === 'string' &&
