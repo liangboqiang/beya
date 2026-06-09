@@ -4,7 +4,7 @@ id: protocol_gateway
 name: 协议网关
 level: top
 layer_order: 2
-canonical_role: 只负责 HTTP、WebSocket、认证、CORS、静态 H5 和协议错误映射。
+canonical_role: 只负责 WebSocket、必要 HTTP 原生能力、认证、CORS、静态 H5 和协议错误映射。
 
 current_paths:
   - src/server/index.ts
@@ -15,7 +15,8 @@ current_paths:
   - src/server/staticH5.ts
 
 target_children:
-  - http_router
+  - app_ws_control
+  - app_resource_rpc
   - session_ws_transport
   - auth_and_cors
   - h5_static_entry
@@ -28,7 +29,8 @@ owns:
   - 协议级错误格式
 
 input_contracts:
-  - http_api
+  - app_ws
+  - app_rpc
   - route_naming
   - session_ws
 
@@ -53,11 +55,13 @@ must_not_own:
   - agent 事件语义
 
 integration_rules:
-  - 外部 HTTP 只允许 /api/*。
-  - 外部 WebSocket 统一使用 /ws/{sessionId}。
+  - 应用级 WebSocket 控制面统一使用 /ws/app。
+  - 应用资源请求只能作为 app_ws 消息承载，资源路径不能带 /api 前缀。
+  - 会话级 WebSocket 实时面统一使用 /ws/{sessionId}。
+  - session_ws 只能承载会话命令和会话事件，不能承载应用资源 RPC。
 
 retire_or_absorb:
-  - top_level_health_alias
+  - legacy_http_resource_route
   - api_v1_or_openai_proxy_public_path
 
 validation_focus:

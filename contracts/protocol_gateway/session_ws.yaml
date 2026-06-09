@@ -35,4 +35,6 @@ boundary_rules:
   - protocol_gateway 只负责连接、认证、反序列化和转发。
   - session 语义交给 session_host。
   - agent 事件解释不能写在 transport 代码里。
+  - user_message、stop_generation、permission_response、set_runtime_config 只能属于 session_ws。
+  - 应用资源 RPC 属于 app_ws，不能混入 session realtime stream。
   - 实时通道不放进 /api 资源树，避免 REST 资源和 WebSocket 通道混名。

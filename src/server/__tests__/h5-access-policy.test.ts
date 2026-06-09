@@ -22,7 +22,7 @@ describe('h5AccessPolicy', () => {
   })
 
   test('keeps Tauri WebView requests to loopback tokenless', () => {
-    const request = req('http://127.0.0.1:3456/api/status', {
+    const request = req('http://127.0.0.1:3456/ws/app', {
       headers: { Origin: 'http://tauri.localhost' },
     })
     expect(classifyH5Request(request, new URL(request.url), localContext)).toBe('local-trusted')
@@ -41,14 +41,14 @@ describe('h5AccessPolicy', () => {
     expect(shouldRequireH5Token({ request, url: new URL(request.url), h5Enabled: true, context: remoteContext })).toBe(false)
   })
 
-  test('keeps adapter API routes tokenless for local integrations', () => {
-    const request = req('http://127.0.0.1:3456/api/adapters')
+  test('keeps app resource routes tokenless for local integrations', () => {
+    const request = req('http://127.0.0.1:3456/ws/app')
     expect(classifyH5Request(request, new URL(request.url), localContext)).toBe('local-trusted')
     expect(shouldRequireH5Token({ request, url: new URL(request.url), h5Enabled: true, context: localContext })).toBe(false)
   })
 
   test('does not trust loopback adapter requests from non-local browser origins', () => {
-    const request = req('http://127.0.0.1:3456/api/adapters', {
+    const request = req('http://127.0.0.1:3456/ws/app', {
       headers: { Origin: 'https://blocked.example.com' },
     })
     expect(classifyH5Request(request, new URL(request.url), localContext)).toBe('h5-browser')
@@ -56,7 +56,7 @@ describe('h5AccessPolicy', () => {
   })
 
   test('does not trust spoofed loopback hosts from remote clients', () => {
-    const request = req('http://127.0.0.1:3456/api/status', {
+    const request = req('http://127.0.0.1:3456/ws/app', {
       headers: { Origin: 'http://127.0.0.1:5179' },
     })
     expect(classifyH5Request(request, new URL(request.url), remoteContext)).toBe('h5-browser')
@@ -77,12 +77,9 @@ describe('h5AccessPolicy', () => {
     }
   })
 
-  test('requires H5 token for LAN browser API, proxy, and chat websocket routes when enabled', () => {
+  test('requires H5 token for LAN browser app, proxy, and chat websocket routes when enabled', () => {
     for (const pathname of [
-      '/api/status',
-      '/api/mcp',
-      '/api/plugins',
-      '/api/agents',
+      '/ws/app',
       '/proxy/openai/v1/chat/completions',
       '/ws/session-1',
     ]) {
@@ -96,10 +93,7 @@ describe('h5AccessPolicy', () => {
 
   test('blocks LAN browser capability routes while H5 access is disabled', () => {
     for (const pathname of [
-      '/api/status',
-      '/api/mcp',
-      '/api/plugins',
-      '/api/agents',
+      '/ws/app',
       '/proxy/openai/v1/chat/completions',
       '/ws/session-1',
       '/sdk/session-1',
@@ -118,7 +112,7 @@ describe('h5AccessPolicy', () => {
   })
 
   test('keeps local capability routes and static bootstrap routes available while H5 access is disabled', () => {
-    for (const pathname of ['/api/status', '/proxy/openai/v1/chat/completions', '/ws/session-1', '/sdk/session-1']) {
+    for (const pathname of ['/ws/app', '/proxy/openai/v1/chat/completions', '/ws/session-1', '/sdk/session-1']) {
       const request = req(`http://127.0.0.1:3456${pathname}`)
       expect(shouldBlockDisabledH5Access({
         request,
@@ -144,7 +138,7 @@ describe('h5AccessPolicy', () => {
   })
 
   test('explicit deployment auth does not use the H5 token gate when H5 is disabled', () => {
-    const request = req('http://127.0.0.1:3456/api/status')
+    const request = req('http://127.0.0.1:3456/ws/app')
     expect(shouldRequireH5Token({
       request,
       url: new URL(request.url),
@@ -154,7 +148,7 @@ describe('h5AccessPolicy', () => {
   })
 
   test('does not block explicitly authenticated deployments before auth middleware runs', () => {
-    const request = req('http://192.168.0.20:3456/api/status', {
+    const request = req('http://192.168.0.20:3456/ws/app', {
       headers: { Origin: 'https://phone.example' },
     })
     expect(shouldBlockDisabledH5Access({

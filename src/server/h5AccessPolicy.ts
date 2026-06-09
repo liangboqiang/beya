@@ -100,14 +100,13 @@ export function shouldBlockDisabledH5Access({
 }
 
 function isH5ProtectedCapabilityPath(pathname: string): boolean {
-  return pathname.startsWith('/api/') ||
-    pathname.startsWith('/proxy/') ||
+  return pathname.startsWith('/proxy/') ||
     pathname.startsWith('/ws/') ||
-    pathname.startsWith('/sdk/')
+    pathname.startsWith('/sdk/') ||
+    pathname.startsWith('/open-target-icons/')
 }
 
 function isH5BrowserCapabilityPath(pathname: string): boolean {
-  return pathname.startsWith('/api/') ||
-    pathname.startsWith('/proxy/') ||
+  return pathname.startsWith('/proxy/') ||
     pathname.startsWith('/ws/')
 }

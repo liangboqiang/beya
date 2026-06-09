@@ -28,7 +28,8 @@ contracts/
     access_surfaces.yaml
   protocol_gateway/
     protocol_gateway.yaml
-    http_api.yaml
+    app_ws.yaml
+    app_rpc.yaml
     route_naming.yaml
     session_ws.yaml
   session_host/

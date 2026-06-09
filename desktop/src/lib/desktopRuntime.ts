@@ -182,7 +182,6 @@ async function initializeBrowserServerUrl(fallbackUrl: string) {
   }
 
   if (!browserH5Runtime) {
-    await ensureBrowserApiAccessibleWithoutH5(requestedUrl)
     return requestedUrl
   }
 
@@ -281,7 +280,7 @@ async function isHealthyServer(serverUrl: string) {
 }
 
 async function assertHealthyServer(serverUrl: string) {
-  const healthUrl = `${serverUrl}/api/health`
+  const healthUrl = `${serverUrl}/health`
   const response = await fetch(healthUrl, {
     cache: 'no-store',
   })
@@ -345,19 +344,6 @@ function shouldDiscoverLoopbackServer(configuredUrl: string, fallbackUrl: string
 
 async function verifyH5Access() {
   await api.post<{ ok: true }>('/api/h5-access/verify')
-}
-
-async function ensureBrowserApiAccessibleWithoutH5(serverUrl: string) {
-  const response = await fetch(`${serverUrl}/api/status`, {
-    cache: 'no-store',
-  })
-  if (response.status === 401) {
-    throw new H5ConnectionRequiredError(
-      'Enter your H5 token to continue.',
-      serverUrl,
-      'missing-token',
-    )
-  }
 }
 
 function normalizeServerUrl(value: string | null | undefined) {

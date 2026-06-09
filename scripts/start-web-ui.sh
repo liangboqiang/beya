@@ -148,6 +148,7 @@ if [[ "${WEB_PORT_RESOLVED}" == "${SERVER_PORT_RESOLVED}" ]]; then
 fi
 
 SERVER_URL="http://${HOST}:${SERVER_PORT_RESOLVED}"
+SERVER_HEALTH_URL="${SERVER_URL}/health"
 WEB_URL="http://${HOST}:${WEB_PORT_RESOLVED}/?serverUrl=$(urlencode "${SERVER_URL}")"
 
 if [[ "${SERVER_PORT_RESOLVED}" != "${SERVER_PORT_START}" ]]; then
@@ -165,7 +166,7 @@ echo "Starting server: ${SERVER_URL}"
 ) >"${SERVER_LOG}" 2>&1 &
 SERVER_PID=$!
 
-wait_for_http "${SERVER_URL}/api/health" "${SERVER_LOG}"
+wait_for_http "${SERVER_HEALTH_URL}" "${SERVER_LOG}"
 
 echo "Starting Web UI: http://${HOST}:${WEB_PORT_RESOLVED}"
 (

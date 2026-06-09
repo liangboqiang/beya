@@ -510,7 +510,7 @@ function buildOpenTarget(definition: TargetDefinition, platform: OpenTargetPlatf
     kind: definition.kind,
     label: definition.label,
     icon: definition.icon,
-    iconUrl: `/api/open-targets/icons/${encodeURIComponent(definition.id)}`,
+    iconUrl: `/open-target-icons/${encodeURIComponent(definition.id)}`,
     platform,
   }
 }

@@ -260,7 +260,7 @@ export async function executeBaselineCase(
   const stderrPump = pipeToFile(server.stderr, serverLogPath)
 
   try {
-    await waitForHttp(`${baseUrl}/api/health`, 60_000)
+    await waitForHttp(`${baseUrl}/health`, 60_000)
 
     const createResponse = await fetch(`${baseUrl}/api/sessions`, {
       method: 'POST',

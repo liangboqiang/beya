@@ -82,7 +82,11 @@ describe('desktop index startup bridge', () => {
 
   it('keeps web launcher ports fixed and reconnects or clears the requested port', () => {
     expect(startWebUi).not.toContain('Find-AvailablePort')
-    expect(startWebUi).toContain('Test-HttpReady "$serverUrl/api/health"')
+    expect(startWebUi).toContain('$serverHealthUrl = "$serverUrl/health"')
+    expect(startWebUi).toContain('Test-HttpReady $serverHealthUrl')
+    const portProbe = startWebUi.match(/function Test-PortInUse[\s\S]*?function Read-RecentLogs/)?.[0] ?? ''
+    expect(portProbe).toContain('[System.Net.Sockets.TcpClient]::new()')
+    expect(portProbe).not.toContain('Get-NetTCPConnection')
     expect(startWebUi).toContain('$webStatusUrl = "$webOrigin/__beya_web_ui_status"')
     expect(startWebUi).toContain('Stop-ListenerOnPort -Port $serverPortResolved -ExpectedRoot $rootDir -ForceAny')
     expect(startWebUi).toContain('Stop-ListenerOnPort -Port $webPortResolved -ExpectedRoot $rootDir -ForceAny')

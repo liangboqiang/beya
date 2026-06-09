@@ -81,8 +81,8 @@ describe('OpenProjectMenu', () => {
 
   it('renders a dropdown with detected IDEs and Finder', async () => {
     storeMocks.state.targets = [
-      { id: 'vscode', kind: 'ide', label: 'VS Code', icon: 'vscode', iconUrl: '/api/open-targets/icons/vscode', platform: 'darwin' },
-      { id: 'finder', kind: 'file_manager', label: 'Finder', icon: 'finder', iconUrl: '/api/open-targets/icons/finder', platform: 'darwin' },
+      { id: 'vscode', kind: 'ide', label: 'VS Code', icon: 'vscode', iconUrl: '/open-target-icons/vscode', platform: 'darwin' },
+      { id: 'finder', kind: 'file_manager', label: 'Finder', icon: 'finder', iconUrl: '/open-target-icons/finder', platform: 'darwin' },
     ]
     storeMocks.state.primaryTargetId = 'vscode'
     storeMocks.openTarget.mockResolvedValue(undefined)
@@ -96,7 +96,7 @@ describe('OpenProjectMenu', () => {
     expect([
       ...Array.from(container.querySelectorAll('img')),
       ...Array.from(document.body.querySelectorAll('[role="menu"] img')),
-    ].map((img) => img.getAttribute('src'))).toContain('/api/open-targets/icons/vscode')
+    ].map((img) => img.getAttribute('src'))).toContain('/open-target-icons/vscode')
     await act(async () => {
       fireEvent.click(screen.getByRole('menuitem', { name: 'Finder' }))
     })

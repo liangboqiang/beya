@@ -1,15 +1,15 @@
-const ENV_BASE_URL =
-  typeof import.meta !== 'undefined' &&
-  typeof import.meta.env?.VITE_DESKTOP_SERVER_URL === 'string' &&
-  import.meta.env.VITE_DESKTOP_SERVER_URL.length > 0
-    ? import.meta.env.VITE_DESKTOP_SERVER_URL
-    : undefined
+import { sendAppRpcRequest } from './appRpc'
+import {
+  getAuthToken,
+  getBaseUrl,
+  getDefaultBaseUrl,
+  getHttpUrl,
+  hasExplicitDefaultBaseUrl,
+  setAuthToken,
+  setBaseUrl,
+} from './clientState'
 
-const DEFAULT_BASE_URL = ENV_BASE_URL || 'http://127.0.0.1:3456'
-
-let baseUrl = DEFAULT_BASE_URL
-let authToken: string | null = null
-const DIAGNOSTICS_PATH = '/api/diagnostics/events'
+const DIAGNOSTICS_PATH = '/diagnostics/events'
 
 function getErrorMessage(status: number, body: unknown) {
   if (body && typeof body === 'object' && 'message' in body && typeof body.message === 'string') {
@@ -23,38 +23,17 @@ function getErrorMessage(status: number, body: unknown) {
   return `API error ${status}`
 }
 
-export function setBaseUrl(url: string) {
-  baseUrl = url.replace(/\/$/, '')
-}
-
-export function getBaseUrl() {
-  return baseUrl
-}
-
 export function getApiUrl(pathOrUrl: string) {
-  try {
-    return new URL(pathOrUrl).toString()
-  } catch {
-    const normalizedPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`
-    return `${baseUrl}${normalizedPath}`
-  }
+  return getHttpUrl(pathOrUrl)
 }
 
-export function setAuthToken(token: string | null) {
-  const trimmed = token?.trim() ?? ''
-  authToken = trimmed.length > 0 ? trimmed : null
-}
-
-export function getAuthToken() {
-  return authToken
-}
-
-export function getDefaultBaseUrl() {
-  return DEFAULT_BASE_URL
-}
-
-export function hasExplicitDefaultBaseUrl() {
-  return Boolean(ENV_BASE_URL)
+export {
+  getAuthToken,
+  getBaseUrl,
+  getDefaultBaseUrl,
+  hasExplicitDefaultBaseUrl,
+  setAuthToken,
+  setBaseUrl,
 }
 
 export class ApiError extends Error {
@@ -68,38 +47,37 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown, options?: { timeout?: number }): Promise<T> {
-  const url = `${baseUrl}${path}`
   const headers = buildHeaders()
-
-  const controller = new AbortController()
   const timeoutMs = options?.timeout ?? 30_000
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
   try {
-    const res = await fetch(url, {
+    const res = await sendAppRpcRequest({
       method,
+      path: normalizeResourcePath(path),
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: controller.signal,
+      timeoutMs,
     })
-    clearTimeout(timeout)
 
-    if (!res.ok) {
-      const errorBody = await res.json().catch(() => res.text())
-      throw new ApiError(res.status, errorBody)
+    if (res.status < 200 || res.status >= 300) {
+      throw new ApiError(res.status, res.body)
     }
 
     if (res.status === 204) return undefined as T
-    return res.json() as Promise<T>
+    return res.body as T
   } catch (err) {
-    clearTimeout(timeout)
-    if (controller.signal.aborted) {
-      const timeoutError = new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`)
-      reportApiFailure(method, path, timeoutError)
-      throw timeoutError
-    }
     reportApiFailure(method, path, err)
     throw err
   }
+}
+
+function normalizeResourcePath(path: string) {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  if (normalizedPath === '/api') return '/'
+  if (normalizedPath.startsWith('/api/')) {
+    return normalizedPath.slice('/api'.length)
+  }
+  return normalizedPath
 }
 
 function reportApiFailure(method: string, path: string, error: unknown) {
@@ -118,7 +96,7 @@ function reportApiFailure(method: string, path: string, error: unknown) {
   }
 
   void rawRecordDiagnosticEvent({
-    type: 'client_api_request_failed',
+    type: 'client_resource_request_failed',
     severity: 'warn',
     summary: `${method} ${path} failed: ${details.message}`,
     details,
@@ -132,10 +110,12 @@ export function rawRecordDiagnosticEvent(event: {
   sessionId?: string
   details?: unknown
 }) {
-  return fetch(`${baseUrl}${DIAGNOSTICS_PATH}`, {
+  return sendAppRpcRequest({
     method: 'POST',
+    path: DIAGNOSTICS_PATH,
     headers: buildHeaders(),
     body: JSON.stringify(event),
+    timeoutMs: 5_000,
   }).catch(() => undefined)
 }
 
@@ -144,18 +124,20 @@ function buildHeaders(): Record<string, string> {
     'Content-Type': 'application/json',
   }
 
-  if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`
+  const token = getAuthToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
   }
 
   return headers
 }
 
 function sanitizeDiagnosticValue(value: unknown): unknown {
-  if (!authToken) return value
+  const token = getAuthToken()
+  if (!token) return value
 
   if (typeof value === 'string') {
-    return value.split(authToken).join('[redacted]')
+    return value.split(token).join('[redacted]')
   }
 
   if (Array.isArray(value)) {

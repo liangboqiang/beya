@@ -1,0 +1,45 @@
+# App WebSocket 协议。
+# 用于 Desktop/H5/SDK 的应用级 RPC 和订阅，不承载会话流式对话。
+
+id: app_ws
+owner_module: protocol_gateway
+canonical_path: /ws/app
+
+message_groups:
+  client_to_server:
+    - ping
+    - api_request
+    - subscribe
+    - unsubscribe
+  server_to_client:
+    - connected
+    - pong
+    - api_response
+    - app_event
+    - app_error
+
+rpc_policy:
+  allowed_resource_path_form:
+    - /{resource}
+  forbidden_path_prefixes:
+    - /api
+    - /ws
+    - /sdk
+    - /proxy
+    - /local-file
+    - /preview-fs
+  allowed_methods:
+    - GET
+    - POST
+    - PATCH
+    - PUT
+    - DELETE
+
+boundary_rules:
+  - app_ws 可以承载资源查询和应用控制 RPC，但不能承载 session 流式消息。
+  - 会话命令和会话事件必须走 session_ws。
+  - app_ws 资源请求必须使用去掉 /api 前缀的资源路径。
+  - 文件下载、OAuth 回调、provider proxy 和静态资源仍保留 HTTP 入口。
+
+retired_routes:
+  - /api/*

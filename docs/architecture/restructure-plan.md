@@ -13,7 +13,7 @@
 
 当前代码已经有一些好的方向，但还没有形成统一架构契约：
 
-- `/api/*` 已经是 HTTP 资源 API，并有 `tests/beyaServerSdkContract.test.ts` 保护；实时 WebSocket 通道统一为 `/ws/:sessionId`，非规范 WS 路径不再作为入口保留。
+- HTTP `/api/*` 已退役；`/ws/app` 作为应用级控制面承载资源 RPC，资源路径使用 `/sessions`、`/providers` 这类无 `/api` 前缀形式；`/ws/:sessionId` 作为会话实时面承载对话流。
 - `RuntimeProfile`、`RuntimeCapabilities` 已经开始统一 provider 与 local CLI 能力，但 provider 配置、代理转换、会话启动仍分散解释运行时能力。
 - `server/ws/handler.ts` 同时承担 WebSocket 传输、runtime 选择、预热、标题生成、桌面 slash command、权限转译、会话清理和事件翻译。
 - `Tool.ts` 同时定义运行时工具契约和 React/Ink 渲染契约，导致 agent runtime 与 CLI UI 互相粘连。
@@ -29,7 +29,7 @@
 | 板块 | 职责 | 不负责 |
 | --- | --- | --- |
 | `access_surfaces` 接入面 | Desktop、CLI shell、H5、IM、SDK 的用户入口 | Agent 推理、provider 选择、持久化写入 |
-| `protocol_gateway` 协议网关 | `/api/*`、session WebSocket、认证、CORS、H5 静态入口 | 会话生命周期、工具执行、模型调用 |
+| `protocol_gateway` 协议网关 | `/ws/app`、app resource RPC、session WebSocket、认证、CORS、H5 静态入口、必要 HTTP 原生能力 | 会话生命周期、工具执行、模型调用 |
 | `session_host` 会话宿主 | session lifecycle、agent runtime 进程、worktree、标题、调度 | UI 渲染、provider 请求转换、工具实现 |
 | `agent_core` Agent 内核 | query loop、消息模型、上下文、权限、工具编排、subagent 编排 | 传输协议、桌面状态、provider 存储 |
 | `capability_registry` 能力目录 | tools、skills、plugins、MCP、agents、workflows、领域能力包 | UI 呈现、会话进程管理、provider 认证 |
@@ -68,7 +68,7 @@ graph LR
 协议统一放在仓库根目录 `contracts/` 中，不能散落到 `src/`、`desktop/`、`adapters/`、`docs/` 等目录里。协议包和 7 个架构板块同构：`contracts/` 内的分类文件夹对应架构板块，每个分类文件夹内有和板块同名的 YAML 文件以及该板块拥有的小协议文件。这些文件夹只是协议包内部的阅读分组，不代表生产代码目录。这里不设置根索引协议文件，目录结构本身就是索引，避免再次形成中心化大文件。协议包不是最终代码生成器，但后续应成为以下内容的单一来源：
 
 - 板块层级和依赖边界。
-- HTTP/WS 路径命名规范。
+- WS 路径和 app resource RPC 命名规范。
 - session runtime 进程消息。
 - capability manifest。
 - provider/runtime profile。
@@ -82,7 +82,8 @@ graph LR
 
 | 当前路线 | 目标路线 | 处理 |
 | --- | --- | --- |
-| 分散的实时通道命名 | `/ws/:sessionId` | Server 合约测试必须拒绝非规范 WS 路径 |
+| 分散的应用资源请求和实时通道 | `/ws/app` + app resource RPC + `/ws/:sessionId` | 资源语义、应用控制和会话实时分离，避免三者争权 |
+| HTTP 会话命令重叠面 | `/ws/:sessionId` | `user_message`、`stop_generation`、权限响应和 runtime 切换归入 session_ws |
 | Desktop/Python SDK/Adapter 各自维护 WS 消息类型 | `session_ws` 协议 | 先共享类型定义，再考虑由 YAML 生成 TS/Python 类型 |
 | provider 与 local CLI 分散判断能力 | `RuntimeProfile` | 将能力判断收敛到 `model_runtime` |
 | `Tool.ts` 混合运行时和 UI 渲染 | `ToolRuntimeContract` + `ToolPresentationContract` | Agent 内核只依赖 runtime contract |
@@ -96,7 +97,7 @@ graph LR
 
 - 落地本文和 YAML 协议。
 - 将顶层 7 板块作为后续 PR 的 changed surface 补充维度。
-- 对 `/api/*` canonical 路径、WS canonical 路径、RuntimeProfile 增加或整理合约测试。
+- 对 `/ws/app`、app resource RPC、session WS canonical 路径、RuntimeProfile 增加或整理合约测试。
 
 验收：
 
@@ -105,8 +106,9 @@ graph LR
 
 ### 阶段 1：协议网关收敛
 
-- Desktop 和 Python SDK 改为 `/ws/:id`。
-- Server 拒绝非规范 WS 路径，用合约测试证明只有 `/ws/:id` 接入。
+- Desktop 和 Python SDK 的会话命令改为 `/ws/:id`。
+- Server 拒绝非规范 session WS 路径，用合约测试证明只有 `/ws/:id` 接入。
+- 增加 `/ws/app` 应用级控制面，承载资源 RPC，并拒绝 HTTP `/api/*` 旧路径。
 - Desktop、SDK、Adapter 的 `ClientMessage` / `ServerMessage` 对齐到同一个协议定义。
 
 建议验证：
@@ -184,8 +186,9 @@ graph LR
 
 ## 首批建议任务
 
-1. 将 Desktop 和 Python SDK WebSocket 改到 `/ws/:id`，并用拒绝测试锁住非规范 WS 路径不再接入。
-2. 为 `session_ws` 提取共享 TS 类型，Desktop 与 Server 同源。
-3. 拆 `server/ws/handler.ts` 的事件翻译函数，先不改变行为。
-4. 给 `src/utils` 建 import 边界报告，列出反向依赖清单。
-5. 拆 `Tool.ts` 的 presentation 字段，先通过 adapter 保持旧调用。
+1. 将 Desktop 和 Python SDK 会话命令固定到 `/ws/:id`，并用拒绝测试锁住非规范 WS 路径不再接入。
+2. 增加 `/ws/app` 应用控制面，承载资源 RPC，并删除 HTTP `/api/*` 入口。
+3. 为 `session_ws` 和 `app_ws` 提取共享 TS 类型，Desktop 与 Server 同源。
+4. 拆 `server/ws/handler.ts` 的事件翻译函数，先不改变行为。
+5. 给 `src/utils` 建 import 边界报告，列出反向依赖清单。
+6. 拆 `Tool.ts` 的 presentation 字段，先通过 adapter 保持旧调用。

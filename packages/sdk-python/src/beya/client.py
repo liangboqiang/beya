@@ -1,11 +1,8 @@
 import asyncio
-from http.cookiejar import CookieJar
 import json
 import time
 from typing import Any, Dict, Iterable, Iterator, List, Optional
-from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit, urlunsplit
-from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 from . import errors
 from ._websocket import WebSocketClient, WebSocketProtocolError
@@ -16,10 +13,10 @@ JsonObject = Dict[str, Any]
 
 
 class BeyaClient:
-    """Product client for the Beya Server API.
+    """Product client for Beya Server resources.
 
-    The SDK exposes Beya product resources. It is not a route table dump, but
-    every resource method is backed by canonical /api/* Beya Server endpoints.
+    The SDK exposes Beya product resources over the app WebSocket control
+    plane. HTTP /api/* is not a public transport.
     """
 
     def __init__(
@@ -33,8 +30,6 @@ class BeyaClient:
         self.api_key = api_key
         self.bearer_token = bearer_token
         self.default_timeout = default_timeout
-        self.cookie_jar = CookieJar()
-        self._opener = build_opener(HTTPCookieProcessor(self.cookie_jar))
 
         self.tasks = TasksResource(self)
         self.chat = ChatResource(self)
@@ -142,10 +137,10 @@ class BeyaClient:
         return self.models.set_current(model_id, timeout=timeout)
 
     def health(self, timeout=None):
-        return self._request("GET", "/api/health", timeout=timeout)
+        return self._request("GET", "/health", timeout=timeout)
 
     def readiness(self, timeout=None):
-        return self._request("GET", "/api/readiness", timeout=timeout)
+        return self._request("GET", "/readiness", timeout=timeout)
 
     def export_diagnostics(self, timeout=None):
         return self.diagnostics.export(timeout=timeout)
@@ -169,33 +164,71 @@ class BeyaClient:
         return headers
 
     def _request(self, method, path, payload=None, timeout=None):
-        data = None
-        if payload is not None:
-            data = json.dumps(payload).encode("utf-8")
-        req = Request(
-            "%s%s" % (self.base_url, path),
-            data=data,
-            method=method,
-            headers=self._headers(),
-        )
+        request_id = "app-rpc-%s" % int(time.time() * 1000)
         try:
-            with self._opener.open(req, timeout=timeout or self.default_timeout) as response:
-                raw = response.read()
-                if not raw:
-                    return None
-                content_type = response.headers.get("content-type", "")
-                if "application/json" not in content_type:
-                    return raw.decode("utf-8")
-                return json.loads(raw.decode("utf-8"))
-        except HTTPError as exc:
-            raw = exc.read().decode("utf-8", errors="replace")
-            try:
-                payload = json.loads(raw)
-            except Exception:
-                payload = raw
-            raise errors.error_from_response(exc.code, payload)
-        except URLError as exc:
-            raise errors.BeyaServerUnavailableError(str(exc.reason), code="BEYA_SERVER_UNAVAILABLE")
+            with self._open_app_websocket(timeout=timeout) as ws:
+                ws.send_json({
+                    "type": "api_request",
+                    "id": request_id,
+                    "request": {
+                        "method": method,
+                        "path": _resource_path(path),
+                        "headers": self._headers(),
+                        "body": payload,
+                    },
+                })
+                while True:
+                    message = ws.recv_json()
+                    if message is None:
+                        raise errors.BeyaServerUnavailableError(
+                            "App WebSocket closed before a resource response was received",
+                            code="APP_WS_CLOSED",
+                        )
+                    if message.get("type") in ("connected", "pong"):
+                        continue
+                    if message.get("id") != request_id:
+                        continue
+                    if message.get("type") == "app_error":
+                        raise errors.BeyaServerUnavailableError(
+                            str(message.get("message") or "App WebSocket RPC failed"),
+                            code=str(message.get("code") or "APP_WS_ERROR"),
+                        )
+                    if message.get("type") != "api_response":
+                        continue
+                    status = int(message.get("status") or 0)
+                    body = message.get("body")
+                    if status >= 400:
+                        raise errors.error_from_response(status, body)
+                    return body
+        except WebSocketProtocolError as exc:
+            raise errors.BeyaServerUnavailableError(str(exc), code="APP_WS_UNAVAILABLE")
+
+    def _open_app_websocket(self, timeout=None):
+        headers = {}
+        if self.bearer_token:
+            headers["Authorization"] = "Bearer %s" % self.bearer_token
+        elif self.api_key:
+            headers["X-API-Key"] = self.api_key
+        try:
+            return WebSocketClient(
+                self._app_websocket_url(),
+                headers=headers,
+                timeout=timeout or self.default_timeout,
+            )
+        except WebSocketProtocolError as exc:
+            raise errors.BeyaServerUnavailableError(str(exc), code="APP_WS_UNAVAILABLE")
+
+    def _app_websocket_url(self):
+        parsed = urlsplit(self.base_url)
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        base_path = parsed.path.rstrip("/")
+        path = "%s/ws/app" % base_path
+        query = parsed.query
+        token = self.bearer_token or self.api_key
+        if token:
+            extra = urlencode({"token": token})
+            query = "%s&%s" % (query, extra) if query else extra
+        return urlunsplit((scheme, parsed.netloc, path, query, ""))
 
     def _open_session_websocket(self, session_id, timeout=None, purpose=None):
         headers = {}
@@ -937,6 +970,15 @@ def _append_query(path, params):
     if not cleaned:
         return path
     return "%s?%s" % (path, urlencode(cleaned))
+
+
+def _resource_path(path):
+    normalized = path if path.startswith("/") else "/%s" % path
+    if normalized == "/api":
+        return "/"
+    if normalized.startswith("/api/"):
+        return normalized[len("/api"):]
+    return normalized
 
 
 def _bool_query(value):

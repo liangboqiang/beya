@@ -80,7 +80,7 @@ async function runProxyProbe(
   void pipe(server.stderr)
 
   try {
-    await waitForHttp(`${baseUrl}/api/health`, 60_000)
+    await waitForHttp(`${baseUrl}/health`, 60_000)
     const proxyPath = `${baseUrl}/proxy/providers/${encodeURIComponent(provider.id)}/v1/messages`
 
     const nonStream = await fetch(proxyPath, {

@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const rpcMock = vi.hoisted(() => vi.fn())
+
+vi.mock('./appRpc', () => ({
+  sendAppRpcRequest: rpcMock,
+}))
+
 import {
   api,
   getApiUrl,
@@ -8,118 +15,89 @@ import {
   setBaseUrl,
 } from './client'
 
-describe('api diagnostics reporting', () => {
+describe('app resource client', () => {
   afterEach(() => {
     setAuthToken(null)
     setBaseUrl(getDefaultBaseUrl())
+    rpcMock.mockReset()
     vi.restoreAllMocks()
   })
 
-  it('does not send Authorization for default local requests', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }))
+  it('sends resource requests through app WebSocket RPC without Authorization by default', async () => {
+    rpcMock.mockResolvedValueOnce({ status: 200, headers: {}, body: { ok: true } })
 
     await api.get('/api/status')
 
-    const [, init] = fetchMock.mock.calls[0]!
-    expect((init as RequestInit).headers).toMatchObject({
-      'Content-Type': 'application/json',
-    })
-    expect((init as RequestInit & { headers?: Record<string, string> }).headers?.Authorization).toBeUndefined()
+    expect(rpcMock).toHaveBeenCalledWith(expect.objectContaining({
+      method: 'GET',
+      path: '/status',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }))
   })
 
-  it('resolves relative asset URLs against the configured API base URL', () => {
+  it('resolves relative asset URLs against the configured server base URL', () => {
     setBaseUrl('http://127.0.0.1:49237')
 
-    expect(getApiUrl('/api/open-targets/icons/finder')).toBe(
-      'http://127.0.0.1:49237/api/open-targets/icons/finder',
+    expect(getApiUrl('/open-target-icons/finder')).toBe(
+      'http://127.0.0.1:49237/open-target-icons/finder',
     )
     expect(getApiUrl('https://example.com/icon.png')).toBe('https://example.com/icon.png')
   })
 
   it('adds Authorization when an H5 token is configured', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }))
+    rpcMock.mockResolvedValueOnce({ status: 200, headers: {}, body: { ok: true } })
 
     setAuthToken('h5_x')
     await api.get('/api/status')
 
-    const [, init] = fetchMock.mock.calls[0]!
-    expect((init as RequestInit & { headers?: Record<string, string> }).headers).toMatchObject({
-      Authorization: 'Bearer h5_x',
-    })
+    expect(rpcMock).toHaveBeenCalledWith(expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: 'Bearer h5_x',
+      }),
+    }))
   })
 
-  it('reports non-diagnostics API failures without request bodies', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-    fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'Nope' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }))
+  it('reports non-diagnostics resource failures without request bodies', async () => {
+    rpcMock
+      .mockResolvedValueOnce({ status: 500, headers: {}, body: { message: 'Nope' } })
+      .mockResolvedValueOnce({ status: 200, headers: {}, body: { ok: true } })
 
     await expect(api.post('/api/providers/test', { apiKey: 'sk-should-not-report' })).rejects.toThrow('Nope')
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    const diagnosticCall = fetchMock.mock.calls[1]
-    expect(diagnosticCall).toBeDefined()
-    const [diagnosticUrl, diagnosticInit] = diagnosticCall!
-    expect(String(diagnosticUrl)).toContain('/api/diagnostics/events')
-    const body = JSON.parse(String((diagnosticInit as RequestInit).body))
-    expect(body.type).toBe('client_api_request_failed')
+    expect(rpcMock).toHaveBeenCalledTimes(2)
+    const diagnosticCall = rpcMock.mock.calls[1]?.[0]
+    expect(diagnosticCall.path).toBe('/diagnostics/events')
+    const body = JSON.parse(String(diagnosticCall.body))
+    expect(body.type).toBe('client_resource_request_failed')
     expect(body.details.path).toBe('/api/providers/test')
     expect(JSON.stringify(body)).not.toContain('sk-should-not-report')
   })
 
   it('does not leak the H5 token in diagnostics payloads', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-    fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'Unauthorized' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }))
+    rpcMock
+      .mockResolvedValueOnce({ status: 401, headers: {}, body: { message: 'Unauthorized' } })
+      .mockResolvedValueOnce({ status: 200, headers: {}, body: { ok: true } })
 
     setAuthToken('h5_super_secret')
 
     await expect(api.get('/api/status')).rejects.toThrow('Unauthorized')
 
-    const [, diagnosticInit] = fetchMock.mock.calls[1]!
-    const body = JSON.parse(String((diagnosticInit as RequestInit).body))
+    const body = JSON.parse(String(rpcMock.mock.calls[1]?.[0].body))
     expect(JSON.stringify(body)).not.toContain('h5_super_secret')
   })
 
   it('does not recursively report diagnostics endpoint failures', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ message: 'diagnostics down' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    }))
+    rpcMock.mockResolvedValueOnce({ status: 500, headers: {}, body: { message: 'diagnostics down' } })
 
     await expect(api.get('/api/diagnostics/status')).rejects.toThrow('diagnostics down')
 
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(rpcMock).toHaveBeenCalledTimes(1)
   })
 
-  it('can report raw client exceptions', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }))
+  it('can report raw client exceptions through app WebSocket RPC', async () => {
+    rpcMock.mockResolvedValueOnce({ status: 200, headers: {}, body: { ok: true } })
 
     await rawRecordDiagnosticEvent({
       type: 'client_window_error',
@@ -128,11 +106,8 @@ describe('api diagnostics reporting', () => {
       details: { filename: 'App.tsx' },
     })
 
-    expect(fetchMock).toHaveBeenCalledTimes(1)
-    const call = fetchMock.mock.calls[0]
-    expect(call).toBeDefined()
-    const [, init] = call!
-    const body = JSON.parse(String((init as RequestInit).body))
+    expect(rpcMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse(String(rpcMock.mock.calls[0]?.[0].body))
     expect(body.type).toBe('client_window_error')
   })
 })

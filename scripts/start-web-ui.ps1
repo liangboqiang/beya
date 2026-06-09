@@ -24,15 +24,6 @@ function Resolve-Bun {
 }
 
 function Test-PortInUse([string]$Address, [int]$Port) {
-  try {
-    $listeners = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
-    if ($listeners) {
-      return $true
-    }
-  } catch {
-    # Fall back to a socket probe below on older PowerShell environments.
-  }
-
   $client = [System.Net.Sockets.TcpClient]::new()
   try {
     $async = $client.BeginConnect($Address, $Port, $null, $null)
@@ -197,6 +188,7 @@ if ($serverPortResolved -eq $webPortResolved) {
 }
 
 $serverUrl = "http://${HostAddress}:$serverPortResolved"
+$serverHealthUrl = "$serverUrl/health"
 $webOrigin = "http://${HostAddress}:$webPortResolved"
 $webStatusUrl = "$webOrigin/__beya_web_ui_status"
 $webUrl = "$webOrigin/?serverUrl=$([uri]::EscapeDataString($serverUrl))"
@@ -213,7 +205,7 @@ $server = $null
 $serverOwned = $false
 if (Test-PortInUse $HostAddress $serverPortResolved) {
   Write-Host "Server port $serverPortResolved is in use; trying to reconnect."
-  if (Test-HttpReady "$serverUrl/api/health") {
+  if (Test-HttpReady $serverHealthUrl) {
     Write-Host "Reusing existing server: $serverUrl"
   } else {
     Write-Host "Existing listener on server port $serverPortResolved is not healthy; stopping it."
@@ -222,7 +214,7 @@ if (Test-PortInUse $HostAddress $serverPortResolved) {
   }
 }
 
-if (-not (Test-HttpReady "$serverUrl/api/health")) {
+if (-not (Test-HttpReady $serverHealthUrl)) {
   Write-Host "Starting server: $serverUrl"
   $serverCommand = @(
     "Set-Location -LiteralPath $(Quote-PowerShell $rootDir)"
@@ -237,7 +229,7 @@ if (-not (Test-HttpReady "$serverUrl/api/health")) {
 
 try {
   if ($serverOwned) {
-    Wait-Http "$serverUrl/api/health" @($serverLog, $serverErr) { -not $server.HasExited }
+    Wait-Http $serverHealthUrl @($serverLog, $serverErr) { -not $server.HasExited }
   }
 
   $web = $null
@@ -303,7 +295,7 @@ try {
       if ($server.HasExited) {
         throw "Server process exited with code $($server.ExitCode). Recent log:`n$(Read-RecentLogs -LogFiles @($serverLog, $serverErr))"
       }
-    } elseif (-not (Test-HttpReady "$serverUrl/api/health")) {
+    } elseif (-not (Test-HttpReady $serverHealthUrl)) {
       throw "Reused server is no longer reachable: $serverUrl"
     }
 

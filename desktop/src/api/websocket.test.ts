@@ -5,7 +5,7 @@ const clientMocks = vi.hoisted(() => ({
   authToken: null as string | null,
 }))
 
-vi.mock('./client', () => ({
+vi.mock('./clientState', () => ({
   getBaseUrl: () => clientMocks.baseUrl,
   getAuthToken: () => clientMocks.authToken,
 }))

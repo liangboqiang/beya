@@ -2,14 +2,14 @@ import asyncio
 import json
 import os
 import sys
-import threading
+import time
 import unittest
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from tempfile import TemporaryDirectory
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
 from beya import AsyncBeyaClient, BeyaClient, ConnectorToolExecutor, RemoteToolExecutor, RunEvent, define_plugin, define_skill, define_tool
+from beya.client import _resource_path
 
 
 class FakeWebSocket:
@@ -43,8 +43,9 @@ class RecordingClient(BeyaClient):
         ])
 
     def _request(self, method, path, payload=None, timeout=None):
+        path = _resource_path(path)
         self.calls.append((method, path, payload))
-        if path == "/api/sessions" and method == "POST":
+        if path == "/sessions" and method == "POST":
             return {"session_id": "session-1"}
         return {"ok": True, "path": path}
 
@@ -102,15 +103,16 @@ class ProductClientTest(unittest.TestCase):
 
         paths = [path for _method, path, _payload in client.calls]
         self.assertTrue(paths)
-        self.assertIn("/api/tasks", paths)
-        self.assertIn("/api/tasks/lists", paths)
-        self.assertIn("/api/providers/catalog", paths)
-        self.assertIn("/api/plugins/enable", paths)
-        self.assertIn("/api/scheduled-tasks", paths)
-        self.assertIn("/api/health", paths)
-        self.assertIn("/api/readiness", paths)
-        self.assertTrue(any(path.startswith("/api/tools?") and "session_id=session-1" in path and "cwd=F%3A%2FDocuments%2Fbeya" in path for path in paths))
+        self.assertIn("/tasks", paths)
+        self.assertIn("/tasks/lists", paths)
+        self.assertIn("/providers/catalog", paths)
+        self.assertIn("/plugins/enable", paths)
+        self.assertIn("/scheduled-tasks", paths)
+        self.assertIn("/health", paths)
+        self.assertIn("/readiness", paths)
+        self.assertTrue(any(path.startswith("/tools?") and "session_id=session-1" in path and "cwd=F%3A%2FDocuments%2Fbeya" in path for path in paths))
         self.assertTrue(any(path == "ws://beya.test/ws/session-1?purpose=sdk_chat" for path in paths))
+        self.assertFalse(any(path.startswith("/api/") for path in paths))
         self.assertFalse(any(path.startswith("/v1/") for path in paths))
         self.assertFalse(any("/api/stream" in path for path in paths))
         self.assertFalse(any("/api/openai" in path for path in paths))
@@ -297,7 +299,7 @@ class ProductClientTest(unittest.TestCase):
         self.assertTrue(response["ok"])
         method, path, payload = client.calls[-1]
         self.assertEqual(method, "POST")
-        self.assertEqual(path, "/api/plugins")
+        self.assertEqual(path, "/plugins")
         self.assertEqual(payload["id"], "demo-plugin")
         self.assertEqual(payload["type"], "inline")
         self.assertEqual(payload["definition"]["tools"][0]["executor"]["url"], "http://127.0.0.1:8000/tools")
@@ -323,7 +325,7 @@ class ProductClientTest(unittest.TestCase):
 
         method, path, payload = client.calls[-1]
         self.assertEqual(method, "POST")
-        self.assertEqual(path, "/api/plugins")
+        self.assertEqual(path, "/plugins")
         executor = payload["definition"]["tools"][0]["executor"]
         self.assertEqual(executor["type"], "http")
         self.assertEqual(executor["toolName"], "query_business_records")
@@ -335,8 +337,8 @@ class ProductClientTest(unittest.TestCase):
 
         client.providers.upsert({"providerId": "custom", "apiFormat": "openai_chat"})
 
-        self.assertEqual(client.calls[-2][1], "/api/providers")
-        self.assertEqual(client.calls[-1], ("POST", "/api/providers", {"providerId": "custom", "apiFormat": "openai_chat"}))
+        self.assertEqual(client.calls[-2][1], "/providers")
+        self.assertEqual(client.calls[-1], ("POST", "/providers", {"providerId": "custom", "apiFormat": "openai_chat"}))
 
     def test_plugin_helpers_write_beya_plugin_layout(self):
         plugin = define_plugin(
@@ -356,46 +358,24 @@ class ProductClientTest(unittest.TestCase):
                 manifest = json.load(fh)
             self.assertEqual(manifest["skills"], "./skills")
 
-    def test_client_preserves_server_route_cookie_between_api_calls(self):
-        seen = []
+    def test_client_sends_resource_request_over_app_websocket(self):
+        frames = [
+            {"type": "connected", "scope": "app"},
+            {"type": "api_response", "id": "app-rpc-1", "status": 200, "headers": {}, "body": {"models": []}},
+        ]
+        client = BeyaClient(base_url="http://beya.test")
+        fake_ws = FakeWebSocket(frames)
+        client._open_app_websocket = lambda timeout=None: fake_ws
 
-        class Handler(BaseHTTPRequestHandler):
-            def do_GET(self):
-                cookie = self.headers.get("Cookie") or ""
-                seen.append(("GET", self.path, cookie))
-                if self.path.startswith("/api/sessions"):
-                    raw = json.dumps({"sessions": []}).encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Set-Cookie", "AlteonP=pod-a; Path=/")
-                    self.send_header("Content-Length", str(len(raw)))
-                    self.end_headers()
-                    self.wfile.write(raw)
-                    return
-                if self.path == "/api/models" and "AlteonP=pod-a" in cookie:
-                    raw = json.dumps({"models": []}).encode("utf-8")
-                    self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
-                    self.send_header("Content-Length", str(len(raw)))
-                    self.end_headers()
-                    self.wfile.write(raw)
-                    return
-                self.send_error(404)
-
-            def log_message(self, _format, *args):
-                return
-
-        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
+        original_time = time.time
         try:
-            client = BeyaClient(base_url="http://127.0.0.1:%s" % server.server_port)
-            client.sessions.list()
-            client.models.list()
-            self.assertTrue(any(row[0] == "GET" and "AlteonP=pod-a" in row[2] for row in seen))
+            time.time = lambda: 0.001
+            self.assertEqual(client.models.list(), {"models": []})
         finally:
-            server.shutdown()
-            server.server_close()
+            time.time = original_time
+
+        self.assertEqual(fake_ws.sent[0]["type"], "api_request")
+        self.assertEqual(fake_ws.sent[0]["request"]["path"], "/models")
 
     def test_async_client_exposes_product_resources(self):
         async def run():

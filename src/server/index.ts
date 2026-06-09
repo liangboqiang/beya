@@ -1,11 +1,14 @@
 /**
- * Beya Desktop App — HTTP + WebSocket Server
+ * Beya Desktop App — WebSocket Gateway Server
  *
- * 为桌面端 UI 提供 REST API 和 WebSocket 实时通信。
+ * 为桌面端 UI 提供 WebSocket 协议、静态 H5 和少量浏览器原生 HTTP 能力。
  * 读写与 CLI 完全相同的文件系统，确保 CLI/UI 数据互通。
  */
 
-import { handleWebSocket, type WebSocketData } from './ws/handler.js'
+import {
+  handleGatewayWebSocket,
+  type GatewayWebSocketData,
+} from './ws/gateway.js'
 import { resolveCors, type CorsResolution } from './middleware/cors.js'
 import { requireAuth, requireH5Token } from './middleware/auth.js'
 import { teamWatcher } from './services/teamWatcher.js'
@@ -25,9 +28,9 @@ import { ensurePersistentStorageUpgraded } from './services/persistentStorageMig
 import { handleStaticH5Request } from './staticH5.js'
 import { classifyH5Request, shouldBlockDisabledH5Access, shouldRequireH5Token } from './h5AccessPolicy.js'
 import { H5AccessService } from './services/h5AccessService.js'
-import { handleApiRequest } from './router.js'
 import { runEmbeddedCliIfRequested } from './embeddedCli.js'
-import { sessionWebSocketIdFromPath } from './ws/sessionWsPath.js'
+import { isAppWebSocketPath, sessionWebSocketIdFromPath } from './ws/paths.js'
+import { openTargetService } from './services/openTargetService.js'
 
 function readArgValue(flag: string): string | undefined {
   const args = process.argv.slice(2)
@@ -87,16 +90,6 @@ function h5AccessControlRejectedResponse(): Response {
   )
 }
 
-function localInteractiveFilesystemRejectedResponse(): Response {
-  return Response.json(
-    {
-      error: 'Forbidden',
-      message: 'Interactive filesystem selection is only available from the local desktop app or loopback Web UI.',
-    },
-    { status: 403 },
-  )
-}
-
 function h5AccessDisabledResponse(): Response {
   return Response.json(
     {
@@ -105,27 +98,6 @@ function h5AccessDisabledResponse(): Response {
     },
     { status: 403 },
   )
-}
-
-function isH5AccessControlRequest(
-  req: Request,
-  url: URL,
-  context: { clientAddress: string | null },
-): boolean {
-  if (!url.pathname.startsWith('/api/h5-access')) {
-    return false
-  }
-
-  if (url.pathname === '/api/h5-access/verify') {
-    return false
-  }
-
-  return classifyH5Request(req, url, context) !== 'local-trusted'
-}
-
-function isLocalInteractiveFilesystemRequest(url: URL): boolean {
-  return url.pathname === '/api/filesystem/pick-directory' ||
-    url.pathname === '/api/filesystem/register-directory'
 }
 
 function originFromUrl(value: string | null): string | null {
@@ -159,10 +131,10 @@ export function startServer(port = PORT, host = HOST) {
     process.env.SERVER_AUTH_REQUIRED === '1'
   const h5AccessService = new H5AccessService()
 
-  let server: ReturnType<typeof Bun.serve<WebSocketData>>
+  let server: ReturnType<typeof Bun.serve<GatewayWebSocketData>>
 
   try {
-    server = Bun.serve<WebSocketData>({
+    server = Bun.serve<GatewayWebSocketData>({
       port,
       hostname: host,
       idleTimeout: 60,
@@ -194,18 +166,6 @@ export function startServer(port = PORT, host = HOST) {
           explicitAuthRequired: forceAuth,
           context: h5RequestContext,
         })
-        const h5AccessControlBlocked = isH5AccessControlRequest(req, url, h5RequestContext)
-        const localInteractiveFilesystemBlocked =
-          isLocalInteractiveFilesystemRequest(url) &&
-          classifyH5Request(req, url, h5RequestContext) !== 'local-trusted'
-
-        if (h5AccessControlBlocked) {
-          return h5AccessControlRejectedResponse()
-        }
-
-        if (localInteractiveFilesystemBlocked) {
-          return localInteractiveFilesystemRejectedResponse()
-        }
 
         if (h5AccessDisabledBlocked) {
           return h5AccessDisabledResponse()
@@ -219,7 +179,39 @@ export function startServer(port = PORT, host = HOST) {
           return new Response(null, { status: 204, headers: cors.headers })
         }
 
-        // Session WebSocket upgrade. /ws/:id is the only public path.
+        // App WebSocket control plane. It carries application-level RPC and
+        // subscriptions without mixing them into a session realtime stream.
+        if (isAppWebSocketPath(url.pathname)) {
+          if (cors.rejected) {
+            return corsRejectedResponse(cors)
+          }
+
+          if (authRequired) {
+            const authError = await requireH5Token(req, url.searchParams.get('token'))
+            if (authError) {
+              return withCors(authError, cors)
+            }
+          } else if (forceAuth) {
+            const authError = await requireAuth(req, url.searchParams.get('token'))
+            if (authError) {
+              return withCors(authError, cors)
+            }
+          }
+
+          const upgraded = server.upgrade(req, {
+            data: {
+              channel: 'app',
+              connectedAt: Date.now(),
+              serverPort: port,
+              serverHost: localConnectHost,
+              requestKind: classifyH5Request(req, url, h5RequestContext),
+            },
+          })
+          if (upgraded) return undefined
+          return new Response('WebSocket upgrade failed', { status: 400 })
+        }
+
+        // Session WebSocket upgrade. /ws/:id is the session realtime path.
         const sessionWebSocketId = sessionWebSocketIdFromPath(url.pathname)
         if (sessionWebSocketId !== null) {
           if (cors.rejected) {
@@ -306,6 +298,14 @@ export function startServer(port = PORT, host = HOST) {
           return handleBeyaOpenAIOAuthCallback(url)
         }
 
+        if (url.pathname === '/health' || url.pathname === '/readiness') {
+          return withCors(Response.json({
+            status: url.pathname === '/health' ? 'ok' : 'ready',
+            service: 'beya-server',
+            timestamp: new Date().toISOString(),
+          }), cors)
+        }
+
         // Preview filesystem — serve sandboxed workspace files for a session.
         if (url.pathname.startsWith('/preview-fs/')) {
           if (cors.rejected) {
@@ -359,12 +359,9 @@ export function startServer(port = PORT, host = HOST) {
           return withCors(response, cors)
         }
 
-        // Unified Beya Server API. Desktop, SDKs, CLI and external clients
-        // converge on this canonical /api/* protocol.
-        if (
-          url.pathname === '/api' ||
-          url.pathname.startsWith('/api/')
-        ) {
+        // Browser-native icon assets. Resource queries go through /ws/app;
+        // image tags still need a direct HTTP URL, but not an /api route.
+        if (url.pathname.startsWith('/open-target-icons/')) {
           if (cors.rejected) {
             return corsRejectedResponse(cors)
           }
@@ -382,18 +379,30 @@ export function startServer(port = PORT, host = HOST) {
           }
 
           try {
-            const response = await handleApiRequest(req, url)
-            return withCors(response, cors)
+            const targetId = decodeURIComponent(url.pathname.slice('/open-target-icons/'.length)).trim()
+            if (!targetId) {
+              return withCors(Response.json(
+                { error: 'Bad Request', message: 'Missing open target icon id' },
+                { status: 400 },
+              ), cors)
+            }
+            const icon = await openTargetService.getTargetIcon(targetId)
+            return withCors(new Response(icon.data, {
+              headers: {
+                'Cache-Control': 'private, max-age=86400',
+                'Content-Type': icon.contentType,
+              },
+            }), cors)
           } catch (error) {
             void diagnosticsService.recordEvent({
-              type: 'server_api_request_failed',
+              type: 'open_target_icon_request_failed',
               severity: 'error',
               summary: error instanceof Error ? error.message : String(error),
               details: { path: url.pathname, method: req.method, error },
             })
-            console.error('[Server] API error:', error)
+            console.error('[Server] Open target icon error:', error)
             return withCors(Response.json(
-              { error: 'Internal server API error' },
+              { error: 'Internal icon request error' },
               { status: 500 },
             ), cors)
           }
@@ -434,6 +443,13 @@ export function startServer(port = PORT, host = HOST) {
           }
         }
 
+        if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+          return withCors(Response.json(
+            { error: 'Not Found', message: 'HTTP /api resources have been retired. Use /ws/app resource RPC.' },
+            { status: 404 },
+          ), cors)
+        }
+
         // Static H5 shell/assets are non-secret bootstrap content and must load
         // before the browser can read the QR token; API/proxy/ws stay protected above.
         const staticResponse = await handleStaticH5Request(req, url)
@@ -444,7 +460,7 @@ export function startServer(port = PORT, host = HOST) {
         return new Response('Not Found', { status: 404 })
       },
 
-      websocket: handleWebSocket,
+      websocket: handleGatewayWebSocket,
     })
   } catch (error) {
     const message = error instanceof Error && error.message

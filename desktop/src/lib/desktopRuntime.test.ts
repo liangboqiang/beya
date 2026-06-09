@@ -125,10 +125,7 @@ describe('desktopRuntime browser H5 bootstrap', () => {
 
     expect(clientMocks.setBaseUrl).toHaveBeenLastCalledWith(window.location.origin)
     expect(clientMocks.setAuthToken).toHaveBeenLastCalledWith(null)
-    expect(globalThis.fetch).toHaveBeenCalledWith(`${window.location.origin}/api/health`, {
-      cache: 'no-store',
-    })
-    expect(globalThis.fetch).toHaveBeenCalledWith(`${window.location.origin}/api/status`, {
+    expect(globalThis.fetch).toHaveBeenCalledWith(`${window.location.origin}/health`, {
       cache: 'no-store',
     })
   })
@@ -144,17 +141,13 @@ describe('desktopRuntime browser H5 bootstrap', () => {
       .mockResolvedValueOnce(notListeningResponse)
       .mockResolvedValueOnce(notListeningResponse)
       .mockResolvedValueOnce(healthOkResponse())
-      .mockResolvedValueOnce(healthOkResponse())
-      .mockResolvedValueOnce(new Response(null, { status: 200 })) as typeof fetch
+      .mockResolvedValueOnce(healthOkResponse()) as typeof fetch
 
     await expect(initializeDesktopServerUrl()).resolves.toBe('http://127.0.0.1:3458')
 
     expect(clientMocks.setBaseUrl).toHaveBeenLastCalledWith('http://127.0.0.1:3458')
     expect(clientMocks.setAuthToken).toHaveBeenLastCalledWith(null)
-    expect(globalThis.fetch).toHaveBeenCalledWith(`${window.location.origin}/api/health`, {
-      cache: 'no-store',
-    })
-    expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:3458/api/status', {
+    expect(globalThis.fetch).toHaveBeenCalledWith(`${window.location.origin}/health`, {
       cache: 'no-store',
     })
   })
@@ -171,10 +164,7 @@ describe('desktopRuntime browser H5 bootstrap', () => {
 
     expect(clientMocks.setBaseUrl).toHaveBeenLastCalledWith('http://127.0.0.1:55189')
     expect(clientMocks.setAuthToken).toHaveBeenLastCalledWith(null)
-    expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:55189/api/health', {
-      cache: 'no-store',
-    })
-    expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:55189/api/status', {
+    expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:55189/health', {
       cache: 'no-store',
     })
   })
@@ -194,7 +184,7 @@ describe('desktopRuntime browser H5 bootstrap', () => {
     expect(clientMocks.setBaseUrl).toHaveBeenLastCalledWith('http://127.0.0.1:55189')
     expect(clientMocks.setAuthToken).toHaveBeenLastCalledWith(null)
     expect(clientMocks.postVerify).not.toHaveBeenCalled()
-    expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:55189/api/status', {
+    expect(globalThis.fetch).toHaveBeenCalledWith('http://127.0.0.1:55189/health', {
       cache: 'no-store',
     })
   })
@@ -286,8 +276,7 @@ describe('desktopRuntime browser H5 bootstrap', () => {
   it('shows the H5 token recovery view when a local browser connects to an auth-required LAN server', async () => {
     window.history.pushState({}, '', '/?serverUrl=http%3A%2F%2F192.168.0.102%3A28670')
     globalThis.fetch = vi.fn()
-      .mockResolvedValueOnce(healthOkResponse())
-      .mockResolvedValueOnce(new Response(null, { status: 401 })) as typeof fetch
+      .mockResolvedValueOnce(healthOkResponse()) as typeof fetch
 
     await expect(initializeDesktopServerUrl()).rejects.toMatchObject({
       name: 'H5ConnectionRequiredError',

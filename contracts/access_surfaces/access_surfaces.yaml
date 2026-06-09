@@ -34,7 +34,8 @@ input_contracts:
   - sdk_call
 
 output_contracts:
-  - http_api
+  - app_ws
+  - app_rpc
   - session_ws
 
 allowed_dependencies:
@@ -54,6 +55,8 @@ must_not_own:
   - ~/.beya 业务持久化写入
 
 integration_rules:
+  - 应用级资源和控制请求必须使用 app_ws/app_rpc。
+  - HTTP 只保留静态资源、OAuth callback、provider proxy、文件预览和浏览器原生资源。
   - 所有远程会话通信都走 session_ws canonical 路径。
   - UI 只消费协议事件，不解释 agent 内部事件。
   - IM Adapter 不能保留私有 WebSocket 语义。

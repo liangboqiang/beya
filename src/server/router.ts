@@ -1,5 +1,8 @@
 /**
- * Canonical Beya Server API router.
+ * Internal Beya resource router.
+ *
+ * Public clients enter through /ws/app resource RPC. The /api-prefixed URL
+ * shape below is a temporary internal adapter for existing resource handlers.
  */
 
 import { handleSessionsApi } from './api/sessions.js'
@@ -51,7 +54,7 @@ async function routeApiRequest(req: Request, url: URL, options: ApiRequestOption
   const segments = path.split('/').filter(Boolean) // ['api', 'sessions', ...]
   if (segments[0] !== 'api') {
     return Response.json(
-      { error: 'Not Found', message: `Unknown API path: ${path}` },
+      { error: 'Not Found', message: `Unknown internal resource path: ${path}` },
       { status: 404 },
     )
   }
@@ -179,7 +182,7 @@ async function routeApiRequest(req: Request, url: URL, options: ApiRequestOption
 
     default:
       return Response.json(
-        { error: 'Not Found', message: `Unknown API resource: ${resource}` },
+        { error: 'Not Found', message: `Unknown resource: ${resource}` },
         { status: 404 }
       )
   }

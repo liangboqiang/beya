@@ -4,6 +4,7 @@ param(
   [string]$HostAddress = "127.0.0.1",
   [int]$ServerPort = 3456,
   [int]$WebPort = 5173,
+  [switch]$NoOpen,
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$ExtraArgs
 )
@@ -29,6 +30,7 @@ function Show-Help {
   Write-Host "  -HostAddress 127.0.0.1"
   Write-Host "  -ServerPort 3456"
   Write-Host "  -WebPort 5173"
+  Write-Host "  -NoOpen"
 }
 
 function Resolve-Bun {
@@ -87,7 +89,11 @@ $bun = Resolve-Bun
 
 switch ($Mode) {
   "web" {
-    & (Join-Path $rootDir "scripts\start-web-ui.ps1") -HostAddress $HostAddress -ServerPort $ServerPort -WebPort $WebPort
+    if ($NoOpen) {
+      & (Join-Path $rootDir "scripts\start-web-ui.ps1") -HostAddress $HostAddress -ServerPort $ServerPort -WebPort $WebPort -NoOpen
+    } else {
+      & (Join-Path $rootDir "scripts\start-web-ui.ps1") -HostAddress $HostAddress -ServerPort $ServerPort -WebPort $WebPort
+    }
   }
   "cli" {
     Invoke-BeyaCli $ExtraArgs

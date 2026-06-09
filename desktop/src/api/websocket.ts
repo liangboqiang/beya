@@ -1,5 +1,5 @@
 import type { ClientMessage, ServerMessage } from '../types/chat'
-import { getAuthToken, getBaseUrl } from './client'
+import { getAuthToken, getBaseUrl } from './clientState'
 
 type MessageHandler = (msg: ServerMessage) => void
 

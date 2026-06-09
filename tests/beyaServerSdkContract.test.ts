@@ -4,14 +4,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { handleApiRequest } from '../src/server/router.js'
 import {
+  APP_WS_PATH,
   SESSION_WS_CANONICAL_PATH,
+  isAppWebSocketPath,
   sessionWebSocketIdFromPath,
-} from '../src/server/ws/sessionWsPath.js'
+} from '../src/server/ws/paths.js'
 import { toolDefinitionToBeyaTool, isExecutableToolDefinition } from '../src/server/services/beyaToolDefinitions.js'
 import { loadInstalledBeyaPlugins } from '../src/server/services/beyaPluginRuntime.js'
 
 describe('Beya Server SDK contract', () => {
-  it('exposes health and readiness through /api/*', async () => {
+  it('keeps health and readiness available through the internal resource router', async () => {
     const health = await handleApiRequest(
       new Request('http://127.0.0.1/api/health'),
       new URL('http://127.0.0.1/api/health'),
@@ -33,7 +35,7 @@ describe('Beya Server SDK contract', () => {
     })
   })
 
-  it('uses /api/* as the canonical Server path and rejects legacy external paths', async () => {
+  it('keeps the internal resource router isolated from legacy external paths', async () => {
     const canonical = await handleApiRequest(
       new Request('http://127.0.0.1/api/tools'),
       new URL('http://127.0.0.1/api/tools'),
@@ -62,11 +64,15 @@ describe('Beya Server SDK contract', () => {
   it('uses the concise session WebSocket path and rejects REST-style WebSocket residue', () => {
     expect(SESSION_WS_CANONICAL_PATH).toBe('/ws/{sessionId}')
     expect(sessionWebSocketIdFromPath('/ws/session-1')).toBe('session-1')
+    expect(APP_WS_PATH).toBe('/ws/app')
+    expect(isAppWebSocketPath('/ws/app')).toBe(true)
+    expect(sessionWebSocketIdFromPath('/ws/app')).toBeNull()
     expect(sessionWebSocketIdFromPath('/api/sessions/session-1/ws')).toBeNull()
     expect(sessionWebSocketIdFromPath('/api/sessions/session-1/chat')).toBeNull()
+    expect(sessionWebSocketIdFromPath('/ws/session-1/extra')).toBeNull()
   })
 
-  it('keeps /api/tasks limited to Desktop/CLI task-list semantics', async () => {
+  it('keeps task resources limited to Desktop/CLI task-list semantics', async () => {
     const postRun = await handleApiRequest(
       new Request('http://127.0.0.1/api/tasks', {
         method: 'POST',

@@ -6,8 +6,8 @@
 
 | 顺序 | 板块 | 唯一职责 | 对外协议 | 必须收敛的旧路线 |
 | --- | --- | --- | --- | --- |
-| 1 | `access_surfaces` 接入面 | 用户和外部系统入口 | `http_api`、`session_ws` | Adapter 私有 WS 语义、入口层直接写业务状态 |
-| 2 | `protocol_gateway` 协议网关 | HTTP/WS 传输、认证和错误映射 | `http_api`、`route_naming`、`session_ws` | 顶层 `/health`、公开 `/api/v1/*` |
+| 1 | `access_surfaces` 接入面 | 用户和外部系统入口 | `app_ws`、`app_rpc`、`session_ws` | Adapter 私有 WS 语义、入口层直接写业务状态 |
+| 2 | `protocol_gateway` 协议网关 | WS 传输、必要 HTTP 原生能力、认证和错误映射 | `app_ws`、`app_rpc`、`route_naming`、`session_ws` | HTTP `/api/*`、公开 `/api/v1/*`、HTTP 会话命令重叠面 |
 | 3 | `session_host` 会话宿主 | session 生命周期和 runtime 进程宿主 | `runtime_process`、`persistence` | WS handler 内的 runtime 选择、预热、标题生成 |
 | 4 | `agent_core` Agent 内核 | turn loop、上下文、权限和工具编排 | `agent_turn` | `Tool.ts` 混合 UI、AgentTool 作为普通工具 |
 | 5 | `capability_registry` 能力目录 | 能力声明、发现和 executor | `capability_manifest` | server services 内的领域能力、重复工具元数据形状 |
@@ -45,7 +45,7 @@ flowchart LR
 
 ## 顶层整合顺序
 
-1. 协议网关收口：Desktop、SDK、Adapter 统一使用 `/ws/{sessionId}`，非规范 WS 路径不再作为入口保留。
+1. 协议网关收口：`/ws/app` 承载应用资源 RPC，`/ws/{sessionId}` 承载会话实时消息，HTTP 只保留静态、OAuth、proxy、文件预览和浏览器原生资源。
 2. 会话宿主抽离：把 `server/ws/handler.ts` 中的 runtime 选择、事件翻译、预热和标题生成迁到 session_host 子模块。
 3. Agent 内核去 UI：拆开 `Tool.ts` 的 runtime contract 和 presentation contract。
 4. 能力目录归一：tools、skills、plugins、MCP、domain pack 都映射到 `capability_manifest`。
