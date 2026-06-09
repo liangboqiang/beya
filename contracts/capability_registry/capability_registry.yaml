@@ -1,0 +1,72 @@
+# 能力目录：所有可被 agent 调用能力的声明和发现层。
+
+id: capability_registry
+name: 能力目录
+level: top
+layer_order: 5
+canonical_role: 统一声明 tools、skills、plugins、MCP、agents、workflows 和领域能力包。
+
+current_paths:
+  - src/tools
+  - src/skills
+  - src/plugins
+  - src/services/mcp
+  - src/services/plugins
+  - src/server/services/mcDesignLocalTools.ts
+
+target_children:
+  - builtin_tools
+  - skills
+  - plugins
+  - mcp
+  - agent_definitions
+  - workflows
+  - domain_packs
+
+owns:
+  - 能力元数据
+  - runtime executor
+  - permission hints
+  - tool schema
+  - 能力发现和注册
+
+input_contracts:
+  - capability_manifest
+  - mcp_server_manifest
+  - plugin_manifest
+  - skill_manifest
+
+output_contracts:
+  - capability_descriptor
+  - capability_executor
+  - permission_hint
+
+allowed_dependencies:
+  - foundation
+
+forbidden_dependencies:
+  - access_surfaces
+  - protocol_gateway
+  - session_host
+  - agent_core
+  - model_runtime
+
+must_not_own:
+  - UI 渲染组件
+  - session 进程生命周期
+  - provider 鉴权状态
+  - HTTP/WS transport
+
+integration_rules:
+  - 领域能力包不能长期放在 server services。
+  - capability 只暴露 metadata、executor、schema 和 permission hints。
+  - 展示逻辑必须通过 presentation adapter 注入。
+
+retire_or_absorb:
+  - mc_design_inside_server_services
+  - tool_specific_ui_inside_registry
+  - duplicate_skill_plugin_mcp_discovery_shapes
+
+validation_focus:
+  - capability manifest 合约测试覆盖 tools、skills、plugins、MCP。
+  - capability_registry 不 import UI、server ws 或 provider storage。

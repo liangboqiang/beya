@@ -73,7 +73,7 @@ class ProductClientTest(unittest.TestCase):
             "content": "hello",
             "metadata": {"user_id": "u1", "conversation_id": "conv-1"},
         })
-        self.assertIn(("WS", "ws://beya.test/api/sessions/session-1/ws?purpose=sdk_chat", None), client.calls)
+        self.assertIn(("WS", "ws://beya.test/ws/session-1?purpose=sdk_chat", None), client.calls)
 
         client.tasks.list()
         client.tasks.lists()
@@ -110,7 +110,7 @@ class ProductClientTest(unittest.TestCase):
         self.assertIn("/api/health", paths)
         self.assertIn("/api/readiness", paths)
         self.assertTrue(any(path.startswith("/api/tools?") and "session_id=session-1" in path and "cwd=F%3A%2FDocuments%2Fbeya" in path for path in paths))
-        self.assertTrue(any(path == "ws://beya.test/api/sessions/session-1/ws?purpose=sdk_chat" for path in paths))
+        self.assertTrue(any(path == "ws://beya.test/ws/session-1?purpose=sdk_chat" for path in paths))
         self.assertFalse(any(path.startswith("/v1/") for path in paths))
         self.assertFalse(any("/api/stream" in path for path in paths))
         self.assertFalse(any("/api/openai" in path for path in paths))
@@ -272,7 +272,7 @@ class ProductClientTest(unittest.TestCase):
         self.assertEqual(events[-1].result, "done")
         self.assertEqual(
             client.calls[0],
-            ("WS", "ws://beya.test/api/sessions/session-1/ws?purpose=interaction_response", None),
+            ("WS", "ws://beya.test/ws/session-1?purpose=interaction_response", None),
         )
 
     def test_plugin_helpers_generate_installable_plugin_payload(self):

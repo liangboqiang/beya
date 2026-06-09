@@ -266,6 +266,92 @@ impl Default for AppModeConfig {
     }
 }
 
+struct ServerRuntime {
+    url: String,
+    child: CommandChild,
+}
+
+#[derive(Default)]
+struct ServerStateInner {
+    runtime: Option<ServerRuntime>,
+    startup_error: Option<String>,
+}
+
+#[derive(Default)]
+struct ServerState(Mutex<ServerStateInner>);
+
+#[derive(Default)]
+struct AppExitState {
+    is_quitting: Mutex<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct StoredWindowState {
+    x: i32,
+    y: i32,
+    width: u32,
+    height: u32,
+    #[serde(default)]
+    maximized: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct TerminalConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    bash_path: Option<String>,
+}
+
+impl TerminalConfig {
+    fn path(app: &AppHandle) -> Option<PathBuf> {
+        beya_config_dir_from_env()
+            .or_else(|| app.path().app_config_dir().ok())
+            .map(|dir| dir.join(TERMINAL_CONFIG_FILE))
+    }
+
+    fn load(app: &AppHandle) -> Self {
+        let Some(path) = Self::path(app) else {
+            return Self::default();
+        };
+        let Ok(data) = fs::read_to_string(path) else {
+            return Self::default();
+        };
+        serde_json::from_str(&data).unwrap_or_default()
+    }
+
+    fn save(&self, app: &AppHandle) -> Result<(), String> {
+        let path =
+            Self::path(app).ok_or_else(|| "terminal config path is unavailable".to_string())?;
+
+        let mut data = match fs::read_to_string(&path) {
+            Ok(existing) => match serde_json::from_str::<serde_json::Value>(&existing) {
+                Ok(serde_json::Value::Object(object)) => object,
+                _ => serde_json::Map::new(),
+            },
+            Err(err) if err.kind() == ErrorKind::NotFound => serde_json::Map::new(),
+            Err(err) => return Err(format!("read terminal config: {err}")),
+        };
+
+        if let Some(bash_path) = self.bash_path.as_ref() {
+            data.insert(
+                "bashPath".to_string(),
+                serde_json::Value::String(bash_path.clone()),
+            );
+        } else {
+            data.remove("bashPath");
+        }
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|err| format!("create terminal config dir: {err}"))?;
+        }
+
+        let contents = serde_json::to_string_pretty(&serde_json::Value::Object(data))
+            .map_err(|err| format!("serialize terminal config: {err}"))?;
+        fs::write(&path, contents).map_err(|err| format!("write terminal config: {err}"))
+    }
+}
+
 /// Tracks adapter sidecar child processes so they can be restarted or stopped.
 #[derive(Default)]
 struct AdapterState(Mutex<Vec<CommandChild>>);
@@ -1207,6 +1293,61 @@ fn beya_config_dir_from_env() -> Option<PathBuf> {
     std::env::var_os("BEYA_CONFIG_DIR").map(PathBuf::from)
 }
 
+fn get_default_portable_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    Some(exe_dir.join("BEYA_CONFIG_DIR"))
+}
+
+fn dir_has_portable_data(dir: &Path) -> bool {
+    if !dir.is_dir() {
+        return false;
+    }
+
+    [
+        "settings.json",
+        "config.json",
+        ".mcp.json",
+        WINDOW_STATE_FILE,
+        TERMINAL_CONFIG_FILE,
+    ]
+    .iter()
+    .any(|file| dir.join(file).is_file())
+        || dir.join("Cache").is_dir()
+        || dir.join("EBWebView").is_dir()
+        || dir.join("projects").is_dir()
+        || dir.join("skills").is_dir()
+        || dir.join("plugins").is_dir()
+        || dir.join("cowork_plugins").is_dir()
+        || dir.join("beya").is_dir()
+}
+
+fn write_app_mode_config(dir: &Path, config: &AppModeConfig) {
+    if let Err(err) = fs::create_dir_all(dir) {
+        eprintln!(
+            "[desktop] failed to create app mode directory {}: {err}",
+            dir.display()
+        );
+        return;
+    }
+
+    let path = dir.join(APP_MODE_FILE);
+    let data = match serde_json::to_string_pretty(config) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("[desktop] failed to serialize app mode config: {err}");
+            return;
+        }
+    };
+
+    if let Err(err) = fs::write(&path, data) {
+        eprintln!(
+            "[desktop] failed to write app mode config {}: {err}",
+            path.display()
+        );
+    }
+}
+
 fn beya_config_dir() -> Option<PathBuf> {
     beya_config_dir_from_env()
         .or_else(|| home_dir().map(|path| path.join(".beya")))
@@ -1751,9 +1892,9 @@ mod tests {
         decode_terminal_output, default_utf8_locale, ensure_utf8_locale,
         dir_has_portable_data, has_meaningful_intersection, is_persistable_window_state,
         normalize_terminal_bash_path, parse_env_block, resolve_desktop_terminal_shell,
-        resolve_terminal_cwd, run_notification_bridge,
-        select_h5_dist_dir, DesktopTerminalConfig, StoredWindowState, TerminalHostPlatform,
-        SERVER_BIND_HOST, SERVER_CONTROL_HOST,
+        resolve_terminal_cwd, run_notification_bridge, select_h5_dist_dir, DesktopTerminalConfig,
+        StoredWindowState, TerminalHostPlatform, SERVER_BIND_HOST, SERVER_CONTROL_HOST,
+        SERVER_STARTUP_TIMEOUT_SECS,
     };
     use std::{collections::HashMap, fs};
 
@@ -1818,13 +1959,13 @@ mod tests {
     #[test]
     fn terminal_output_decoder_preserves_split_chinese_characters() {
         let mut pending = Vec::new();
-        let bytes = "瀹夎 Skills 鎴愬姛\n".as_bytes();
+        let bytes = "安装 Skills 成功\n".as_bytes();
 
         assert_eq!(decode_terminal_output(&mut pending, &bytes[..2]), "");
-        assert_eq!(decode_terminal_output(&mut pending, &bytes[2..4]), "瀹?);
+        assert_eq!(decode_terminal_output(&mut pending, &bytes[2..4]), "安");
         assert_eq!(
             decode_terminal_output(&mut pending, &bytes[4..]),
-            "瑁?Skills 鎴愬姛\n"
+            "装 Skills 成功\n"
         );
         assert!(pending.is_empty());
     }
@@ -1832,11 +1973,11 @@ mod tests {
     #[test]
     fn terminal_output_decoder_keeps_incomplete_suffix_pending() {
         let mut pending = Vec::new();
-        let bytes = "涓枃".as_bytes();
+        let bytes = "中文".as_bytes();
 
-        assert_eq!(decode_terminal_output(&mut pending, &bytes[..4]), "涓?);
+        assert_eq!(decode_terminal_output(&mut pending, &bytes[..4]), "中");
         assert_eq!(pending, bytes[3..4]);
-        assert_eq!(decode_terminal_output(&mut pending, &bytes[4..]), "鏂?);
+        assert_eq!(decode_terminal_output(&mut pending, &bytes[4..]), "文");
         assert!(pending.is_empty());
     }
 
@@ -2098,8 +2239,8 @@ pub fn run() {
     let builder = builder
         .menu(|app| {
             let about_item =
-                MenuItemBuilder::with_id("nav_about", "鍏充簬 Beya").build(app)?;
-            let settings_item = MenuItemBuilder::with_id("nav_settings", "璁剧疆...")
+                MenuItemBuilder::with_id("nav_about", "关于 Beya").build(app)?;
+            let settings_item = MenuItemBuilder::with_id("nav_settings", "设置...")
                 .accelerator("CmdOrCtrl+,")
                 .build(app)?;
 

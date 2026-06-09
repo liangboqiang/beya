@@ -216,7 +216,7 @@ class BeyaClient:
         parsed = urlsplit(self.base_url)
         scheme = "wss" if parsed.scheme == "https" else "ws"
         base_path = parsed.path.rstrip("/")
-        path = "%s/api/sessions/%s/ws" % (base_path, _path(session_id))
+        path = "%s/ws/%s" % (base_path, _path(session_id))
         query = parsed.query
         token = self.bearer_token or self.api_key
         if token:

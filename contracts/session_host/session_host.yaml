@@ -1,0 +1,72 @@
+# 会话宿主：会话生命周期和 runtime 进程宿主。
+
+id: session_host
+name: 会话宿主
+level: top
+layer_order: 3
+canonical_role: 负责 session、runtime 进程、执行后端、worktree、标题和调度。
+
+current_paths:
+  - src/server/services/sessionService.ts
+  - src/server/services/conversationService.ts
+  - src/server/execution
+  - src/server/runtime
+  - src/server/services/repositoryLaunchService.ts
+  - src/server/services/titleService.ts
+  - src/server/services/cronScheduler.ts
+
+target_children:
+  - session_lifecycle
+  - runtime_process_host
+  - execution_backends
+  - worktree_launch
+  - title_and_metadata
+  - scheduler
+
+owns:
+  - session 创建、恢复、删除
+  - runtime 启动、停止、重启
+  - 会话级权限模式
+  - 运行时事件转译
+  - worktree 和仓库启动
+
+input_contracts:
+  - session_command
+  - session_ws_event
+  - scheduled_task
+
+output_contracts:
+  - runtime_process
+  - agent_turn
+  - provider_runtime
+  - persistence
+
+allowed_dependencies:
+  - agent_core
+  - model_runtime
+  - foundation
+
+forbidden_dependencies:
+  - access_surfaces
+  - protocol_gateway
+  - capability_registry
+
+must_not_own:
+  - HTTP 认证
+  - provider proxy transform
+  - UI 状态
+  - tool 业务实现
+
+integration_rules:
+  - WebSocket handler 的事件解释迁入 session_host 的 event translator。
+  - runtime 能力只通过 RuntimeProfile 读取。
+  - conversation service 不能继续承接 provider 和 transport 细节。
+
+retire_or_absorb:
+  - runtime_selection_inside_ws_transport
+  - provider_env_building_inside_conversation_service
+  - title_and_prewarm_logic_inside_ws_handler
+
+validation_focus:
+  - server 测试覆盖 session 生命周期和 runtime host。
+  - session_host 不 import Desktop、Adapter 或协议网关 handler。

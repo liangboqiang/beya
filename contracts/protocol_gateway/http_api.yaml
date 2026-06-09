@@ -1,0 +1,58 @@
+# HTTP API 协议。
+# 所有 HTTP 资源 API 统一放在 /api/* 下。
+# WebSocket 实时通道不属于 HTTP 资源树，见 session_ws.yaml。
+
+id: http_api
+owner_module: protocol_gateway
+canonical_prefix: /api
+
+forbidden_external_paths:
+  - /health
+  - /api/v1/*
+  - /api/openai/*
+  - /api/stream/*
+
+resource_groups:
+  - id: health
+    paths:
+      - /api/health
+      - /api/readiness
+      - /api/status
+  - id: session
+    paths:
+      - /api/sessions
+      - /api/sessions/{sessionId}
+      - /api/sessions/{sessionId}/chat
+      - /api/conversations
+      - /api/teams
+  - id: runtime
+    paths:
+      - /api/providers
+      - /api/models
+      - /api/effort
+      - /api/local-cli
+  - id: capability
+    paths:
+      - /api/tools
+      - /api/plugins
+      - /api/skills
+      - /api/mcp
+      - /api/agents
+  - id: workspace
+    paths:
+      - /api/filesystem
+      - /api/search
+      - /api/memory
+      - /api/open-targets
+  - id: desktop_ops
+    paths:
+      - /api/desktop-ui
+      - /api/adapters
+      - /api/h5-access
+      - /api/doctor
+      - /api/diagnostics
+  - id: automation
+    paths:
+      - /api/tasks
+      - /api/scheduled-tasks
+      - /api/activity-stats

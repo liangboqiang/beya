@@ -1,0 +1,26 @@
+# Agent Turn 协议。
+# 约束一次或多次模型交互中的消息、权限和工具编排语义。
+
+id: agent_turn
+owner_module: agent_core
+
+input_groups:
+  - user_message
+  - system_context
+  - transcript_context
+  - runtime_profile
+  - available_capabilities
+
+output_groups:
+  - assistant_message
+  - tool_use_request
+  - permission_request
+  - usage_update
+  - transcript_event
+  - final_result
+
+required_boundaries:
+  - tool 执行只能通过 capability_manifest 暴露的 executor。
+  - 模型能力只能通过 provider_runtime 判断。
+  - UI 展示只能消费事件，不能反向影响 turn loop。
+  - transport 连接状态不能进入 agent_core。

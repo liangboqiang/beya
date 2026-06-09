@@ -27,6 +27,7 @@ import { classifyH5Request, shouldBlockDisabledH5Access, shouldRequireH5Token } 
 import { H5AccessService } from './services/h5AccessService.js'
 import { handleApiRequest } from './router.js'
 import { runEmbeddedCliIfRequested } from './embeddedCli.js'
+import { sessionWebSocketIdFromPath } from './ws/sessionWsPath.js'
 
 function readArgValue(flag: string): string | undefined {
   const args = process.argv.slice(2)
@@ -139,15 +140,6 @@ function originFromUrl(value: string | null): string | null {
   }
 }
 
-function sessionWebSocketIdFromPath(pathname: string): string | null {
-  if (pathname.startsWith('/ws/')) {
-    return pathname.split('/').pop() || ''
-  }
-
-  const match = pathname.match(/^\/api\/sessions\/([^/]+)\/ws$/)
-  return match ? decodeURIComponent(match[1] || '') : null
-}
-
 export function startServer(port = PORT, host = HOST) {
   enableConfigs()
   diagnosticsService.installConsoleCapture()
@@ -227,8 +219,7 @@ export function startServer(port = PORT, host = HOST) {
           return new Response(null, { status: 204, headers: cors.headers })
         }
 
-        // Session WebSocket upgrade. /api/sessions/:id/ws is the canonical
-        // public path; /ws/:id remains an internal compatibility alias.
+        // Session WebSocket upgrade. /ws/:id is the only public path.
         const sessionWebSocketId = sessionWebSocketIdFromPath(url.pathname)
         if (sessionWebSocketId !== null) {
           if (cors.rejected) {

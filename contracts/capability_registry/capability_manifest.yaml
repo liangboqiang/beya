@@ -1,0 +1,34 @@
+# Capability Manifest 协议。
+# 内置 TS 能力也要能映射到这个形状。
+
+id: capability_manifest
+owner_module: capability_registry
+file_name: capability.yaml
+
+required_fields:
+  - id
+  - kind
+  - owner_module
+  - schema_version
+
+kinds:
+  - tool
+  - skill
+  - plugin
+  - mcp
+  - agent
+  - workflow
+  - domain_pack
+
+fields:
+  id: 稳定标识，不能因展示文案变化而变化。
+  kind: 能力类型。
+  display_name: 给用户看的名称。
+  input_schema: JSON Schema 或可转换为 JSON Schema 的 Zod schema。
+  permissions: 只描述权限 hint，不直接打开 UI。
+  runtime_executor: 执行入口。
+  presentation: 可选展示 adapter，不能被 agent_core 直接依赖。
+
+boundary_rules:
+  - AgentTool/subagent 编排属于 agent_core，不作为普通工具争权。
+  - 领域能力包不能放在 server core services 下长期存在。

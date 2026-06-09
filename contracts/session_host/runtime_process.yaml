@@ -1,0 +1,37 @@
+# Runtime Process 协议。
+# 这是 session_host 和 agent_core 之间的进程/消息契约。
+
+id: runtime_process
+owner_module: session_host
+
+launch:
+  command_contract:
+    - --print
+    - --sdk-url
+    - --input-format=stream-json
+    - --output-format=stream-json
+  env_contract:
+    canonical_prefix: BEYA_
+    legacy_prefix: CLAUDE_
+    legacy_handled_by: foundation.compat
+
+message_groups:
+  - init
+  - user
+  - assistant_stream
+  - tool_use
+  - tool_result
+  - control_request
+  - control_response
+  - result
+
+control_requests:
+  - can_use_tool
+  - set_permission_mode
+  - set_max_thinking_tokens
+  - interrupt
+
+boundary_rules:
+  - session_host 负责进程生命周期。
+  - agent_core 负责 turn 语义。
+  - provider/local CLI 能力通过 provider_runtime 描述。

@@ -3,6 +3,10 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { handleApiRequest } from '../src/server/router.js'
+import {
+  SESSION_WS_CANONICAL_PATH,
+  sessionWebSocketIdFromPath,
+} from '../src/server/ws/sessionWsPath.js'
 import { toolDefinitionToBeyaTool, isExecutableToolDefinition } from '../src/server/services/beyaToolDefinitions.js'
 import { loadInstalledBeyaPlugins } from '../src/server/services/beyaPluginRuntime.js'
 
@@ -53,6 +57,13 @@ describe('Beya Server SDK contract', () => {
       new URL('http://127.0.0.1/api/openai/chat/completions'),
     )
     expect(openaiHelper.status).toBe(404)
+  })
+
+  it('uses the concise session WebSocket path and rejects REST-style WebSocket residue', () => {
+    expect(SESSION_WS_CANONICAL_PATH).toBe('/ws/{sessionId}')
+    expect(sessionWebSocketIdFromPath('/ws/session-1')).toBe('session-1')
+    expect(sessionWebSocketIdFromPath('/api/sessions/session-1/ws')).toBeNull()
+    expect(sessionWebSocketIdFromPath('/api/sessions/session-1/chat')).toBeNull()
   })
 
   it('keeps /api/tasks limited to Desktop/CLI task-list semantics', async () => {

@@ -1,0 +1,18 @@
+# 路径命名协议。
+# 目标是简洁、稳定、可读；不同通信形态不要混在同一命名树里。
+
+id: route_naming
+owner_module: protocol_gateway
+
+rules:
+  - HTTP 资源统一使用 /api/{resource}。
+  - WebSocket 实时通道使用短顶层名词，例如 /ws/{sessionId}。
+  - 内部 runtime SDK 通道使用 /sdk/{sessionId}。
+  - 不使用 /api/v1 版本前缀；版本兼容通过协议字段和能力协商处理。
+  - 不把 OpenAI 兼容代理暴露成 /api/openai/*；代理属于 /proxy/*。
+
+canonical_paths:
+  http_api: /api
+  session_ws: /ws/{sessionId}
+  runtime_sdk_ws: /sdk/{sessionId}
+  provider_proxy: /proxy/{provider}

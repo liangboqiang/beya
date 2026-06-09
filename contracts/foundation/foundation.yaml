@@ -1,0 +1,72 @@
+# 基础设施：所有板块可依赖的纯基础能力。
+
+id: foundation
+name: 基础设施
+level: top
+layer_order: 7
+canonical_role: 提供配置、持久化、路径、文件系统、安全策略、诊断、质量和发布能力。
+
+current_paths:
+  - src/utils
+  - src/constants
+  - src/types
+  - src/migrations
+  - scripts
+  - docs
+
+target_children:
+  - config_and_env
+  - persistence_and_migrations
+  - filesystem_and_paths
+  - diagnostics_and_telemetry
+  - security_policy
+  - quality_and_release
+  - shared_types
+
+owns:
+  - BEYA_* 与兼容变量归一化
+  - 用户拥有文件的安全读写
+  - 诊断脱敏
+  - 质量门禁和发布脚本
+  - 纯类型和纯工具
+
+input_contracts:
+  - persistence
+  - compatibility
+  - security_policy
+
+output_contracts:
+  - config_value
+  - safe_file_access
+  - diagnostic_event
+  - quality_report
+
+allowed_dependencies: []
+
+forbidden_dependencies:
+  - access_surfaces
+  - protocol_gateway
+  - session_host
+  - agent_core
+  - capability_registry
+  - model_runtime
+
+must_not_own:
+  - provider 业务判断
+  - agent turn 逻辑
+  - transport handler
+  - tool 业务实现
+
+integration_rules:
+  - src/utils 只能保留纯基础工具。
+  - 兼容变量和兼容路径必须集中声明退役条件。
+  - 用户拥有状态必须保存未知字段，并按 owner 迁移。
+
+retire_or_absorb:
+  - business_logic_inside_utils
+  - scattered_claude_env_compat
+  - unowned_persistence_writes
+
+validation_focus:
+  - import-boundary 检查证明 foundation 没有反向依赖。
+  - persistence upgrade gate 覆盖用户状态形状变化。

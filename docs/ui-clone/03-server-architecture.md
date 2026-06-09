@@ -88,7 +88,7 @@ src/server/
 | GET | `/api/sessions/:id/chat/status` | 获取对话状态 |
 | POST | `/api/sessions/:id/chat/stop` | 停止生成 |
 
-**WebSocket**: `ws://host:port/ws/chat/:sessionId`
+**WebSocket**: `ws://host:port/ws/:sessionId`
 - 发送消息 → 流式接收 AI 回复
 - 实时推送工具调用进度
 - 权限请求转发给前端
@@ -221,7 +221,7 @@ class SessionService {
 ### 连接流程
 
 ```
-1. 客户端连接: ws://host:port/ws/chat/{sessionId}
+1. 客户端连接: ws://host:port/ws/{sessionId}
    Headers: Authorization: Bearer {apiKey}
 
 2. 服务器确认: { type: 'connected', sessionId: '...' }

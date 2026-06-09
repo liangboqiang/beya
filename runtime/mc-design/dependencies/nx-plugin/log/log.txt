@@ -193,3 +193,131 @@ System.IO.IOException: 无法将数据写入传输连接: 远程主机强迫关�
    在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()
    在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)
    在 NXServer.HttpServer.<ProcessClient>d__9.MoveNext() 位置 F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\HttpServer.cs:行号 80
+[2026-06-09 17:46:05.722] 信息 | Logger.Initialize: 日志初始化完成，LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-09 17:46:05.745] 信息 | Program.InitializeLoggingSafe: NXServer.Startup: logging initialized. RootDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin, LogDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log
+[2026-06-09 17:46:05.745] 信息 | Program.Startup: NXServer.Startup entered.
+[2026-06-09 17:46:05.746] 信息 | Logger.Initialize: 日志初始化完成，LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-09 17:46:05.747] 信息 | Program.InitializeLoggingSafe: Program.ctor: logging initialized. RootDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin, LogDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log
+[2026-06-09 17:46:05.747] 信息 | Program..ctor: NXServer constructor started.
+[2026-06-09 17:46:05.747] 信息 | Program.SafeStep: Initialize NX Session: start.
+[2026-06-09 17:46:06.005] 信息 | Program.InitializeNXSession: NX Session acquired.
+[2026-06-09 17:46:06.006] 信息 | Program.SafeStep: Initialize NX Session: done.
+[2026-06-09 17:46:06.006] 信息 | Program.SafeStep: Initialize components: start.
+[2026-06-09 17:46:06.145] 信息 | Program.InitializeComponents: Dispatcher initialized.
+[2026-06-09 17:46:06.147] 信息 | Program..ctor: ToolManager 工具目录: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\tools
+[2026-06-09 17:46:06.148] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 跳过基础程序集: Newtonsoft.Json.dll
+[2026-06-09 17:46:06.148] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 跳过基础程序集: NXSDK.dll
+[2026-06-09 17:46:06.156] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 已加载工具程序集: NXTools.dll
+[2026-06-09 17:46:06.166] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: ExitAnimation
+[2026-06-09 17:46:06.169] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetOptimizationToolGuide
+[2026-06-09 17:46:06.169] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: ValidateOptimizationStudy
+[2026-06-09 17:46:06.170] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: BuildOptimizationObjectiveExpression
+[2026-06-09 17:46:06.170] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: RunOptimizationStudy
+[2026-06-09 17:46:06.170] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetAllParamsList
+[2026-06-09 17:46:06.171] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetDriveParamsList
+[2026-06-09 17:46:06.171] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: FindParams
+[2026-06-09 17:46:06.171] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateParam
+[2026-06-09 17:46:06.172] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: UpdateParam
+[2026-06-09 17:46:06.172] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: HighLightDim
+[2026-06-09 17:46:06.173] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: BatchUpdateParams
+[2026-06-09 17:46:06.173] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateNewPart
+[2026-06-09 17:46:06.173] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenTCPart
+[2026-06-09 17:46:06.173] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenTcDrawing
+[2026-06-09 17:46:06.173] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenPart
+[2026-06-09 17:46:06.175] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateImage
+[2026-06-09 17:46:06.175] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetWorkPartInfo
+[2026-06-09 17:46:06.175] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetDrawingSheetNameList
+[2026-06-09 17:46:06.176] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenDrawingSheet
+[2026-06-09 17:46:06.176] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: Updatedrawings
+[2026-06-09 17:46:06.176] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_read_bytes
+[2026-06-09 17:46:06.177] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_write_bytes
+[2026-06-09 17:46:06.177] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_copy
+[2026-06-09 17:46:06.177] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_exists
+[2026-06-09 17:46:06.178] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: Test
+[2026-06-09 17:46:06.178] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: FitView
+[2026-06-09 17:46:06.178] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: SetViewStyle
+[2026-06-09 17:46:06.179] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetViewStyle
+[2026-06-09 17:46:06.179] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: SwitchView
+[2026-06-09 17:46:06.179] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetAllViewNames
+[2026-06-09 17:46:06.179] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: RotateAndScaleView
+[2026-06-09 17:46:06.180] 信息 | ToolManager.ScanToolMethods: ToolManager.ScanToolMethods: 扫描完成，已注册 32 个工具入口（含别名）
+[2026-06-09 17:46:06.180] 信息 | Program.Initialize: 工具管理器初始化完成，已注册 32 个工具方法
+[2026-06-09 17:46:06.181] 信息 | SettingConfig.Load: Loading mc-design-client.config: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\configure\mc-design-client.config
+[2026-06-09 17:46:06.181] 警告 | SettingConfig.Load: mc-design-client.config not found; using local defaults: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\configure\mc-design-client.config
+[2026-06-09 17:46:06.182] 信息 | Program.InitializeComponents: HTTP service object created: 127.0.0.1:8088, Base_Path=/api
+[2026-06-09 17:46:06.182] 信息 | Program.SafeStep: Initialize components: done.
+[2026-06-09 17:46:06.183] 信息 | Program.SafeStep: Start local HTTP service: start.
+[2026-06-09 17:46:06.216] 信息 | HttpServer.Start: Loopback NX tool server started on 127.0.0.1:8088
+[2026-06-09 17:46:06.218] 信息 | Program.SafeStep: Start local HTTP service: done.
+[2026-06-09 17:46:06.219] 信息 | Program.SafeStep: Check user-side Python client: start.
+[2026-06-09 17:46:07.457] 警告 | Program.Probe: User-side Python client is not running. Start it manually with start-client.bat before using the agent.
+[2026-06-09 17:46:07.457] 信息 | Program.SafeStep: Check user-side Python client: done.
+[2026-06-09 17:46:07.458] 信息 | Program..ctor: NXServer constructor finished. LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-09 17:46:07.458] 信息 | Program.Startup: NXServer.Startup finished.
+[2026-06-09 17:48:16.374] 信息 | Logger.Initialize: 日志初始化完成，LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-09 17:48:16.379] 信息 | Program.InitializeLoggingSafe: NXServer.Startup: logging initialized. RootDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin, LogDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log
+[2026-06-09 17:48:16.379] 信息 | Program.Startup: NXServer.Startup entered.
+[2026-06-09 17:48:16.381] 信息 | Logger.Initialize: 日志初始化完成，LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-09 17:48:16.381] 信息 | Program.InitializeLoggingSafe: Program.ctor: logging initialized. RootDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin, LogDir=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log
+[2026-06-09 17:48:16.382] 信息 | Program..ctor: NXServer constructor started.
+[2026-06-09 17:48:16.382] 信息 | Program.SafeStep: Initialize NX Session: start.
+[2026-06-09 17:48:16.455] 信息 | Program.InitializeNXSession: NX Session acquired.
+[2026-06-09 17:48:16.455] 信息 | Program.SafeStep: Initialize NX Session: done.
+[2026-06-09 17:48:16.456] 信息 | Program.SafeStep: Initialize components: start.
+[2026-06-09 17:48:16.523] 信息 | Program.InitializeComponents: Dispatcher initialized.
+[2026-06-09 17:48:16.526] 信息 | Program..ctor: ToolManager 工具目录: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\tools
+[2026-06-09 17:48:16.527] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 跳过基础程序集: Newtonsoft.Json.dll
+[2026-06-09 17:48:16.528] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 跳过基础程序集: NXSDK.dll
+[2026-06-09 17:48:16.529] 信息 | ToolManager.LoadToolsAssemblies: ToolManager.LoadToolsAssemblies: 已加载工具程序集: NXTools.dll
+[2026-06-09 17:48:16.536] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: ExitAnimation
+[2026-06-09 17:48:16.537] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetOptimizationToolGuide
+[2026-06-09 17:48:16.537] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: ValidateOptimizationStudy
+[2026-06-09 17:48:16.538] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: BuildOptimizationObjectiveExpression
+[2026-06-09 17:48:16.539] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: RunOptimizationStudy
+[2026-06-09 17:48:16.539] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetAllParamsList
+[2026-06-09 17:48:16.539] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetDriveParamsList
+[2026-06-09 17:48:16.540] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: FindParams
+[2026-06-09 17:48:16.540] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateParam
+[2026-06-09 17:48:16.541] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: UpdateParam
+[2026-06-09 17:48:16.541] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: HighLightDim
+[2026-06-09 17:48:16.542] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: BatchUpdateParams
+[2026-06-09 17:48:16.542] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateNewPart
+[2026-06-09 17:48:16.542] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenTCPart
+[2026-06-09 17:48:16.543] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenTcDrawing
+[2026-06-09 17:48:16.543] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenPart
+[2026-06-09 17:48:16.543] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: CreateImage
+[2026-06-09 17:48:16.544] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetWorkPartInfo
+[2026-06-09 17:48:16.544] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetDrawingSheetNameList
+[2026-06-09 17:48:16.544] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: OpenDrawingSheet
+[2026-06-09 17:48:16.545] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: Updatedrawings
+[2026-06-09 17:48:16.545] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_read_bytes
+[2026-06-09 17:48:16.546] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_write_bytes
+[2026-06-09 17:48:16.546] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_copy
+[2026-06-09 17:48:16.547] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: fs_exists
+[2026-06-09 17:48:16.548] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: Test
+[2026-06-09 17:48:16.548] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: FitView
+[2026-06-09 17:48:16.548] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: SetViewStyle
+[2026-06-09 17:48:16.548] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetViewStyle
+[2026-06-09 17:48:16.548] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: SwitchView
+[2026-06-09 17:48:16.549] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: GetAllViewNames
+[2026-06-09 17:48:16.549] 信息 | ToolManager.RegisterTool: ToolManager.RegisterTool: 注册工具方法: RotateAndScaleView
+[2026-06-09 17:48:16.549] 信息 | ToolManager.ScanToolMethods: ToolManager.ScanToolMethods: 扫描完成，已注册 32 个工具入口（含别名）
+[2026-06-09 17:48:16.551] 信息 | Program.Initialize: 工具管理器初始化完成，已注册 32 个工具方法
+[2026-06-09 17:48:16.552] 信息 | SettingConfig.Load: Loading mc-design-client.config: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\configure\mc-design-client.config
+[2026-06-09 17:48:16.553] 警告 | SettingConfig.Load: mc-design-client.config not found; using local defaults: F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\configure\mc-design-client.config
+[2026-06-09 17:48:16.554] 信息 | Program.InitializeComponents: HTTP service object created: 127.0.0.1:8088, Base_Path=/api
+[2026-06-09 17:48:16.555] 信息 | Program.SafeStep: Initialize components: done.
+[2026-06-09 17:48:16.555] 信息 | Program.SafeStep: Start local HTTP service: start.
+[2026-06-09 17:48:16.598] 严重错误 | Program.StartServer: [ASUS@BRYAN-ROG] HTTP service startup failed; NXServer will keep running for logs and runtime launch.
+System.Net.Sockets.SocketException (0x80004005): 通常每个套接字地址(协议/网络地址/端口)只允许使用一次。
+   在 System.Net.Sockets.Socket.DoBind(EndPoint endPointSnapshot, SocketAddress socketAddress)
+   在 System.Net.Sockets.Socket.Bind(EndPoint localEP)
+   在 System.Net.Sockets.TcpListener.Start(Int32 backlog)
+   在 NXServer.HttpServer.Start() 位置 F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\HttpServer.cs:行号 33
+   在 NXServer.Program.StartServer() 位置 F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\src\McDesign.NXPlugin\Program.cs:行号 125
+[2026-06-09 17:48:16.598] 信息 | Program.SafeStep: Start local HTTP service: done.
+[2026-06-09 17:48:16.599] 信息 | Program.SafeStep: Check user-side Python client: start.
+[2026-06-09 17:48:17.773] 警告 | Program.Probe: User-side Python client is not running. Start it manually with start-client.bat before using the agent.
+[2026-06-09 17:48:17.773] 信息 | Program.SafeStep: Check user-side Python client: done.
+[2026-06-09 17:48:17.774] 信息 | Program..ctor: NXServer constructor finished. LogFile=F:\Documents\beya\runtime\mc-design\dependencies\nx-plugin\log\log.txt
+[2026-06-09 17:48:17.774] 信息 | Program.Startup: NXServer.Startup finished.

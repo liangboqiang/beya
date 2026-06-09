@@ -98,6 +98,7 @@ async function compileExecutable({
   productName: string
   bunTarget: string
 }) {
+  const executablePath = resolveCompileExecutablePath(bunTarget)
   const result = await Bun.build({
     entrypoints: [entrypoint],
     // minify whitespace + identifiers + dead-code 大概能省 5-15% 的二进制大小，
@@ -133,10 +134,13 @@ async function compileExecutable({
       'fflate',
       'sharp',
       'react-devtools-core',
+      // 语音模式 native capture，可选安装；未安装时运行时按 voice gate 降级。
+      'audio-capture-napi',
     ],
     compile: {
       target: bunTarget,
       outfile: outfileBase,
+      executablePath,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       windows: {
@@ -163,6 +167,25 @@ async function compileExecutable({
   if (process.platform === 'darwin') {
     await adHocSignMacBinary(outputPath)
   }
+}
+
+function resolveCompileExecutablePath(bunTarget: string) {
+  const explicitPath = process.env.BEYA_BUN_COMPILE_EXECUTABLE_PATH?.trim()
+  if (explicitPath) {
+    return explicitPath
+  }
+
+  // Windows 上 Bun 的目标 runtime 下载偶发损坏；同平台编译时直接复用当前
+  // bun.exe，避免每次构建侧车都依赖额外下载和解压。
+  if (
+    process.platform === 'win32' &&
+    process.arch === 'x64' &&
+    bunTarget === 'bun-windows-x64-baseline'
+  ) {
+    return process.execPath
+  }
+
+  return undefined
 }
 
 async function adHocSignMacBinary(outputPath: string) {
