@@ -13,7 +13,7 @@ description: 固定槽位 DOCX 设计说明书生成技能；用于基于本地 
 - `crankshaft_design_report_template.docx`
 - `camshaft_design_report_template.docx`
 
-报告只在用户明确要求“设计说明书/报告/doc/docx”时生成；DFMEA CSV 只在用户明确要求或工具入参 `include_dfmea: true` 时生成。
+报告只在用户明确要求“设计说明书/报告/doc/docx”时生成；DFMEA 只在用户明确要求或工具入参 `include_dfmea: true` 时生成，当前连杆 DFMEA 交付为 `.xls` 模板副本。
 
 ## 旧版提示词约束
 
@@ -22,7 +22,7 @@ description: 固定槽位 DOCX 设计说明书生成技能；用于基于本地 
 - 先判断用户是否真的要求报告；没有报告请求时不调用报告工具。
 - 先检索并确认报告模板，再读取模板槽位。
 - 文本槽位只填工具结果、本地资料库证据、计算结果或用户明确确认的信息；禁止假数据。
-- 图片槽位必须来自真实 NX 截图/导出工具；缺图默认阻断。只有用户明确确认后，才允许 `allow_confirmed_missing_images: true`。
+- 图片槽位优先来自真实 NX 截图/导出工具；调用报告工具时如已有截图，应传 `image_path`/`image_paths` 或确保截图在当前会话 artifact 目录。缺图默认阻断；只有用户明确确认后，才允许顶层传入 `allow_confirmed_missing_images: true`。
 - 报告导出必须通过本 skill 的脚本完成，且 `validate` 成功后才能 `generate`。
 
 ## 脚本命令

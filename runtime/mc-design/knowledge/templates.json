@@ -345,23 +345,28 @@
       "shaft_journal_diameter_mm": 28
     },
     "nxDriveParameters": [
-      "CAM_BASE_DIA",
-      "CAM_LIFT",
-      "CAM_NOSE_RAD",
-      "CAM_LOBE_W",
-      "CAM_J_DIA",
-      "CAM_PHASE"
+      "CV_BC_DIA",
+      "CV_J_DIA",
+      "CV_INL_W",
+      "CV_EXL_W",
+      "CV_BRKL_W",
+      "CV_BS_DIA",
+      "CV_AX_CEN",
+      "CV_GRDJ_CEN"
     ],
     "requiredNxMappings": [
-      "CAM_BASE_DIA",
-      "CAM_LIFT",
-      "CAM_NOSE_RAD",
-      "CAM_LOBE_W",
-      "CAM_J_DIA"
+      "CV_BC_DIA",
+      "CV_J_DIA",
+      "CV_INL_W",
+      "CV_EXL_W",
+      "CV_BRKL_W"
     ],
     "optionalNxMappings": [
-      "CAM_PHASE",
-      "CAM_RAMP_ANGLE"
+      "CV_BS_DIA",
+      "CV_AX_CEN",
+      "CV_GRDJ_CEN",
+      "CV_THRJ_W",
+      "CV_REAX_DIA"
     ],
     "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-A/X14N_1006001_01_camshaft_A.prt"
   },
@@ -390,23 +395,28 @@
       "shaft_journal_diameter_mm": 30
     },
     "nxDriveParameters": [
-      "CAM_BASE_DIA",
-      "CAM_LIFT",
-      "CAM_NOSE_RAD",
-      "CAM_LOBE_W",
-      "CAM_J_DIA",
-      "CAM_PHASE"
+      "CV_BC_DIA",
+      "CV_J_DIA",
+      "CV_INL_W",
+      "CV_EXL_W",
+      "CV_BRKL_W",
+      "CV_BS_DIA",
+      "CV_AX_CEN",
+      "CV_GRDJ_CEN"
     ],
     "requiredNxMappings": [
-      "CAM_BASE_DIA",
-      "CAM_LIFT",
-      "CAM_NOSE_RAD",
-      "CAM_LOBE_W",
-      "CAM_J_DIA"
+      "CV_BC_DIA",
+      "CV_J_DIA",
+      "CV_INL_W",
+      "CV_EXL_W",
+      "CV_BRKL_W"
     ],
     "optionalNxMappings": [
-      "CAM_PHASE",
-      "CAM_RAMP_ANGLE"
+      "CV_BS_DIA",
+      "CV_AX_CEN",
+      "CV_GRDJ_CEN",
+      "CV_THRJ_W",
+      "CV_REAX_DIA"
     ],
     "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-B/X14N_1006001_01_camshaft_B.prt"
   },
@@ -435,23 +445,28 @@
       "shaft_journal_diameter_mm": 26
     },
     "nxDriveParameters": [
-      "CAM_BASE_DIA",
-      "CAM_LIFT",
-      "CAM_NOSE_RAD",
-      "CAM_LOBE_W",
-      "CAM_J_DIA",
-      "CAM_PHASE"
+      "CV_BC_DIA",
+      "CV_J_DIA",
+      "CV_INL_W",
+      "CV_EXL_W",
+      "CV_BRKL_W",
+      "CV_BS_DIA",
+      "CV_AX_CEN",
+      "CV_GRDJ_CEN"
     ],
     "requiredNxMappings": [
-      "CAM_BASE_DIA",
-      "CAM_LIFT",
-      "CAM_NOSE_RAD",
-      "CAM_LOBE_W",
-      "CAM_J_DIA"
+      "CV_BC_DIA",
+      "CV_J_DIA",
+      "CV_INL_W",
+      "CV_EXL_W",
+      "CV_BRKL_W"
     ],
     "optionalNxMappings": [
-      "CAM_PHASE",
-      "CAM_RAMP_ANGLE"
+      "CV_BS_DIA",
+      "CV_AX_CEN",
+      "CV_GRDJ_CEN",
+      "CV_THRJ_W",
+      "CV_REAX_DIA"
     ],
     "evidence": "runtime/mc-design/dependencies/templates/TC-TPL-CAM-C/X14N_1006001_01_camshaft_C.prt"
   }

@@ -50,15 +50,38 @@ describe('mc-design NX plugin source contract', () => {
       path.join(nxToolsSourceRoot, 'OptimizationTools.cs'),
       'utf8',
     )
+    const manifest = JSON.parse(await fs.readFile(
+      path.join(nxResourcesRoot, 'nx_tools_manifest.json'),
+      'utf8',
+    )) as { tools: Array<{ name?: string; original_name?: string; category?: string }> }
+    const manifestTools = new Map(manifest.tools.map(tool => [tool.original_name, tool]))
 
-    for (const toolName of [
-      'GetOptimizationToolGuide',
-      'ValidateOptimizationStudy',
-      'BuildOptimizationObjectiveExpression',
-      'RunOptimizationStudy',
+    for (const [toolName, wrappedName] of [
+      ['GetOptimizationToolGuide', 'nx_get_optimization_tool_guide'],
+      ['ValidateOptimizationStudy', 'nx_validate_optimization_study'],
+      ['BuildOptimizationObjectiveExpression', 'nx_build_optimization_objective_expression'],
+      ['RunOptimizationStudy', 'nx_run_optimization_study'],
     ]) {
       expect(source).toContain(`[Tool("${toolName}"`)
+      expect(manifestTools.get(toolName)).toEqual(expect.objectContaining({
+        category: 'Optimization',
+        name: wrappedName,
+      }))
     }
+  })
+
+  it('guards NX optimization against internal objective loops and builder failures', async () => {
+    const source = await fs.readFile(
+      path.join(nxToolsSourceRoot, 'OptimizationTools.cs'),
+      'utf8',
+    )
+
+    expect(source).toContain('RunSafeExpressionSearch')
+    expect(source).toContain('safe_expression_search')
+    expect(source).toContain('fallback_from = "nx_optimization_builder"')
+    expect(source).toContain('IsInternalObjectiveExpression')
+    expect(source).toContain('目标不能直接使用 " + DefaultObjectiveExpressionName')
+    expect(source).toContain('会形成循环参考')
   })
 
   it('accepts numeric or string values for batch expression updates', async () => {

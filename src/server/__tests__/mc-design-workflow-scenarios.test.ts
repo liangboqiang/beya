@@ -119,6 +119,15 @@ describe('mc-design workflow scenarios', () => {
       next: ['mc_design_generate_report_artifacts'],
     },
     {
+      name: 'DFMEA generation: explicit conrod request uses reference artifact tool',
+      input: { request_text: '根据 IPM-CONROD-001 生成连杆 DFMEA' },
+      intent: 'dfmea_generation',
+      should_query_tasks: true,
+      requires_guidance: false,
+      next: ['mc_design_generate_dfmea_artifact'],
+      forbidden: ['mc_design_generate_report_artifacts'],
+    },
+    {
       name: 'conrod drawing: use drawing template workflow only',
       input: { request_text: '给连杆生成图纸并打印' },
       intent: 'drawing_template_update',
@@ -416,14 +425,15 @@ describe('mc-design workflow scenarios', () => {
       template_id: 'TC-TPL-CRANK-B',
     }) as { ok: boolean; nx_parameters: Record<string, number> }
     expect(crank.ok).toBe(true)
-    expect(crank.nx_parameters.CS_Q_RAD).toBe(62.5)
+    expect(crank.nx_parameters.CS_Q_RAD).toBe(89)
 
     const cam = estimateDesignParameters({
       task_id: 'ECR-CAM-004',
       template_id: 'TC-TPL-CAM-B',
     }) as { ok: boolean; nx_parameters: Record<string, number> }
     expect(cam.ok).toBe(true)
-    expect(cam.nx_parameters.CAM_LIFT).toBe(9.8)
+    expect(cam.nx_parameters.CV_BC_DIA).toBe(59)
+    expect(cam.nx_parameters.CV_J_DIA).toBe(39)
   })
 })
 

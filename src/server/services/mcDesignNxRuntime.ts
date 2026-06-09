@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { access, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, normalize, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import type { JsonObject } from '../types/serverRuntime.js'
 
 const execFileAsync = promisify(execFile)
@@ -49,9 +49,14 @@ export type NxRuntimeOptions = {
   extraRoots?: string[]
   baseUrl?: string
   port?: number
+  requestTimeoutMs?: number
+  writeTimeoutMs?: number
 }
 
 export const DEFAULT_NX_PLUGIN_PORT = 8088
+const NX_PLUGIN_READ_TIMEOUT_MS = 30_000
+const NX_PLUGIN_WRITE_TIMEOUT_MS = 120_000
+const NX_PLUGIN_OPTIMIZATION_TIMEOUT_MS = 300_000
 
 const PROJECT_ROOT = resolve(import.meta.dir, '../../..')
 const DEFAULT_MC_DESIGN_REFERENCE_ROOT = join(
@@ -277,6 +282,19 @@ const WRITE_NX_TOOLS = new Set([
   'fs_write_bytes',
 ])
 
+const SLOW_NX_WRITE_TOOL_TIMEOUTS: Record<string, number> = {
+  BatchUpdateParams: NX_PLUGIN_WRITE_TIMEOUT_MS,
+  BuildOptimizationObjectiveExpression: NX_PLUGIN_WRITE_TIMEOUT_MS,
+  CreateImage: NX_PLUGIN_WRITE_TIMEOUT_MS,
+  OpenDrawingSheet: NX_PLUGIN_WRITE_TIMEOUT_MS,
+  OpenPart: NX_PLUGIN_WRITE_TIMEOUT_MS,
+  OpenTCPart: NX_PLUGIN_WRITE_TIMEOUT_MS,
+  OpenTcDrawing: NX_PLUGIN_WRITE_TIMEOUT_MS,
+  RunOptimizationStudy: NX_PLUGIN_OPTIMIZATION_TIMEOUT_MS,
+  Updatedrawings: NX_PLUGIN_WRITE_TIMEOUT_MS,
+  UpdateParam: NX_PLUGIN_WRITE_TIMEOUT_MS,
+}
+
 const openedNxPidsBySession = new Map<string, Set<number>>()
 
 export async function discoverNxInstallations(
@@ -323,6 +341,14 @@ export async function discoverNxInstallations(
 
 export async function listNxProcesses(): Promise<NxProcessInfo[]> {
   if (process.platform !== 'win32') return []
+  const fromGetProcess = await listNxProcessesFromGetProcess()
+  if (fromGetProcess.length > 0) return fromGetProcess
+  const fromCim = await listNxProcessesFromCim()
+  if (fromCim.length > 0) return fromCim
+  return await listNxProcessesFromTasklist()
+}
+
+async function listNxProcessesFromCim(): Promise<NxProcessInfo[]> {
   const script = [
     "$items = Get-CimInstance Win32_Process -Filter \"Name='ugraf.exe'\"",
     'if ($null -eq $items) { @() | ConvertTo-Json -Compress; exit }',
@@ -336,23 +362,94 @@ export async function listNxProcesses(): Promise<NxProcessInfo[]> {
       '-Command',
       script,
     ], { windowsHide: true, timeout: 5000 })
-    const parsed = JSON.parse(stdout.trim() || '[]') as unknown
-    const items = Array.isArray(parsed) ? parsed : parsed ? [parsed] : []
-    return items
-      .map(item => item && typeof item === 'object'
-        ? item as Record<string, unknown>
-        : null)
-      .filter((item): item is Record<string, unknown> => item !== null)
-      .map(item => ({
-        pid: Number(item.ProcessId),
-        name: String(item.Name ?? 'ugraf.exe'),
-        executablePath: stringField(item.ExecutablePath),
-        commandLine: stringField(item.CommandLine),
-      }))
-      .filter(item => Number.isFinite(item.pid))
+    return parsePowerShellProcessJson(stdout, {
+      pidKey: 'ProcessId',
+      nameKey: 'Name',
+      pathKey: 'ExecutablePath',
+      commandLineKey: 'CommandLine',
+    })
   } catch {
     return []
   }
+}
+
+async function listNxProcessesFromGetProcess(): Promise<NxProcessInfo[]> {
+  const script = [
+    "$items = Get-Process -Name ugraf -ErrorAction SilentlyContinue",
+    'if ($null -eq $items) { @() | ConvertTo-Json -Compress; exit }',
+    '$items | Select-Object Id,ProcessName,Path | ConvertTo-Json -Compress',
+  ].join('; ')
+  try {
+    const { stdout } = await execFileAsync('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      script,
+    ], { windowsHide: true, timeout: 5000 })
+    return parsePowerShellProcessJson(stdout, {
+      pidKey: 'Id',
+      nameKey: 'ProcessName',
+      pathKey: 'Path',
+    })
+  } catch {
+    return []
+  }
+}
+
+async function listNxProcessesFromTasklist(): Promise<NxProcessInfo[]> {
+  try {
+    const { stdout } = await execFileAsync('tasklist.exe', [
+      '/FI',
+      'IMAGENAME eq ugraf.exe',
+      '/FO',
+      'CSV',
+      '/NH',
+    ], { windowsHide: true, timeout: 5000 })
+    return stdout
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => line && !line.includes('INFO:'))
+      .map(parseTasklistCsvLine)
+      .filter((item): item is NxProcessInfo => item !== null)
+  } catch {
+    return []
+  }
+}
+
+function parsePowerShellProcessJson(
+  stdout: string,
+  keys: { pidKey: string; nameKey: string; pathKey?: string; commandLineKey?: string },
+): NxProcessInfo[] {
+  const parsed = JSON.parse(stdout.trim() || '[]') as unknown
+  const items = Array.isArray(parsed) ? parsed : parsed ? [parsed] : []
+  return items
+    .map(item => item && typeof item === 'object'
+      ? item as Record<string, unknown>
+      : null)
+    .filter((item): item is Record<string, unknown> => item !== null)
+    .map(item => ({
+      pid: Number(item[keys.pidKey]),
+      name: normalizeNxProcessName(stringField(item[keys.nameKey])),
+      executablePath: keys.pathKey ? stringField(item[keys.pathKey]) : undefined,
+      commandLine: keys.commandLineKey ? stringField(item[keys.commandLineKey]) : undefined,
+    }))
+    .filter(item => Number.isFinite(item.pid))
+}
+
+function parseTasklistCsvLine(line: string): NxProcessInfo | null {
+  const fields = line.match(/("([^"]|"")*"|[^,]+)/g)?.map(field =>
+    field.replace(/^"|"$/g, '').replace(/""/g, '"'),
+  ) ?? []
+  const imageName = fields[0]
+  const pid = Number(fields[1])
+  if (!imageName || !Number.isFinite(pid) || !/^ugraf\.exe$/i.test(imageName)) return null
+  return { pid, name: 'ugraf.exe' }
+}
+
+function normalizeNxProcessName(name: string | undefined): string {
+  if (!name) return 'ugraf.exe'
+  return /\.exe$/i.test(name) ? name : `${name}.exe`
 }
 
 export async function openNx(
@@ -375,6 +472,21 @@ export async function openNx(
       message: options.partPath
         ? 'NX is already running; reuse the existing process and open the part through the NX plugin.'
         : 'NX is already running; no new ugraf.exe process was launched.',
+    }
+  }
+  const pluginStatus = await getNxPluginStatus(options)
+  if (pluginStatus.ok) {
+    return {
+      ok: true,
+      alreadyRunning: true,
+      detectedBy: 'nx_plugin_health',
+      partPath: options.partPath,
+      partOpenRequired: Boolean(options.partPath),
+      runningProcesses: before,
+      pluginStatus,
+      message: options.partPath
+        ? 'NX plugin is already online; reuse the existing NX session and open the part through the NX plugin.'
+        : 'NX plugin is already online; no new ugraf.exe process was launched.',
     }
   }
   const install = options.executablePath
@@ -596,11 +708,36 @@ export async function callNxPluginTool(
   const originalName = resolveNxToolName(toolName)
   const normalizedArgs = normalizePluginArgs(originalName, args)
   const baseUrl = nxPluginBaseUrl(options)
-  const result = await fetchNxJson(`${baseUrl}/tools/${encodeURIComponent(originalName)}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(normalizedArgs),
-  })
+  if (usesInternalOptimizationObjective(originalName, normalizedArgs)) {
+    return {
+      ok: false,
+      tool: toolName,
+      originalTool: originalName,
+      baseUrl,
+      args: normalizedArgs,
+      error: 'invalid_optimization_objective',
+      message: 'Objective_AI 是 NX 优化工具内部合成目标表达式，不能作为 objective 再传入运行工具；请传原始表达式目标。',
+    }
+  }
+  const requestTimeoutMs = nxPluginToolTimeoutMs(originalName, options)
+  let result: unknown
+  try {
+    result = await fetchNxJson(`${baseUrl}/tools/${encodeURIComponent(originalName)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(normalizedArgs),
+    }, requestTimeoutMs)
+  } catch (error) {
+    return {
+      ok: false,
+      tool: toolName,
+      originalTool: originalName,
+      baseUrl,
+      args: normalizedArgs,
+      error: error instanceof Error ? error.message : String(error),
+      timeout_ms: requestTimeoutMs,
+    }
+  }
   return {
     ok: isPluginOk(result),
     tool: toolName,
@@ -609,6 +746,16 @@ export async function callNxPluginTool(
     args: normalizedArgs,
     result: result as JsonObject,
   }
+}
+
+function nxPluginToolTimeoutMs(toolName: string, options: NxRuntimeOptions): number {
+  const requestTimeout = coerceTimeoutMs(options.requestTimeoutMs)
+  const writeTimeout = coerceTimeoutMs(options.writeTimeoutMs)
+  if (!isNxWriteTool(toolName)) return requestTimeout ?? NX_PLUGIN_READ_TIMEOUT_MS
+  return writeTimeout
+    ?? requestTimeout
+    ?? SLOW_NX_WRITE_TOOL_TIMEOUTS[resolveNxToolName(toolName)]
+    ?? NX_PLUGIN_WRITE_TIMEOUT_MS
 }
 
 function normalizePluginArgs(toolName: string, args: JsonObject): JsonObject {
@@ -627,6 +774,20 @@ function normalizePluginArgs(toolName: string, args: JsonObject): JsonObject {
 
 function normalizeWindowsPath(path: string): string {
   return path.replace(/\\/g, '/')
+}
+
+function usesInternalOptimizationObjective(toolName: string, args: JsonObject): boolean {
+  if (toolName !== 'RunOptimizationStudy' && toolName !== 'BuildOptimizationObjectiveExpression') {
+    return false
+  }
+  const objectives = args.objectives
+  if (!Array.isArray(objectives)) return false
+  return objectives.some(objective => {
+    if (!objective || typeof objective !== 'object' || Array.isArray(objective)) return false
+    const name = String((objective as JsonObject).name ?? '').trim()
+    return name.localeCompare('Objective_AI', undefined, { sensitivity: 'accent' }) === 0
+      || name.toLowerCase() === 'objective_ai'
+  })
 }
 
 export function isNxWriteTool(toolName: string): boolean {
@@ -1017,9 +1178,13 @@ function nxPluginBaseUrl(options: NxRuntimeOptions): string {
   return `http://127.0.0.1:${port}/api`
 }
 
-async function fetchNxJson(url: string, init: RequestInit): Promise<unknown> {
+async function fetchNxJson(
+  url: string,
+  init: RequestInit,
+  timeoutMs = NX_PLUGIN_READ_TIMEOUT_MS,
+): Promise<unknown> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 10_000)
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const response = await fetch(url, {
       ...init,
@@ -1031,9 +1196,19 @@ async function fetchNxJson(url: string, init: RequestInit): Promise<unknown> {
       throw new Error(`HTTP ${response.status}: ${text}`)
     }
     return payload
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`NX plugin request timed out after ${timeoutMs}ms`)
+    }
+    throw error
   } finally {
     clearTimeout(timeout)
   }
+}
+
+function coerceTimeoutMs(value: unknown): number | undefined {
+  const parsed = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10)
+  return Number.isFinite(parsed) && parsed >= 1000 ? Math.min(parsed, 600_000) : undefined
 }
 
 async function validateProjectNxPluginFiles(pluginDir: string): Promise<{

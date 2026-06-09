@@ -318,11 +318,29 @@ function template(
       : null,
     classificationAttributes: { component, family, revision: revisionId },
     nominalParameters,
-    nxDriveParameters: Object.keys(nominalParameters),
-    requiredNxMappings: Object.keys(nominalParameters),
-    optionalNxMappings: [],
+    nxDriveParameters: fallbackNxDriveParameters(component, nominalParameters),
+    requiredNxMappings: fallbackRequiredNxMappings(component, nominalParameters),
+    optionalNxMappings: component === 'camshaft'
+      ? ['CV_BS_DIA', 'CV_AX_CEN', 'CV_GRDJ_CEN']
+      : [],
     evidence: 'built-in fallback fixture',
   }
+}
+
+function fallbackNxDriveParameters(
+  component: McDesignComponent,
+  nominalParameters: Record<string, number | string>,
+): string[] {
+  if (component !== 'camshaft') return Object.keys(nominalParameters)
+  return ['CV_BC_DIA', 'CV_J_DIA', 'CV_INL_W', 'CV_EXL_W', 'CV_BRKL_W', 'CV_BS_DIA', 'CV_AX_CEN', 'CV_GRDJ_CEN']
+}
+
+function fallbackRequiredNxMappings(
+  component: McDesignComponent,
+  nominalParameters: Record<string, number | string>,
+): string[] {
+  if (component !== 'camshaft') return Object.keys(nominalParameters)
+  return ['CV_BC_DIA', 'CV_J_DIA', 'CV_INL_W', 'CV_EXL_W', 'CV_BRKL_W']
 }
 
 function fallbackKnowledge(): McDesignKnowledgeEntry[] {
@@ -333,6 +351,11 @@ function fallbackKnowledge(): McDesignKnowledgeEntry[] {
     knowledge('KN-CRANK-002', 'crankshaft', 'check_rule', 'torsional_safety_factor', 'Torsional safety factor', ['torsional safety', 'safety factor'], undefined, 'Keep above the project target before release.'),
     knowledge('KN-CAM-001', 'camshaft', 'parameter_dictionary', 'cam_lift_mm', 'Cam lift', ['cam lift', 'cam_lift_mm'], 'mm', 'Lift and duration define valve event performance.'),
     knowledge('KN-CAM-002', 'camshaft', 'check_rule', 'valve_duration_deg', 'Valve duration', ['duration', 'valve_duration_deg'], 'deg', 'Duration must match target speed and emissions constraints.'),
+    knowledge('KN-CAM-003', 'camshaft', 'experience_formula', 'CV_BC_DIA', 'Cam base circle diameter', ['base circle', 'CV_BC_DIA'], 'mm', 'base_circle_diameter_mm'),
+    knowledge('KN-CAM-004', 'camshaft', 'experience_formula', 'CV_J_DIA', 'Camshaft journal diameter', ['shaft journal', 'CV_J_DIA'], 'mm', 'shaft_journal_diameter_mm'),
+    knowledge('KN-CAM-005', 'camshaft', 'experience_formula', 'CV_INL_W', 'Intake cam lobe width', ['cam lobe width', 'CV_INL_W'], 'mm', 'cam_lobe_width_mm'),
+    knowledge('KN-CAM-006', 'camshaft', 'experience_formula', 'CV_EXL_W', 'Exhaust cam lobe width', ['cam lobe width', 'CV_EXL_W'], 'mm', 'cam_lobe_width_mm'),
+    knowledge('KN-CAM-007', 'camshaft', 'experience_formula', 'CV_BRKL_W', 'Brake cam lobe width', ['cam lobe width', 'CV_BRKL_W'], 'mm', 'cam_lobe_width_mm'),
   ]
 }
 

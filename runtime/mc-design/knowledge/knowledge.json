@@ -94,37 +94,59 @@
     "source": "nx-parameter-formula-dictionary-crankshaft.xlsx"
   },
   {
-    "id": "CAM-PARAM-CAM_BASE_DIA",
+    "id": "CAM-PARAM-CV_BC_DIA",
     "component": "camshaft",
     "category": "experience_formula",
-    "paramId": "CAM_BASE_DIA",
+    "paramId": "CV_BC_DIA",
     "standardName": "cam base circle diameter",
-    "aliases": ["base circle"],
+    "aliases": ["base circle", "凸轮轴基圆直径"],
     "unit": "mm",
     "formula": "base_circle_diameter_mm",
-    "source": "X14N_1006001_01_camshaft.prt local template metadata"
+    "source": "X14N_1006001_01_camshaft_A.prt current drive expression"
   },
   {
-    "id": "CAM-PARAM-CAM_LIFT",
+    "id": "CAM-PARAM-CV_J_DIA",
     "component": "camshaft",
     "category": "experience_formula",
-    "paramId": "CAM_LIFT",
-    "standardName": "cam lift",
-    "aliases": ["valve lift"],
+    "paramId": "CV_J_DIA",
+    "standardName": "camshaft journal diameter",
+    "aliases": ["shaft journal diameter", "凸轮轴安装轴颈直径"],
     "unit": "mm",
-    "formula": "cam_lift_mm",
-    "source": "X14N_1006001_01_camshaft.prt local template metadata"
+    "formula": "shaft_journal_diameter_mm",
+    "source": "X14N_1006001_01_camshaft_A.prt current drive expression"
   },
   {
-    "id": "CAM-PARAM-CAM_NOSE_RAD",
+    "id": "CAM-PARAM-CV_INL_W",
     "component": "camshaft",
     "category": "experience_formula",
-    "paramId": "CAM_NOSE_RAD",
-    "standardName": "cam nose radius",
-    "aliases": ["nose radius"],
+    "paramId": "CV_INL_W",
+    "standardName": "intake cam lobe width",
+    "aliases": ["cam lobe width", "进气凸轮宽度"],
     "unit": "mm",
-    "formula": "max(2.5, 0.28 * cam_lift_mm + 0.035 * base_circle_diameter_mm)",
-    "source": "local camshaft engineering heuristic"
+    "formula": "cam_lobe_width_mm",
+    "source": "X14N_1006001_01_camshaft_A.prt current drive expression"
+  },
+  {
+    "id": "CAM-PARAM-CV_EXL_W",
+    "component": "camshaft",
+    "category": "experience_formula",
+    "paramId": "CV_EXL_W",
+    "standardName": "exhaust cam lobe width",
+    "aliases": ["cam lobe width", "排气凸轮宽度"],
+    "unit": "mm",
+    "formula": "cam_lobe_width_mm",
+    "source": "X14N_1006001_01_camshaft_A.prt current drive expression"
+  },
+  {
+    "id": "CAM-PARAM-CV_BRKL_W",
+    "component": "camshaft",
+    "category": "experience_formula",
+    "paramId": "CV_BRKL_W",
+    "standardName": "brake cam lobe width",
+    "aliases": ["cam lobe width", "制动凸轮宽度"],
+    "unit": "mm",
+    "formula": "cam_lobe_width_mm",
+    "source": "X14N_1006001_01_camshaft_A.prt current drive expression"
   },
   {
     "id": "CAM-CHECK-LIFT-BASE",

@@ -25,7 +25,7 @@ capabilities:
 | 历史能力 | Beya 当前做法 | 常用表 | 结果用途 |
 |---|---|---|---|
 | `query_nx_param_dic` | 用 `mysql_query` 查询参数词典 | `nx_param_dic_cn_v2` | 中文参数到标准参数/NX 表达式候选 |
-| `query_part_template` | 用 `mysql_query` 查询历史零部件模板记录 | `part_template_table` | 仅用于辅助理解历史模板记录；当前数模模板主路径走 TC `智能体模板库` |
+| `query_part_template` | 用 `mysql_query` 查询历史零部件模板记录 | `part_template_table` | 仅用于辅助理解历史模板记录；当前数模模板主路径走本地真实模板清单，TC `智能体模板库` 作为可用时增强来源 |
 | `query_doc_template` | 用 `mysql_query` 查询历史设计文档模板 | `doc_template_table` | 仅用于非当前设计报告流程的历史文档候选查询 |
 | `mysql_schema_lookup` | 用 `SHOW TABLES` / `DESCRIBE` / `INFORMATION_SCHEMA` | 数据库结构 | 不确定表结构时先查 schema |
 | `mysql_query_records` | 用 `SELECT ... WHERE ... LIMIT ...` | 白名单业务表 | 等值过滤记录查询 |
@@ -108,7 +108,7 @@ LIMIT 20;
 
 ### 4. 历史零部件模板记录查询
 
-当前参数化建模的数模模板以 Teamcenter `智能体模板库` 为准。建模缺少模型、用户提出新任务或需要打开模板时，应加载 `teamcenter-flow` 并调用 `teamcenter_get_parts_from_specified_folder(folder_name="智能体模板库")` 查询。以下 MySQL 查询只能作为历史记录或辅助信息，不得替代 TC 模板库候选和 NX 打开结果。
+当前参数化建模的数模模板以本地 `runtime/mc-design/dependencies/templates` 和 `knowledge/templates.json` 中真实 `.prt` 为稳定主路径。建模缺少模型、用户提出新任务或需要打开模板时，应先调用本地模板推荐；如用户明确要求远端 TC 模板或本地候选不足，再加载 `teamcenter-flow` 并调用 `teamcenter_get_parts_from_specified_folder(folder_name="智能体模板库")` 查询。以下 MySQL 查询只能作为历史记录或辅助信息，不得替代本地/TC 中真实可打开的模板候选和 NX 打开结果。
 
 ```sql
 SELECT

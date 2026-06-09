@@ -409,6 +409,231 @@
       }
     },
     {
+      "name": "nx_get_optimization_tool_guide",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "读取 NX plugin 优化工具说明和参数 schema",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "GetOptimizationToolGuide",
+      "category": "Optimization",
+      "parameters": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "nx_validate_optimization_study",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "校验 NX 优化研究的变量、目标、约束和算法；不修改模型",
+      "danger_level": "read",
+      "requires_connection": true,
+      "original_name": "ValidateOptimizationStudy",
+      "category": "Optimization",
+      "parameters": [
+        {
+          "name": "variables",
+          "type": "List<OptimizerVariableItem>",
+          "isOptional": false
+        },
+        {
+          "name": "objectives",
+          "type": "List<OptimizerObjectiveItem>",
+          "isOptional": false
+        },
+        {
+          "name": "constraints",
+          "type": "List<OptimizerConstraintItem>",
+          "isOptional": true
+        },
+        {
+          "name": "algorithm",
+          "type": "OptimizerAlgorithmOptions",
+          "isOptional": true
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "variables": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List<OptimizerVariableItem>"
+          },
+          "objectives": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List<OptimizerObjectiveItem>"
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List<OptimizerConstraintItem>"
+          },
+          "algorithm": {
+            "type": "object",
+            "description": "OptimizerAlgorithmOptions"
+          }
+        },
+        "required": [
+          "variables",
+          "objectives"
+        ]
+      }
+    },
+    {
+      "name": "nx_build_optimization_objective_expression",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "按多目标配置构建或更新 NX 优化目标表达式",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "BuildOptimizationObjectiveExpression",
+      "category": "Optimization",
+      "parameters": [
+        {
+          "name": "objectives",
+          "type": "List<OptimizerObjectiveItem>",
+          "isOptional": false
+        },
+        {
+          "name": "expression_name",
+          "type": "string",
+          "isOptional": true
+        },
+        {
+          "name": "write_to_part",
+          "type": "bool",
+          "isOptional": true
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "objectives": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List<OptimizerObjectiveItem>"
+          },
+          "expression_name": {
+            "type": "string",
+            "description": "string"
+          },
+          "write_to_part": {
+            "type": "boolean",
+            "description": "bool"
+          }
+        },
+        "required": [
+          "objectives"
+        ]
+      }
+    },
+    {
+      "name": "nx_run_optimization_study",
+      "namespace": "nx",
+      "source": "nx-plugin",
+      "description": "一次性执行 NX 优化研究：变量、目标、约束、算法和结果回读在同一调用内完成",
+      "danger_level": "write",
+      "requires_connection": true,
+      "original_name": "RunOptimizationStudy",
+      "category": "Optimization",
+      "parameters": [
+        {
+          "name": "title",
+          "type": "string",
+          "isOptional": false
+        },
+        {
+          "name": "variables",
+          "type": "List<OptimizerVariableItem>",
+          "isOptional": false
+        },
+        {
+          "name": "objectives",
+          "type": "List<OptimizerObjectiveItem>",
+          "isOptional": false
+        },
+        {
+          "name": "constraints",
+          "type": "List<OptimizerConstraintItem>",
+          "isOptional": true
+        },
+        {
+          "name": "algorithm",
+          "type": "OptimizerAlgorithmOptions",
+          "isOptional": true
+        },
+        {
+          "name": "dry_run",
+          "type": "bool",
+          "isOptional": true
+        },
+        {
+          "name": "show_results",
+          "type": "bool",
+          "isOptional": true
+        }
+      ],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "string"
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List<OptimizerVariableItem>"
+          },
+          "objectives": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List<OptimizerObjectiveItem>"
+          },
+          "constraints": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "List<OptimizerConstraintItem>"
+          },
+          "algorithm": {
+            "type": "object",
+            "description": "OptimizerAlgorithmOptions"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "bool"
+          },
+          "show_results": {
+            "type": "boolean",
+            "description": "bool"
+          }
+        },
+        "required": [
+          "title",
+          "variables",
+          "objectives"
+        ]
+      }
+    },
+    {
       "name": "nx_get_drive_params_list",
       "namespace": "nx",
       "source": "nx-plugin",

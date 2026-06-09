@@ -1,4 +1,5 @@
-import { cp, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { copyFile, cp, mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
@@ -39,6 +40,7 @@ type WorkflowIntent =
   | 'direct_parameter_update'
   | 'performance_design'
   | 'report_generation'
+  | 'dfmea_generation'
   | 'drawing_template_update'
   | 'optimization'
   | 'template_recommendation'
@@ -69,6 +71,7 @@ const TOOL_NAMES = [
   'mc_design_run_local_chain_check',
   'mc_design_generate_nx_artifact',
   'mc_design_generate_report_artifacts',
+  'mc_design_generate_dfmea_artifact',
   'mc_design_generate_conrod_drawing',
   'mc_design_tc_writeback_mock',
 ] as const
@@ -125,6 +128,10 @@ export function getMcDesignLocalToolDefinitions(): ToolDefinition[] {
         template_id: { type: 'string' },
         request_text: { type: 'string' },
         parameters: { type: 'object' },
+        allow_confirmed_missing_images: { type: 'boolean' },
+        include_dfmea: { type: 'boolean' },
+        template_path: { type: 'string' },
+        dfmea_template_path: { type: 'string' },
         confirmed: { type: 'boolean' },
       },
     },
@@ -196,6 +203,7 @@ export function classifyRequirement(args: JsonObject): JsonObject {
     task_id: task?.id,
     extracted_parameters: parameters,
     missing_inputs: missingInputs,
+    guided_input_options: guidedInputOptions(component, missingInputs),
     requires_confirmation: !component || missingInputs.length > 0 || !isReadOnlyIntent(intent),
     next_recommended_tool: nextToolForIntent(intent, component, missingInputs),
   }
@@ -273,8 +281,10 @@ export function recommendTemplates(args: JsonObject): JsonObject {
     .filter(template => !component || template.component === component)
     .map(template => {
       const score = scoreTemplate(parameters, template)
+      const implementation = templateImplementationStatus(template)
       return {
         template,
+        implementation,
         ...score,
         score: Number(score.score ?? 0),
       }
@@ -289,7 +299,8 @@ export function recommendTemplates(args: JsonObject): JsonObject {
     data_source: MC_DESIGN_LOCAL_SOURCE,
     component,
     query_parameters: parameters,
-    algorithm: 'weighted_normalized_euclidean_similarity',
+    algorithm: 'weighted_normalized_euclidean_similarity_with_local_runnable_template_bias',
+    recommendation_policy: '优先选择本地可打开的真实参数化模板；无完整输入时优先 baseline/master 模板，避免推荐偏离当前可运行范围的方案。',
     best_template_id: topPick?.template.id,
     recommendations: candidates,
     confirmation_required: true,
@@ -298,7 +309,7 @@ export function recommendTemplates(args: JsonObject): JsonObject {
 
 export function estimateDesignParameters(args: JsonObject): JsonObject {
   const task = getMcDesignTask(stringValue(args.task_id) || stringValue(args.taskId))
-  const template = getMcDesignTemplate(stringValue(args.template_id))
+  let template = getMcDesignTemplate(stringValue(args.template_id))
   const text = stringValue(args.request_text) || stringValue(args.text) || task?.requirementText || ''
   const component = normalizeComponent(args.component) || template?.component || task?.component || inferComponent(text)
   const supplied = collectParameters(task, args, text)
@@ -307,20 +318,32 @@ export function estimateDesignParameters(args: JsonObject): JsonObject {
     ...nominal,
     ...supplied,
   }
-  const nxParameters = computeNxParameters(component, parameters)
+  if (!template && component) {
+    template = selectBestLocalTemplate(component, parameters)
+  }
+  const rawNxParameters = computeNxParameters(component, parameters)
+  const fitted = fitParametersToTemplateEnvelope(component, rawNxParameters, template)
+  const baselineFit = fitParametersToTemplateDriveBaseline(component, fitted.parameters, rawNxParameters, template)
+  const nxParameters = baselineFit.parameters
   const missingInputs = component
     ? REQUIRED_INPUTS[component].filter(key => parameters[key] === undefined)
     : []
   const isIncomplete = component && missingInputs.length > 0
+  const includeDiagnostics = args.include_diagnostics === true || args.debug === true
 
-  return {
+  const result: JsonObject = {
     ok: !isIncomplete,
     data_source: MC_DESIGN_LOCAL_SOURCE,
     component,
     task_id: task?.id,
     template_id: template?.id,
+    template_implementation: template ? templateImplementationStatus(template) : undefined,
     parameters,
     nx_parameters: isIncomplete ? {} : nxParameters,
+    nx_parameter_candidates: isIncomplete
+      ? {}
+      : buildNxParameterCandidates(component, nxParameters, fitted.parameters, rawNxParameters),
+    parameter_ranges: isIncomplete ? {} : publicParameterRanges(component, fitted.ranges),
     checks: isIncomplete ? [] : buildChecks(component, parameters, nxParameters),
     missing_inputs: missingInputs.map(key => ({ key })),
     requires_confirmation: true,
@@ -328,6 +351,13 @@ export function estimateDesignParameters(args: JsonObject): JsonObject {
       ? '缺少必要输入参数。请通过 AskUserQuestion 工具补充缺失的参数后重试。'
       : 'Review the estimated parameters and pass confirmed: true before any NX write operation.',
   }
+  if (includeDiagnostics) {
+    result.raw_nx_parameters = isIncomplete ? {} : rawNxParameters
+    result.range_fitted_nx_parameters = isIncomplete ? {} : fitted.parameters
+    result.template_baseline_nx_parameters = isIncomplete ? {} : baselineFit.baseline
+    result.parameter_fit_notes = isIncomplete ? [] : [...fitted.notes, ...baselineFit.notes]
+  }
+  return result
 }
 
 function planWorkflow(args: JsonObject): JsonObject {
@@ -368,7 +398,7 @@ function planWorkflow(args: JsonObject): JsonObject {
     guardrails.push('reuse_running_nx_before_launch')
   }
 
-  const shouldQueryTasks = intent === 'task_execution' || intent === 'retrieval_comparison' || intent === 'report_generation'
+  const shouldQueryTasks = intent === 'task_execution' || intent === 'retrieval_comparison' || intent === 'report_generation' || intent === 'dfmea_generation'
 
   return {
     ok: true,
@@ -377,6 +407,7 @@ function planWorkflow(args: JsonObject): JsonObject {
     component,
     task_id: classified.task_id,
     missing_inputs: missingInputs,
+    guided_input_options: guidedInputOptions(component, missingInputs),
     requires_guidance: requiresGuidance,
     side_effects_allowed: sideEffectsAllowed,
     should_query_tasks: shouldQueryTasks,
@@ -502,27 +533,47 @@ async function generateReportArtifacts(args: JsonObject, extra: ToolCallExtra): 
   if (args.confirmed !== true) {
     return { ok: false, error: 'confirmation_required', message: 'Report generation requires confirmed: true.' }
   }
-  const allowConfirmedMissing = args.allow_confirmed_missing_images === true
   const task = getMcDesignTask(stringValue(args.task_id) || stringValue(args.taskId))
   const template = getMcDesignTemplate(stringValue(args.template_id))
   const component = normalizeComponent(args.component) || template?.component || task?.component || 'conrod'
   const artifactDir = await ensureArtifactDir(extra)
+  const requestParameters = jsonObjectValue(args.parameters) ?? {}
+  const allowConfirmedMissing = allowsConfirmedMissingImages(args)
+  const reportImagePaths = await findReportImagePaths(artifactDir, args)
   const parameters = {
     ...(task?.explicitParameters ?? {}),
     ...(template?.nominalParameters ?? {}),
-    ...(jsonObjectValue(args.parameters) ?? {}),
-  }
+    ...stripReportControlParameters(requestParameters),
+  } as Record<string, number | string>
 
-  if (!allowConfirmedMissing) {
+  if (!allowConfirmedMissing && reportImagePaths.length === 0) {
     return {
       ok: false,
       error: 'report_image_evidence_required',
-      message: 'Design report generation requires image slots (NX screenshots, drawing exports). Set allow_confirmed_missing_images: true to proceed without images.',
+      message: 'Design report generation requires image slots (NX screenshots, drawing exports). Provide an image path or set allow_confirmed_missing_images: true to proceed without images.',
     }
   }
 
-  const pyResult = await tryDocxGeneration(artifactDir, component, parameters, task, template)
-  if (pyResult) return { ...pyResult, data_source: MC_DESIGN_LOCAL_SOURCE }
+  const pyResult = await tryDocxGeneration(
+    artifactDir,
+    component,
+    parameters,
+    task,
+    template,
+    reportImagePaths,
+    allowConfirmedMissing,
+  )
+  const dfmeaResult = args.include_dfmea === true
+    ? await generateDfmeaArtifact({ ...args, confirmed: true }, extra)
+    : undefined
+  const dfmeaFields = dfmeaResult?.ok
+    ? {
+      dfmea_path: dfmeaResult.dfmea_path,
+      dfmea_format: dfmeaResult.dfmea_format,
+      dfmea_rows: dfmeaResult.rows_count,
+    }
+    : {}
+  if (pyResult) return { ...pyResult, ...dfmeaFields, data_source: MC_DESIGN_LOCAL_SOURCE }
 
   const reportPath = join(artifactDir, `design-report-${component}-${timestampSegment()}.md`)
   const content = [
@@ -548,7 +599,248 @@ async function generateReportArtifacts(args: JsonObject, extra: ToolCallExtra): 
     task_id: task?.id,
     template_id: template?.id,
     report_path: reportPath,
+    ...dfmeaFields,
   }
+}
+
+function buildNxParameterCandidates(
+  component: McDesignComponent | undefined,
+  primaryParameters: Record<string, number>,
+  fittedParameters: Record<string, number>,
+  rawParameters: Record<string, number>,
+): Record<string, number[]> {
+  const result: Record<string, number[]> = {}
+  const keys = new Set([
+    ...Object.keys(primaryParameters),
+    ...Object.keys(fittedParameters),
+    ...Object.keys(rawParameters),
+  ])
+
+  for (const key of keys) {
+    const values = [
+      primaryParameters[key],
+      fittedParameters[key],
+      rawParameters[key],
+    ].filter((value): value is number => Number.isFinite(value))
+
+    const unique: number[] = []
+    for (const value of values) {
+      const rounded = publicNxParameterValue(component, value)
+      if (!unique.includes(rounded)) unique.push(rounded)
+    }
+    result[key] = unique
+  }
+
+  return result
+}
+
+function publicParameterRanges(
+  component: McDesignComponent | undefined,
+  ranges: Record<string, JsonObject>,
+): Record<string, JsonObject> {
+  if (component !== 'crankshaft') return ranges
+  return Object.fromEntries(
+    Object.entries(ranges).map(([key, range]) => [key, {
+      ...range,
+      min: publicNxParameterValue(component, range.min),
+      max: publicNxParameterValue(component, range.max),
+    }]),
+  )
+}
+
+function publicNxParameterValue(component: McDesignComponent | undefined, value: unknown): number {
+  const parsed = numeric(value)
+  if (parsed === undefined) return 0
+  return component === 'crankshaft' || component === 'camshaft'
+    ? Math.round(parsed)
+    : roundEngineeringValue(parsed)
+}
+
+const DFMEA_TEMPLATE_FILE_NAMES = [
+  '14N连杆部件边界图、P图和DFMEA.xls',
+  'K09LN-1004201-01A-DFMEA01.xls',
+  'K11-1004201-21-DFMEA01.xls',
+]
+
+const DFMEA_TEMPLATE_DIRS = [
+  'F:\\Desktop\\defema',
+  'F:\\Desktop\\dfmea',
+]
+
+async function generateDfmeaArtifact(args: JsonObject, extra: ToolCallExtra): Promise<JsonObject> {
+  if (args.confirmed !== true) {
+    return { ok: false, error: 'confirmation_required', message: 'DFMEA generation requires confirmed: true.' }
+  }
+
+  const task = getMcDesignTask(stringValue(args.task_id) || stringValue(args.taskId))
+  const template = getMcDesignTemplate(stringValue(args.template_id))
+  const component = normalizeComponent(args.component) || template?.component || task?.component || inferComponent(stringValue(args.request_text) ?? '') || 'conrod'
+  if (component !== 'conrod') {
+    return {
+      ok: false,
+      error: 'dfmea_component_not_supported',
+      component,
+      message: '当前本地 DFMEA 生成仅稳定支持连杆模板；曲轴和凸轮轴需补充对应 DFMEA 模板后再启用。',
+    }
+  }
+
+  const artifactDir = await ensureArtifactDir(extra)
+  const sourcePath = await findDfmeaTemplatePath(args)
+  if (!sourcePath) {
+    return {
+      ok: false,
+      error: 'dfmea_template_not_found',
+      component,
+      message: '未找到可复制的连杆 DFMEA .xls 模板。请提供 dfmea_template_path 或确认 F:\\Desktop\\defema 下的模板存在。',
+      candidate_paths: dfmeaTemplateCandidates(args),
+    }
+  }
+
+  const sourceInfo = await stat(sourcePath)
+  const dfmeaPath = join(artifactDir, `dfmea-conrod-${timestampSegment()}-${basename(sourcePath)}`)
+  await copyFile(sourcePath, dfmeaPath)
+
+  return {
+    ok: true,
+    data_source: MC_DESIGN_LOCAL_SOURCE,
+    artifact_type: 'dfmea_template_copy',
+    dfmea_format: 'xls',
+    component,
+    task_id: task?.id,
+    template_id: template?.id,
+    dfmea_path: dfmeaPath,
+    source_template_path: sourcePath,
+    template_source_path: sourcePath,
+    copied_template: true,
+    content_modified: false,
+    source_size_bytes: sourceInfo.size,
+    reference_templates: DFMEA_TEMPLATE_FILE_NAMES,
+  }
+}
+
+function dfmeaTemplateCandidates(args: JsonObject): string[] {
+  const parameters = jsonObjectValue(args.parameters) ?? {}
+  const explicit = [
+    stringValue(args.dfmea_template_path),
+    stringValue(args.dfmeaTemplatePath),
+    stringValue(args.template_path),
+    stringValue(args.templatePath),
+    stringValue(parameters.dfmea_template_path),
+    stringValue(parameters.dfmeaTemplatePath),
+    stringValue(parameters.template_path),
+    stringValue(parameters.templatePath),
+    stringValue(process.env.MC_DESIGN_DFMEA_TEMPLATE_PATH),
+  ].filter((value): value is string => Boolean(value))
+  const dirs = [
+    stringValue(args.dfmea_template_dir),
+    stringValue(args.dfmeaTemplateDir),
+    stringValue(parameters.dfmea_template_dir),
+    stringValue(parameters.dfmeaTemplateDir),
+    stringValue(process.env.MC_DESIGN_DFMEA_TEMPLATE_DIR),
+    ...DFMEA_TEMPLATE_DIRS,
+  ].filter((value): value is string => Boolean(value))
+  return [
+    ...explicit,
+    ...dirs.flatMap(dir => DFMEA_TEMPLATE_FILE_NAMES.map(fileName => join(dir, fileName))),
+  ].map(candidate => resolve(candidate))
+}
+
+async function findDfmeaTemplatePath(args: JsonObject): Promise<string | undefined> {
+  for (const candidate of dfmeaTemplateCandidates(args)) {
+    try {
+      const info = await stat(candidate)
+      if (info.isFile() && candidate.toLowerCase().endsWith('.xls')) return candidate
+    } catch {
+      // Try the next configured template path.
+    }
+  }
+  return undefined
+}
+
+function allowsConfirmedMissingImages(args: JsonObject): boolean {
+  const parameters = jsonObjectValue(args.parameters) ?? {}
+  return truthyFlag(args.allow_confirmed_missing_images)
+    || truthyFlag(args.allowConfirmedMissingImages)
+    || truthyFlag(parameters.allow_confirmed_missing_images)
+    || truthyFlag(parameters.allowConfirmedMissingImages)
+    || normalizedText(args.request_text).includes('allow_confirmed_missing_images=true')
+}
+
+function stripReportControlParameters(parameters: JsonObject): JsonObject {
+  const result: JsonObject = {}
+  for (const [key, value] of Object.entries(parameters)) {
+    if ([
+      'allow_confirmed_missing_images',
+      'allowConfirmedMissingImages',
+      'include_dfmea',
+      'includeDfmea',
+      'image_path',
+      'imagePath',
+      'screenshot_path',
+      'screenshotPath',
+      'report_image_path',
+      'reportImagePath',
+    ].includes(key)) continue
+    result[key] = value
+  }
+  return result
+}
+
+async function findReportImagePaths(artifactDir: string, args: JsonObject): Promise<string[]> {
+  const parameters = jsonObjectValue(args.parameters) ?? {}
+  const explicit = [
+    stringValue(args.image_path),
+    stringValue(args.imagePath),
+    stringValue(args.screenshot_path),
+    stringValue(args.screenshotPath),
+    stringValue(args.report_image_path),
+    stringValue(args.reportImagePath),
+    stringValue(parameters.image_path),
+    stringValue(parameters.imagePath),
+    stringValue(parameters.screenshot_path),
+    stringValue(parameters.screenshotPath),
+    stringValue(parameters.report_image_path),
+    stringValue(parameters.reportImagePath),
+    ...(stringArray(args.image_paths) ?? []),
+    ...(stringArray(args.imagePaths) ?? []),
+    ...(stringArray(parameters.image_paths) ?? []),
+    ...(stringArray(parameters.imagePaths) ?? []),
+  ].filter((value): value is string => Boolean(value))
+
+  let artifactImages: string[] = []
+  try {
+    const entries = await readdir(artifactDir)
+    artifactImages = entries
+      .filter(entry => isReportImageFile(entry))
+      .map(entry => join(artifactDir, entry))
+  } catch {
+    artifactImages = []
+  }
+
+  const result: string[] = []
+  for (const candidate of [...explicit, ...artifactImages]) {
+    const resolved = resolve(candidate)
+    try {
+      const info = await stat(resolved)
+      if (info.isFile() && isReportImageFile(resolved) && !result.includes(resolved)) {
+        result.push(resolved)
+      }
+    } catch {
+      // Ignore stale paths.
+    }
+  }
+  return result
+}
+
+function isReportImageFile(path: string): boolean {
+  const lower = path.toLowerCase()
+  return lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.bmp')
+}
+
+function truthyFlag(value: unknown): boolean {
+  if (value === true) return true
+  if (typeof value !== 'string') return false
+  return ['true', '1', 'yes', 'y', '是', '确认', '已确认'].includes(normalizedText(value))
 }
 
 async function tryDocxGeneration(
@@ -557,6 +849,8 @@ async function tryDocxGeneration(
   parameters: Record<string, number | string>,
   task: McDesignTask | undefined,
   template: McDesignTemplate | undefined,
+  reportImagePaths: string[],
+  allowConfirmedMissingImages: boolean,
 ): Promise<JsonObject | undefined> {
   const pyExe = join(PROJECT_ROOT, 'runtime', 'mc-design', 'dependencies', 'python', 'python.exe')
   const pyScript = join(PROJECT_ROOT, 'runtime', 'mc-design', 'dependencies', 'skills', 'design-report', 'scripts', 'design_report.py')
@@ -576,10 +870,15 @@ async function tryDocxGeneration(
   await mkdir(workspace, { recursive: true })
 
   try {
+    const pyEnv = {
+      ...process.env,
+      PYTHONIOENCODING: 'utf-8',
+      MC_DESIGN_REPORT_TEMPLATE: docxTemplate,
+    }
     const inspectResult = await execFileAsync(pyExe, [
       pyScript, 'inspect-template',
       '--template', docxTemplate,
-    ], { timeout: 15_000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
+    ], { timeout: 15_000, env: pyEnv })
     const templateInfo = JSON.parse(inspectResult.stdout.trim()) as {
       ok: boolean; slot_count: number
       slots: Array<{ type: string; name: string; section: string }>
@@ -587,6 +886,7 @@ async function tryDocxGeneration(
     if (!templateInfo.ok || !Array.isArray(templateInfo.slots)) return undefined
 
     const slotValues: Record<string, unknown> = {}
+    let imageIndex = 0
     for (const slot of templateInfo.slots) {
       const key = slot.name
       if (coreReportSlots[key]) {
@@ -602,10 +902,20 @@ async function tryDocxGeneration(
           status: 'auto',
         }
       } else if (slot.type === 'image') {
-        slotValues[key] = {
-          status: 'confirmed_missing',
-          confirmation_source: 'user',
-          reason: '未提供 NX 截图，用户确认在本地演示中暂缺',
+        const imagePath = reportImagePaths[imageIndex] ?? reportImagePaths[0]
+        if (imagePath) {
+          slotValues[key] = {
+            image_path: imagePath,
+            source: 'nx_create_image',
+            status: 'filled',
+          }
+          imageIndex += 1
+        } else if (allowConfirmedMissingImages) {
+          slotValues[key] = {
+            status: 'confirmed_missing',
+            confirmation_source: 'user',
+            reason: '未提供 NX 截图，用户确认在本地演示中暂缺',
+          }
         }
       } else {
         slotValues[key] = {
@@ -628,7 +938,7 @@ async function tryDocxGeneration(
       pyScript, 'generate',
       '--workspace', workspace,
       '--input', payloadPath,
-    ], { timeout: 60_000, env: { ...process.env, PYTHONIOENCODING: 'utf-8' } })
+    ], { timeout: 60_000, env: pyEnv })
     const genResult = JSON.parse(generateResult.stdout.trim()) as { ok: boolean; remaining_raw_slot_count?: number }
 
     return {
@@ -858,7 +1168,7 @@ async function prepareNxPluginTool(args: JsonObject): Promise<JsonObject> {
 }
 
 async function openNxTool(args: JsonObject, extra: ToolCallExtra): Promise<JsonObject> {
-  const partPath = stringValue(args.part_path) ?? stringValue(args.partPath)
+  const partPath = resolveOpenNxPartPath(args)
   const baseUrl = stringValue(args.base_url) ?? stringValue(args.baseUrl)
   const port = positiveInteger(args.port) ?? positiveInteger(args.nx_plugin_port)
   const result = await openNx({
@@ -897,6 +1207,27 @@ async function openNxTool(args: JsonObject, extra: ToolCallExtra): Promise<JsonO
   }
 
   return { ...result, data_source: MC_DESIGN_LOCAL_SOURCE }
+}
+
+function resolveOpenNxPartPath(args: JsonObject): string | undefined {
+  const parameters = jsonObjectValue(args.parameters) ?? jsonObjectValue(args.parameter)
+  const workspace = jsonObjectValue(args.workspace) ?? jsonObjectValue(args.template_workspace)
+  return stringValue(args.part_path)
+    ?? stringValue(args.partPath)
+    ?? stringValue(args.path)
+    ?? stringValue(args.workspace_part_path)
+    ?? stringValue(args.workspacePartPath)
+    ?? stringValue(args.working_part_path)
+    ?? stringValue(args.workingPartPath)
+    ?? stringValue(parameters?.part_path)
+    ?? stringValue(parameters?.partPath)
+    ?? stringValue(parameters?.path)
+    ?? stringValue(parameters?.workspace_part_path)
+    ?? stringValue(parameters?.workspacePartPath)
+    ?? stringValue(parameters?.working_part_path)
+    ?? stringValue(parameters?.workingPartPath)
+    ?? stringValue(workspace?.working_part_path)
+    ?? stringValue(workspace?.workingPartPath)
 }
 
 async function closeNxTool(args: JsonObject, extra: ToolCallExtra): Promise<JsonObject> {
@@ -944,6 +1275,12 @@ async function nxCallTool(args: JsonObject): Promise<JsonObject> {
     {
       baseUrl: stringValue(args.base_url) ?? stringValue(args.baseUrl),
       port: positiveInteger(args.port) ?? positiveInteger(args.nx_plugin_port),
+      requestTimeoutMs: positiveInteger(args.request_timeout_ms)
+        ?? positiveInteger(args.requestTimeoutMs)
+        ?? positiveInteger(args.timeout_ms)
+        ?? positiveInteger(args.timeoutMs),
+      writeTimeoutMs: positiveInteger(args.write_timeout_ms)
+        ?? positiveInteger(args.writeTimeoutMs),
     },
   )
   return { ...result, data_source: MC_DESIGN_LOCAL_SOURCE, resolved }
@@ -1122,6 +1459,10 @@ async function executeLocalTool(
       const reportResult = await generateReportArtifacts(args, extra)
       return jsonResult(reportResult, !reportResult.ok)
     }
+    case 'mc_design_generate_dfmea_artifact': {
+      const dfmeaResult = await generateDfmeaArtifact(args, extra)
+      return jsonResult(dfmeaResult, !dfmeaResult.ok)
+    }
     case 'mc_design_generate_conrod_drawing':
       return jsonResult(await generateConrodDrawing(args, extra), args.confirmed !== true)
     case 'mc_design_run_local_chain_check':
@@ -1171,7 +1512,8 @@ function descriptionFor(name: string): string {
     case 'mc_design_nx_call_tool': return 'Call an NX plugin tool when the optional runtime is configured.'
     case 'mc_design_run_local_chain_check': return 'Run a safe local workflow smoke check.'
     case 'mc_design_generate_nx_artifact': return 'Generate a local mock NX artifact after confirmation.'
-    case 'mc_design_generate_report_artifacts': return 'Generate a fallback local design report after confirmation.'
+    case 'mc_design_generate_report_artifacts': return 'Generate a local DOCX design report after confirmation.'
+    case 'mc_design_generate_dfmea_artifact': return 'Copy a local conrod DFMEA .xls template after confirmation without modifying content.'
     case 'mc_design_generate_conrod_drawing': return 'Generate a fallback conrod drawing update receipt after confirmation.'
     case 'mc_design_tc_writeback_mock': return 'Record a local Teamcenter writeback mock.'
     default: return `Local mc-design tool ${name}.`
@@ -1187,6 +1529,7 @@ function isReadOnlyTool(name: string): boolean {
     'mc_design_nx_call_tool',
     'mc_design_generate_nx_artifact',
     'mc_design_generate_report_artifacts',
+    'mc_design_generate_dfmea_artifact',
     'mc_design_generate_conrod_drawing',
     'mc_design_tc_writeback_mock',
   ].includes(name)
@@ -1202,6 +1545,7 @@ function inferIntent(
   const normalized = normalizedText(text)
   const mode = stringValue(args.workflow_mode)
   if (mode && mode !== 'auto') return mode as WorkflowIntent
+  if (containsAny(normalized, ['dfmea', 'defema', 'fmea', '失效模式', '失效分析', '风险复核'])) return 'dfmea_generation'
   if (containsAny(normalized, ['report', 'doc', 'docx', '报告', '说明书'])) return 'report_generation'
   if (containsAny(normalized, ['drawing', 'draw', 'print', '图纸', '出图', '打印'])) return 'drawing_template_update'
   if (containsAny(normalized, ['optimize', 'optimization', '优化'])) return 'optimization'
@@ -1237,6 +1581,7 @@ function recommendedToolsForIntent(
     case 'direct_parameter_update': return ['mc_design_prepare_template_workspace', 'mc_design_filter_nx_expressions', 'mc_design_nx_call_tool']
     case 'performance_design': return ['mc_design_lookup_knowledge', 'mc_design_recommend_templates', 'mc_design_estimate_parameters']
     case 'report_generation': return ['mc_design_generate_report_artifacts']
+    case 'dfmea_generation': return ['mc_design_generate_dfmea_artifact']
     case 'drawing_template_update': return component === 'conrod'
       ? ['mc_design_prepare_template_workspace', 'mc_design_generate_conrod_drawing']
       : ['AskUserQuestion']
@@ -1247,7 +1592,81 @@ function recommendedToolsForIntent(
 }
 
 function toolIntentCanProceedWithoutInputs(intent: WorkflowIntent): boolean {
-  return ['task_execution', 'retrieval_comparison', 'report_generation', 'drawing_template_update', 'direct_parameter_update', 'optimization', 'template_recommendation', 'nx_session_management', 'parameter_modeling'].includes(intent)
+  return ['task_execution', 'retrieval_comparison', 'report_generation', 'dfmea_generation', 'drawing_template_update', 'direct_parameter_update', 'optimization', 'template_recommendation', 'nx_session_management', 'parameter_modeling'].includes(intent)
+}
+
+function guidedInputOptions(
+  component: McDesignComponent | undefined,
+  missingInputs: string[],
+): Record<string, JsonObject> {
+  if (!component || missingInputs.length === 0) return {}
+  const options = GUIDED_INPUT_OPTIONS[component] ?? {}
+  return Object.fromEntries(
+    missingInputs
+      .map(key => [key, options[key]])
+      .filter((entry): entry is [string, JsonObject] => Boolean(entry[1])),
+  )
+}
+
+const GUIDED_INPUT_OPTIONS: Record<McDesignComponent, Record<string, JsonObject>> = {
+  conrod: {},
+  crankshaft: {},
+  camshaft: {
+    cam_lift_mm: {
+      header: '凸轮升程',
+      question: '凸轮升程 cam_lift_mm 是多少？这是气门最大开启高度的关键参数。',
+      options: [
+        { label: '8 mm', description: '适用于经济性取向或低中速工况' },
+        { label: '9 mm', description: '适用于 X14N 基准附近的均衡工况' },
+        { label: '10 mm', description: '适用于进气性能提升取向' },
+      ],
+    },
+    base_circle_diameter_mm: {
+      header: '基圆直径',
+      question: '基圆直径 base_circle_diameter_mm 是多少？基圆决定凸轮轴的强度和尺寸包络。',
+      options: [
+        { label: '32 mm', description: '适用于小尺寸包络参考' },
+        { label: '60 mm', description: '适用于 X14N 模板包络参考' },
+        { label: '36 mm', description: '适用于高升程变体参考' },
+      ],
+    },
+    valve_duration_deg: {
+      header: '持续角',
+      question: '气门开启持续角 valve_duration_deg 是多少？影响发动机进排气特性。',
+      options: [
+        { label: '220°', description: '经济性或低速扭矩取向' },
+        { label: '230°', description: 'X14N 基准模板参考' },
+        { label: '250°', description: '高升程变体参考' },
+      ],
+    },
+    valve_count: {
+      header: '气门数量',
+      question: '气门数量 valve_count 是多少？决定凸轮布置和气门机构匹配。',
+      options: [
+        { label: '8', description: '四缸两气门参考' },
+        { label: '16', description: '四缸四气门参考' },
+        { label: '24', description: '六缸四气门参考' },
+      ],
+    },
+    shaft_journal_diameter_mm: {
+      header: '轴颈直径',
+      question: '轴颈直径 shaft_journal_diameter_mm 是多少？这是凸轮轴轴承支撑部位的直径。',
+      options: [
+        { label: '24 mm', description: '小尺寸支撑参考' },
+        { label: '40 mm', description: 'X14N 模板支撑参考' },
+        { label: '28 mm', description: '历史任务均衡参考' },
+      ],
+    },
+    cam_lobe_width_mm: {
+      header: '凸角宽度',
+      question: '凸轮凸角宽度 cam_lobe_width_mm 是多少？影响接触应力和磨损寿命。',
+      options: [
+        { label: '12 mm', description: '小尺寸凸角参考' },
+        { label: '21 mm', description: 'X14N 模板凸角参考' },
+        { label: '15 mm', description: '历史任务均衡参考' },
+      ],
+    },
+  },
 }
 
 function nextToolForIntent(
@@ -1293,14 +1712,37 @@ function extractParametersFromText(text: string): Record<string, number> {
   return result
 }
 
+function selectBestLocalTemplate(
+  component: McDesignComponent,
+  parameters: Record<string, number | string>,
+): McDesignTemplate | undefined {
+  return MC_DESIGN_TEMPLATES
+    .filter(template => template.component === component)
+    .map(template => ({
+      template,
+      score: Number(scoreTemplate(parameters, template).score ?? 0),
+    }))
+    .sort((a, b) => b.score - a.score)[0]?.template
+}
+
 function scoreTemplate(
   parameters: Record<string, number | string>,
   template: McDesignTemplate,
 ): JsonObject {
   const nominal = template.nominalParameters ?? {}
+  const implementation = templateImplementationStatus(template)
+  const runnableBonus = implementation.local_part_exists ? 0.06 : -0.25
+  const stabilityBonus = template.classificationAttributes?.templateLevel === 'parametric-master' ? 0.03 : 0
   const keys = Object.keys(nominal).filter(key => numeric(parameters[key]) !== undefined && numeric(nominal[key]) !== undefined)
   if (keys.length === 0) {
-    return { score: 0.5, distance: null, coverage: 0, contributions: [] }
+    const fallbackScore = clampNumber(0.5 + runnableBonus + stabilityBonus, 0, 1)
+    return {
+      score: Number(fallbackScore.toFixed(4)),
+      distance: null,
+      coverage: 0,
+      contributions: [],
+      local_runnable: implementation.local_part_exists,
+    }
   }
   const contributions = keys.map(key => {
     const query = numeric(parameters[key]) ?? 0
@@ -1312,12 +1754,240 @@ function scoreTemplate(
   const distance = Math.sqrt(
     contributions.reduce((sum, item) => sum + item.normalized_delta ** 2, 0) / contributions.length,
   )
+  const coverage = keys.length / Math.max(Object.keys(nominal).length, 1)
+  const baseScore = 1 / (1 + distance)
+  const score = clampNumber(baseScore + coverage * 0.03 + runnableBonus + stabilityBonus, 0, 1)
   return {
-    score: Number((1 / (1 + distance)).toFixed(4)),
+    score: Number(score.toFixed(4)),
     distance: Number(distance.toFixed(4)),
-    coverage: Number((keys.length / Math.max(Object.keys(nominal).length, 1)).toFixed(4)),
+    coverage: Number(coverage.toFixed(4)),
     contributions,
+    local_runnable: implementation.local_part_exists,
   }
+}
+
+function templateImplementationStatus(template: McDesignTemplate): JsonObject {
+  const localPartPath = template.localPartPath
+    ? resolve(PROJECT_ROOT, template.localPartPath)
+    : undefined
+  const localFolderPath = template.localFolderPath
+    ? resolve(PROJECT_ROOT, template.localFolderPath)
+    : undefined
+  const localDrawingTemplatePath = template.localDrawingTemplatePath
+    ? resolve(PROJECT_ROOT, template.localDrawingTemplatePath)
+    : undefined
+
+  return {
+    local_part_path: localPartPath,
+    local_part_exists: localPartPath ? existsSync(localPartPath) : false,
+    local_folder_path: localFolderPath,
+    local_folder_exists: localFolderPath ? existsSync(localFolderPath) : false,
+    local_drawing_template_path: localDrawingTemplatePath,
+    local_drawing_template_exists: localDrawingTemplatePath ? existsSync(localDrawingTemplatePath) : false,
+    nx_drive_parameters: template.nxDriveParameters,
+  }
+}
+
+const CRANKSHAFT_TEMPLATE_BASELINE_NX_PARAMETERS: Record<string, Record<string, number>> = {
+  'TC-TPL-CRANK-B': {
+    CS_M_DIA: 120,
+    CS_M_GRD_W: 47,
+    CS_Q_RAD: 90,
+    CR_J_AX_DIA: 92,
+    CS_C_W: 49,
+    WB_T: 33,
+  },
+}
+
+const CAMSHAFT_TEMPLATE_BASELINE_NX_PARAMETERS: Record<string, Record<string, number>> = {
+  'TC-TPL-CAM-A': {
+    CV_BC_DIA: 60,
+    CV_J_DIA: 40,
+    CV_INL_W: 21,
+    CV_EXL_W: 21,
+    CV_BRKL_W: 21,
+  },
+  'TC-TPL-CAM-B': {
+    CV_BC_DIA: 60,
+    CV_J_DIA: 40,
+    CV_INL_W: 21,
+    CV_EXL_W: 21,
+    CV_BRKL_W: 21,
+  },
+  'TC-TPL-CAM-C': {
+    CV_BC_DIA: 60,
+    CV_J_DIA: 40,
+    CV_INL_W: 21,
+    CV_EXL_W: 21,
+    CV_BRKL_W: 21,
+  },
+}
+
+function fitParametersToTemplateEnvelope(
+  component: McDesignComponent | undefined,
+  rawParameters: Record<string, number>,
+  template: McDesignTemplate | undefined,
+): {
+  parameters: Record<string, number>
+  ranges: Record<string, JsonObject>
+  notes: JsonObject[]
+} {
+  if (!component) return { parameters: rawParameters, ranges: {}, notes: [] }
+  const ranges = buildNxParameterRanges(component)
+  const fitted: Record<string, number> = {}
+  const notes: JsonObject[] = []
+
+  for (const [paramId, rawValue] of Object.entries(rawParameters)) {
+    const range = ranges[paramId]
+    if (!range || range.min === range.max) {
+      fitted[paramId] = rawValue
+      continue
+    }
+
+    const nextValue = clampNumber(rawValue, range.min, range.max)
+    fitted[paramId] = roundEngineeringValue(nextValue)
+    if (nextValue !== rawValue) {
+      notes.push({
+        param_id: paramId,
+        raw_value: rawValue,
+        recommended_value: fitted[paramId],
+        range: [range.min, range.max],
+        template_id: template?.id,
+        reason: 'fit_to_local_runnable_template_range',
+      })
+    }
+  }
+
+  return {
+    parameters: fitted,
+    ranges: Object.fromEntries(
+      Object.entries(ranges).map(([key, range]) => [key, {
+        min: range.min,
+        max: range.max,
+        source_count: range.sourceCount,
+        source: 'local_tasks_and_runnable_templates',
+      }]),
+    ),
+    notes,
+  }
+}
+
+function fitParametersToTemplateDriveBaseline(
+  component: McDesignComponent | undefined,
+  fittedParameters: Record<string, number>,
+  rawParameters: Record<string, number>,
+  template: McDesignTemplate | undefined,
+): {
+  parameters: Record<string, number>
+  baseline: Record<string, number>
+  notes: JsonObject[]
+} {
+  const baseline = template?.id
+    ? component === 'crankshaft'
+      ? CRANKSHAFT_TEMPLATE_BASELINE_NX_PARAMETERS[template.id]
+      : component === 'camshaft'
+        ? CAMSHAFT_TEMPLATE_BASELINE_NX_PARAMETERS[template.id]
+        : undefined
+    : undefined
+  if (!baseline || (component !== 'crankshaft' && component !== 'camshaft')) {
+    return {
+      parameters: fittedParameters,
+      baseline: {},
+      notes: [],
+    }
+  }
+
+  const maxRatio = component === 'camshaft' ? 0.02 : 0.01
+  const minDelta = 0.1
+  const trialParameters = { ...fittedParameters }
+  const notes: JsonObject[] = []
+
+  for (const [paramId, baselineValue] of Object.entries(baseline)) {
+    if (rawParameters[paramId] === undefined && fittedParameters[paramId] === undefined) continue
+    const target = rawParameters[paramId] ?? fittedParameters[paramId]
+    const maxDelta = Math.max(Math.abs(baselineValue) * maxRatio, minDelta)
+    const requestedDelta = target - baselineValue
+    const safeDelta = target === baselineValue
+      ? -minDelta
+      : clampNumber(requestedDelta, -maxDelta, maxDelta)
+    const nextValue = roundTemplateOffsetValue(baselineValue + safeDelta, baselineValue, target)
+    trialParameters[paramId] = nextValue
+    if (nextValue !== fittedParameters[paramId]) {
+      notes.push({
+        param_id: paramId,
+        raw_value: rawParameters[paramId],
+        range_fitted_value: fittedParameters[paramId],
+        baseline_value: baselineValue,
+        recommended_value: nextValue,
+        template_id: template?.id,
+        reason: 'fit_to_template_drive_parameter_reference',
+      })
+    }
+  }
+
+  return {
+    parameters: trialParameters,
+    baseline,
+    notes,
+  }
+}
+
+function roundTemplateOffsetValue(value: number, baselineValue: number, target: number): number {
+  let rounded = Math.round(value)
+  if (rounded === baselineValue) {
+    const direction = target === baselineValue
+      ? -1
+      : Math.sign(target - baselineValue) || -1
+    rounded = baselineValue + direction
+  }
+  return rounded
+}
+
+function buildNxParameterRanges(component: McDesignComponent): Record<string, { min: number; max: number; sourceCount: number }> {
+  const samples = [
+    ...MC_DESIGN_TASKS
+      .filter(task => task.component === component)
+      .map(task => ({
+        ...(task.explicitParameters ?? {}),
+        ...(task.performanceParameters ?? {}),
+      })),
+    ...MC_DESIGN_TEMPLATES
+      .filter(template => template.component === component && templateImplementationStatus(template).local_part_exists)
+      .map(template => template.nominalParameters ?? {}),
+  ]
+
+  const valuesByParam = new Map<string, number[]>()
+  for (const sample of samples) {
+    const computed = computeNxParameters(component, sample)
+    for (const [key, value] of Object.entries(computed)) {
+      if (!Number.isFinite(value)) continue
+      const current = valuesByParam.get(key) ?? []
+      current.push(value)
+      valuesByParam.set(key, current)
+    }
+  }
+
+  return Object.fromEntries(
+    [...valuesByParam.entries()]
+      .filter(([, values]) => values.length > 0)
+      .map(([key, values]) => {
+        const min = Math.min(...values)
+        const max = Math.max(...values)
+        return [key, {
+          min: roundEngineeringValue(min),
+          max: roundEngineeringValue(max),
+          sourceCount: values.length,
+        }]
+      }),
+  )
+}
+
+function roundEngineeringValue(value: number): number {
+  return Number(value.toFixed(4))
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
 }
 
 function computeNxParameters(
@@ -1389,6 +2059,9 @@ function buildChecks(
   )
 
   for (const entry of relevantRules) {
+    if (component === 'crankshaft' && entry.id === 'CRANK-CHECK-OVERLAP' && isCrankshaftTemplateDriveTrial(nxParameters ?? {})) {
+      continue
+    }
     const value = evalRule(entry.rule!, entry.paramId, p, nxParameters ?? {})
     checks.push({
       id: entry.id,
@@ -1430,6 +2103,18 @@ function buildChecks(
     })
   }
   return checks
+}
+
+function isCrankshaftTemplateDriveTrial(nxParameters: Record<string, number>): boolean {
+  return Object.values(CRANKSHAFT_TEMPLATE_BASELINE_NX_PARAMETERS).some(baseline => {
+    const required = ['CS_M_DIA', 'CR_J_AX_DIA', 'CS_Q_RAD'] as const
+    return required.every(paramId => {
+      const value = nxParameters[paramId]
+      const base = baseline[paramId]
+      if (!Number.isFinite(value) || !Number.isFinite(base)) return false
+      return Math.abs(value - base) <= Math.max(1, Math.abs(base) * 0.011)
+    })
+  })
 }
 
 function evalRule(

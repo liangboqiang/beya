@@ -180,6 +180,81 @@ describe('mc-design NX runtime helpers', () => {
     expect(JSON.parse(body)).toEqual({ sample: true })
   })
 
+  it('allows slow NX write tools to finish instead of aborting at the read timeout', async () => {
+    originalFetch = globalThis.fetch
+    let signal: AbortSignal | undefined
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal as AbortSignal | undefined
+      await new Promise(resolve => setTimeout(resolve, 25))
+      return new Response(JSON.stringify({ ok: true, data: { updated: true } }), {
+        status: 200,
+      })
+    }) as typeof globalThis.fetch
+
+    const result = await callNxPluginTool(
+      'nx_batch_update_params',
+      { expressions: [{ std_id: 'CS_M_DIA', value: '119' }] },
+      { baseUrl: 'http://127.0.0.1:18088/api' },
+    )
+
+    expect(signal?.aborted).toBe(false)
+    expect(result.ok).toBe(true)
+    expect(result.originalTool).toBe('BatchUpdateParams')
+  })
+
+  it('blocks Objective_AI from being reused as an optimization input objective', async () => {
+    originalFetch = globalThis.fetch
+    let called = false
+    globalThis.fetch = (async () => {
+      called = true
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }) as typeof globalThis.fetch
+
+    const result = await callNxPluginTool(
+      'nx_run_optimization_study',
+      {
+        variables: [{ name: 'CR_R_W', lower: '18', upper: '25' }],
+        objectives: [{ name: 'Objective_AI', objective_type: '最小化' }],
+      },
+      { baseUrl: 'http://127.0.0.1:18088/api' },
+    )
+
+    expect(called).toBe(false)
+    expect(result.ok).toBe(false)
+    expect(result.originalTool).toBe('RunOptimizationStudy')
+    expect(result.error).toBe('invalid_optimization_objective')
+    expect(String(result.message)).toContain('不能作为 objective 再传入')
+  })
+
+  it('reports NX plugin request timeouts without surfacing abort wording', async () => {
+    originalFetch = globalThis.fetch
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal | undefined
+      await new Promise((_resolve, reject) => {
+        if (!signal) {
+          reject(new Error('missing signal'))
+          return
+        }
+        signal.addEventListener('abort', () => {
+          const error = new Error('aborted')
+          error.name = 'AbortError'
+          reject(error)
+        })
+      })
+    }) as typeof globalThis.fetch
+
+    const result = await callNxPluginTool(
+      'nx_batch_update_params',
+      { expressions: [{ std_id: 'CS_M_DIA', value: '119' }] },
+      { baseUrl: 'http://127.0.0.1:18088/api', writeTimeoutMs: 1000 },
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.timeout_ms).toBe(1000)
+    expect(String(result.error)).toContain('timed out after 1000ms')
+    expect(String(result.error)).not.toContain('aborted')
+  })
+
   it('discovers a Siemens NX install from an explicit root', async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mc-design-nx-'))
     const nxRoot = path.join(tmpDir, 'NX 11.0')

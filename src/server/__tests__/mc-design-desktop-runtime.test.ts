@@ -58,6 +58,7 @@ describe('mc-design desktop runtime tool surface', () => {
     expect(names).not.toContain('mc_design_optimize_parameters')
     expect(names).toContain('mc_design_filter_nx_expressions')
     expect(names).toContain('mc_design_generate_report_artifacts')
+    expect(names).toContain('mc_design_generate_dfmea_artifact')
     expect(names).toContain('mc_design_generate_conrod_drawing')
 
     const recommendation = await executeTool('mc_design_recommend_templates', {
@@ -65,7 +66,7 @@ describe('mc-design desktop runtime tool surface', () => {
       limit: 2,
     })
     expect(recommendation.ok).toBe(true)
-    expect(recommendation.algorithm).toBe('weighted_normalized_euclidean_similarity')
+    expect(recommendation.algorithm).toBe('weighted_normalized_euclidean_similarity_with_local_runnable_template_bias')
     expect(recommendation.best_template_id).toBe('TC-TPL-CRANK-B')
     expect(recommendation.bestTemplateId).toBeUndefined()
 

@@ -13,7 +13,7 @@ capabilities:
 
 ## 与 design-data-query 的关系
 
-本技能负责“参数语义消歧和编码决策”；`design-data-query` 负责“数据库查询路线和 SQL 模板”。需要查询参数词典、历史模板记录、文档模板、编码类型表、schema 或唯一性验证时，应先加载 `design-data-query`，再通过 `mysql_query` 执行对应 SQL。参数化建模所需的数模模板不走 MySQL 主路径，必须加载 `teamcenter-flow` 从 TC `智能体模板库` 查询。不要恢复多个 MySQL 工具名，也不要绕开 `mysql_query`。
+本技能负责“参数语义消歧和编码决策”；`design-data-query` 负责“数据库查询路线和 SQL 模板”。需要查询参数词典、历史模板记录、文档模板、编码类型表、schema 或唯一性验证时，应先加载 `design-data-query`，再通过 `mysql_query` 执行对应 SQL。参数化建模所需的数模模板不走 MySQL 主路径；当前稳定链路优先使用本地 `templates.json` 和真实 `.prt` 模板，TC `智能体模板库` 仅在用户明确要求或本地模板不足时加载 `teamcenter-flow` 查询。不要恢复多个 MySQL 工具名，也不要绕开 `mysql_query`。
 
 ## Beya 使用边界
 

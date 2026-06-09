@@ -194,6 +194,110 @@ describe('mc-design local tools', () => {
     )
   })
 
+  it('fits recommended values to the local runnable template envelope', () => {
+    const result = estimateDesignParameters({
+      component: 'camshaft',
+      template_id: 'TC-TPL-CAM-A',
+      include_diagnostics: true,
+      parameters: {
+        cam_lift_mm: 50,
+        base_circle_diameter_mm: 34,
+        valve_duration_deg: 230,
+        valve_count: 16,
+        shaft_journal_diameter_mm: 28,
+        cam_lobe_width_mm: 14,
+      },
+    }) as {
+      ok: boolean
+      nx_parameters: Record<string, number>
+      nx_parameter_candidates: Record<string, number[]>
+      raw_nx_parameters: Record<string, number>
+      parameter_fit_notes: Array<{ param_id: string; reason: string }>
+    }
+
+    expect(result.ok).toBe(true)
+    expect(result.raw_nx_parameters.CV_BC_DIA).toBe(34)
+    expect(result.raw_nx_parameters.CV_J_DIA).toBe(28)
+    expect(result.nx_parameters).toEqual({
+      CV_BC_DIA: 59,
+      CV_J_DIA: 39,
+      CV_INL_W: 20,
+      CV_EXL_W: 20,
+      CV_BRKL_W: 20,
+    })
+    expect(result.nx_parameter_candidates.CV_J_DIA).toEqual([39, 28])
+    expect(result.parameter_fit_notes).toContainEqual(expect.objectContaining({
+      param_id: 'CV_J_DIA',
+      reason: 'fit_to_template_drive_parameter_reference',
+    }))
+  })
+
+  it('keeps crankshaft trial values close to the selected model baseline', () => {
+    const result = estimateDesignParameters({
+      component: 'crankshaft',
+      template_id: 'TC-TPL-CRANK-B',
+      include_diagnostics: true,
+      parameters: {
+        bore_mm: 92,
+        stroke_mm: 100,
+        cylinder_count: 6,
+      },
+    }) as {
+      ok: boolean
+      template_id: string
+      nx_parameters: Record<string, number>
+      raw_nx_parameters: Record<string, number>
+      range_fitted_nx_parameters: Record<string, number>
+      template_baseline_nx_parameters: Record<string, number>
+      parameter_fit_notes: Array<{ param_id: string; reason: string }>
+      checks: Array<{ id: string; pass: boolean }>
+    }
+
+    expect(result.ok).toBe(true)
+    expect(result.template_id).toBe('TC-TPL-CRANK-B')
+    expect(result.raw_nx_parameters.CS_Q_RAD).toBe(50)
+    expect(result.range_fitted_nx_parameters.CS_Q_RAD).toBe(55)
+    expect(result.template_baseline_nx_parameters.CS_Q_RAD).toBe(90)
+    expect(result.nx_parameters).toEqual({
+      CS_M_DIA: 119,
+      CR_J_AX_DIA: 91,
+      CS_Q_RAD: 89,
+    })
+    expect(result.nx_parameters.CS_Q_RAD).not.toBe(result.template_baseline_nx_parameters.CS_Q_RAD)
+    expect(result.parameter_fit_notes).toContainEqual(expect.objectContaining({
+      param_id: 'CS_Q_RAD',
+      reason: 'fit_to_template_drive_parameter_reference',
+    }))
+    expect(result.checks).not.toContainEqual(expect.objectContaining({ id: 'CRANK-CHECK-OVERLAP' }))
+  })
+
+  it('selects a runnable crankshaft template when estimate input omits template_id', () => {
+    const result = estimateDesignParameters({
+      component: 'crankshaft',
+      parameters: {
+        bore_mm: 92,
+        stroke_mm: 100,
+        cylinder_count: 6,
+      },
+    }) as {
+      ok: boolean
+      template_id: string
+      nx_parameters: Record<string, number>
+      nx_parameter_candidates: Record<string, number[]>
+      raw_nx_parameters?: unknown
+      range_fitted_nx_parameters?: unknown
+      template_baseline_nx_parameters?: unknown
+    }
+
+    expect(result.ok).toBe(true)
+    expect(result.template_id).toBe('TC-TPL-CRANK-B')
+    expect(result.nx_parameters.CS_M_DIA).toBe(119)
+    expect(result.nx_parameter_candidates.CS_M_DIA).toEqual([119, 78, 74])
+    expect(result.raw_nx_parameters).toBeUndefined()
+    expect(result.range_fitted_nx_parameters).toBeUndefined()
+    expect(result.template_baseline_nx_parameters).toBeUndefined()
+  })
+
   it('supports camshaft only through template parameterization, not create-new modeling', async () => {
     const estimate = estimateDesignParameters({
       task_id: 'IPM-CAM-001',
@@ -206,7 +310,7 @@ describe('mc-design local tools', () => {
 
     expect(estimate.ok).toBe(true)
     expect(estimate.component).toBe('camshaft')
-    expect(estimate.nx_parameters.CAM_LIFT).toBe(8.5)
+    expect(estimate.nx_parameters.CV_BC_DIA).toBe(59)
 
     const tool = getMcDesignLocalToolDefinitions().find(
       definition => definition.name === 'mc_design_generate_nx_artifact',
@@ -221,6 +325,27 @@ describe('mc-design local tools', () => {
 
     expect(payload.ok).toBe(false)
     expect(payload.error).toBe('template_parameterization_only')
+  })
+
+  it('returns camshaft guided input options that include current template-size candidates', () => {
+    const result = classifyRequirement({
+      component: 'camshaft',
+      request_text: '请你帮我设计一根凸轮轴。',
+    }) as {
+      ok: boolean
+      guided_input_options: Record<string, { options: Array<{ label: string }> }>
+    }
+
+    expect(result.ok).toBe(true)
+    expect(result.guided_input_options.base_circle_diameter_mm.options).toContainEqual(
+      expect.objectContaining({ label: '60 mm' }),
+    )
+    expect(result.guided_input_options.shaft_journal_diameter_mm.options).toContainEqual(
+      expect.objectContaining({ label: '40 mm' }),
+    )
+    expect(result.guided_input_options.cam_lobe_width_mm.options).toContainEqual(
+      expect.objectContaining({ label: '21 mm' }),
+    )
   })
 
   it('filters isolated anonymous NX p-number expressions', async () => {
@@ -301,11 +426,10 @@ describe('mc-design local tools', () => {
 
     const result = await tool!.execute!({
       confirmed: true,
-      allow_confirmed_missing_images: true,
       include_dfmea: false,
       task_id: 'IPM-CONROD-001',
       template_id: 'TC-TPL-CONROD-A',
-      parameters: { CR_A_CEN: 155.7, CR_B_DIA: 62 },
+      parameters: { CR_A_CEN: 155.7, CR_B_DIA: 62, allow_confirmed_missing_images: true },
     }, fakeExtra())
     const payload = parseToolPayload(result) as {
       ok: boolean
@@ -320,6 +444,93 @@ describe('mc-design local tools', () => {
       expect.objectContaining({ size: expect.any(Number) }),
     )
   }, 60_000)
+
+  it('copies a conrod DFMEA .xls template without modifying content', async () => {
+    const tool = getMcDesignLocalToolDefinitions().find(
+      definition => definition.name === 'mc_design_generate_dfmea_artifact',
+    )
+    expect(tool?.execute).toBeTypeOf('function')
+
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mc-design-dfmea-'))
+    originalCwd = process.cwd()
+    process.chdir(tmpDir)
+    const sourceTemplatePath = path.join(tmpDir, 'source-dfmea-template.xls')
+    const sourceContent = Buffer.from('xls-template-bytes')
+    await fs.writeFile(sourceTemplatePath, sourceContent)
+
+    const result = await tool!.execute!({
+      confirmed: true,
+      task_id: 'IPM-CONROD-001',
+      template_id: 'TC-TPL-CONROD-A',
+      dfmea_template_path: sourceTemplatePath,
+      parameters: { CR_A_CEN: 155.7, CR_B_DIA: 62 },
+    }, fakeExtra())
+    const payload = parseToolPayload(result) as {
+      ok: boolean
+      dfmea_path: string
+      dfmea_format: string
+      source_template_path: string
+      copied_template: boolean
+      content_modified: boolean
+    }
+
+    expect(payload.ok).toBe(true)
+    expect(payload.dfmea_format).toBe('xls')
+    expect(payload.source_template_path).toBe(sourceTemplatePath)
+    expect(payload.copied_template).toBe(true)
+    expect(payload.content_modified).toBe(false)
+    const copied = await fs.readFile(payload.dfmea_path)
+    expect(Buffer.compare(copied, sourceContent)).toBe(0)
+  })
+
+  it('opens a nested workspace part path through the existing NX plugin session', async () => {
+    const tool = getMcDesignLocalToolDefinitions().find(
+      definition => definition.name === 'mc_design_open_nx',
+    )
+    expect(tool?.execute).toBeTypeOf('function')
+
+    originalFetch = globalThis.fetch
+    const requestedTools: string[] = []
+    let openPartBody = ''
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/health')) {
+        return jsonResponse({ ok: true, data: 'heartbeat' })
+      }
+      if (url.endsWith('/tools')) {
+        return jsonResponse({ ok: true, data: { tools: [] } })
+      }
+      const toolName = decodeURIComponent(url.split('/').pop() ?? '')
+      requestedTools.push(toolName)
+      if (toolName === 'OpenPart') {
+        openPartBody = String(init?.body ?? '')
+        return jsonResponse({ ok: true, data: { part_opened: true } })
+      }
+      return jsonResponse({ ok: false, message: `unexpected ${toolName}` }, 404)
+    }) as typeof globalThis.fetch
+
+    const result = await tool!.execute!({
+      base_url: 'http://nx.test/api',
+      parameters: {
+        workspace_part_path: 'C:\\Users\\ASUS\\.beya\\mc-design-artifacts\\session\\workspaces\\copy\\K08.prt',
+      },
+    }, fakeExtra())
+    const payload = parseToolPayload(result) as {
+      ok: boolean
+      alreadyRunning: boolean
+      partOpenRequired: boolean
+      part_opened_via_plugin: boolean
+    }
+
+    expect(payload.ok).toBe(true)
+    expect(payload.alreadyRunning).toBe(true)
+    expect(payload.partOpenRequired).toBe(true)
+    expect(payload.part_opened_via_plugin).toBe(true)
+    expect(requestedTools).toContain('OpenPart')
+    expect(JSON.parse(openPartBody)).toEqual({
+      path: 'C:/Users/ASUS/.beya/mc-design-artifacts/session/workspaces/copy/K08.prt',
+    })
+  })
 
   it('reuses an already-open copied conrod drawing template instead of blocking', async () => {
     const tool = getMcDesignLocalToolDefinitions().find(
@@ -413,6 +624,8 @@ describe('mc-design local tools', () => {
     const nxbin = path.join(nxRoot, 'NXBIN')
     await fs.mkdir(nxbin, { recursive: true })
     await fs.writeFile(path.join(nxbin, 'ugraf.exe'), '')
+    const dfmeaTemplatePath = path.join(tmpDir, 'chain-dfmea-template.xls')
+    await fs.writeFile(dfmeaTemplatePath, Buffer.from('chain-xls-template'))
 
     originalFetch = globalThis.fetch
     const calledTools: string[] = []
@@ -478,6 +691,7 @@ describe('mc-design local tools', () => {
       write_mode: 'same_value',
       generate_report: true,
       include_dfmea: true,
+      dfmea_template_path: dfmeaTemplatePath,
       allow_confirmed_missing_images: true,
       base_url: 'http://nx.test/api',
       reference_root: path.join(tmpDir, 'missing-history'),
@@ -487,7 +701,7 @@ describe('mc-design local tools', () => {
       ok: boolean
       blockers: string[]
       mappings: Array<{ matched: boolean }>
-      report_result: { report_path: string; report_format: string }
+      report_result: { report_path: string; report_format: string; dfmea_path?: string }
       called_tools: string[]
     }
 
@@ -502,6 +716,9 @@ describe('mc-design local tools', () => {
       'BatchUpdateParams',
     ])
     await expect(fs.stat(payload.report_result.report_path)).resolves.toEqual(
+      expect.objectContaining({ size: expect.any(Number) }),
+    )
+    await expect(fs.stat(payload.report_result.dfmea_path!)).resolves.toEqual(
       expect.objectContaining({ size: expect.any(Number) }),
     )
   }, 60_000)

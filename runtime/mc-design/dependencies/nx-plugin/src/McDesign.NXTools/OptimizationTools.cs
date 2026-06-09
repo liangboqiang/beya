@@ -56,6 +56,8 @@ namespace NXTools
         private const string DefaultObjectiveExpressionName = "Objective_AI";
         private const double NegativeInfinity = -1e308;
         private const double PositiveInfinity = 1e308;
+        private const double ConstraintPenaltyWeight = 1000000.0;
+        private const int MaxSafeSearchCandidates = 250;
 
         [Tool("GetOptimizationToolGuide", "Get NX optimization workflow guide and parameter schema")]
         public static NXResult GetOptimizationToolGuide()
@@ -75,15 +77,15 @@ namespace NXTools
                             "3. 选择目标 objectives：每个目标必须是已存在表达式；objective_type 支持 最小化/min/minimize、最大化/max/maximize、目标值数值。",
                             "4. 可选选择约束 constraints：constraint_type 支持 上限约束/upper/max/<=、下限约束/lower/min/>=。",
                             "5. 调用 ValidateOptimizationStudy 做预检。",
-                            "6. 可选调用 BuildOptimizationObjectiveExpression 查看或写入 Objective_AI 目标表达式。",
-                            "7. 调用 RunOptimizationStudy 执行。dry_run=true 时只校验与配置，不运行算法。"
+                            "6. 可选调用 BuildOptimizationObjectiveExpression 查看或写入 Objective_AI 目标表达式；Objective_AI 是内部合成表达式，不能作为 objective 再传回 RunOptimizationStudy。",
+                            "7. 调用 RunOptimizationStudy 执行。dry_run=true 时只校验与配置，不运行算法；NX OptimizationBuilder 异常时会退到表达式安全搜索并写回最佳候选。"
                         }
                     },
                     tools = new[]
                     {
                         new { name = "ValidateOptimizationStudy", purpose = "只校验变量/目标/约束/算法和表达式存在性，不改变模型。" },
                         new { name = "BuildOptimizationObjectiveExpression", purpose = "根据多目标配置生成加权目标表达式，默认写入 Objective_AI。" },
-                        new { name = "RunOptimizationStudy", purpose = "一次性创建优化研究、设置变量/目标/约束/算法并运行优化。" }
+                        new { name = "RunOptimizationStudy", purpose = "一次性创建优化研究、设置变量/目标/约束/算法并运行优化；必要时在插件内切换到表达式安全搜索。" }
                     },
                     schemas = new
                     {
@@ -118,6 +120,7 @@ namespace NXTools
                         "不要猜表达式名；先调用 GetAllParamsList/GetDriveParamsList。",
                         "变量必须是可编辑、可驱动的表达式；目标/约束也必须能被 NX Optimization 识别。",
                         "多目标会被合成为 Objective_AI：最小化项为正，最大化项取负，数值目标项使用平方误差。",
+                        "不要把 Objective_AI 作为 objective 输入；它是工具内部输出，再输入会形成循环参考。",
                         "当需求含多个连续优化动作时，每次 RunOptimizationStudy 都是独立研究，避免在多轮对话中保存 Builder。"
                     }
                 };
@@ -248,7 +251,25 @@ namespace NXTools
                     return NXResult.Success(configured, "优化研究 dry_run 配置成功，未运行算法");
                 }
 
-                optimizer.RunOptimization();
+                try
+                {
+                    optimizer.RunOptimization();
+                }
+                catch (Exception runEx)
+                {
+                    DestroyBuilder(optimizer);
+                    optimizer = null;
+                    return RunSafeExpressionSearch(
+                        title,
+                        variables,
+                        objectives,
+                        constraints,
+                        configured,
+                        objectiveExpression,
+                        runEx,
+                        startTime);
+                }
+
                 DateTime endTime = DateTime.Now;
 
                 if (show_results)
@@ -262,6 +283,7 @@ namespace NXTools
                 var result = new
                 {
                     title = title,
+                    runner = "nx_optimization_builder",
                     elapsed_seconds = Math.Round((endTime - startTime).TotalSeconds, 3),
                     completion_time = endTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     configured = configured,
@@ -356,6 +378,7 @@ namespace NXTools
                     bool ok = true;
 
                     if (string.IsNullOrWhiteSpace(name)) { errors.Add("目标 name 不能为空"); ok = false; }
+                    if (IsInternalObjectiveExpression(name)) { errors.Add("目标不能直接使用 " + DefaultObjectiveExpressionName + "；" + DefaultObjectiveExpressionName + " 是工具内部合成目标表达式，直接作为 objective 会形成循环参考。请传原始表达式目标。"); ok = false; }
                     if (exp == null) { errors.Add("目标表达式不存在：" + name); ok = false; }
                     if (Math.Abs(weight) <= 1e-12) { warnings.Add("目标 " + name + " 权重为0，该目标不会影响优化"); }
                     if (Math.Abs(scale) <= 1e-12) { errors.Add("目标 " + name + " 的 scale_factor 不能为0"); ok = false; }
@@ -594,6 +617,9 @@ namespace NXTools
             foreach (var objective in objectives)
             {
                 string name = NormalizeName(objective.name, null);
+                if (IsInternalObjectiveExpression(name))
+                    throw new ArgumentException("目标不能直接使用 " + DefaultObjectiveExpressionName + "；" + DefaultObjectiveExpressionName + " 是工具内部合成目标表达式，直接作为 objective 会形成循环参考。请传原始表达式目标。");
+
                 double weight = ParseDoubleOrDefault(objective.weight, 1.0);
                 double scale = ParseDoubleOrDefault(objective.scale_factor, 1.0);
                 if (Math.Abs(scale) <= 1e-12) scale = 1.0;
@@ -645,6 +671,299 @@ namespace NXTools
             }
 
             return ToInvariant(coefficient) + "*" + name;
+        }
+
+        private static NXResult RunSafeExpressionSearch(
+            string title,
+            List<OptimizerVariableItem> variables,
+            List<OptimizerObjectiveItem> objectives,
+            List<OptimizerConstraintItem> constraints,
+            object configured,
+            Expression objectiveExpression,
+            Exception builderException,
+            DateTime startTime)
+        {
+            var originalValues = SnapshotVariableValues(variables);
+            var failures = new List<object>();
+
+            try
+            {
+                var candidates = GenerateCandidates(variables);
+                CandidateEvaluation best = null;
+
+                foreach (var candidate in candidates)
+                {
+                    try
+                    {
+                        ApplyVariableValues(candidate);
+                        NXContext.Update(false, "RunOptimizationStudy safe candidate");
+
+                        var evaluated = EvaluateCandidate(candidate, objectives, constraints);
+                        if (best == null || evaluated.RankScore < best.RankScore)
+                            best = evaluated;
+                    }
+                    catch (Exception ex)
+                    {
+                        failures.Add(new { values = candidate, reason = ex.Message });
+                    }
+                }
+
+                if (best == null)
+                {
+                    TryRestoreVariables(originalValues);
+                    return NXResult.Fail("优化研究执行失败，表达式安全搜索也未得到可更新候选：" + builderException.Message);
+                }
+
+                ApplyVariableValues(best.Values);
+                NXContext.Update(false, "RunOptimizationStudy safe best");
+
+                DateTime endTime = DateTime.Now;
+                var finalValues = ReadFinalValues(variables, objectives, constraints, objectiveExpression);
+                var result = new
+                {
+                    title = title,
+                    runner = "safe_expression_search",
+                    fallback_from = "nx_optimization_builder",
+                    fallback_reason = builderException.Message,
+                    elapsed_seconds = Math.Round((endTime - startTime).TotalSeconds, 3),
+                    completion_time = endTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+                    configured = configured,
+                    safe_search = new
+                    {
+                        candidate_count = candidates.Count,
+                        failed_candidate_count = failures.Count,
+                        selected = new
+                        {
+                            values = best.Values,
+                            objective_score = best.ObjectiveScore,
+                            constraint_penalty = best.ConstraintPenalty,
+                            feasible = best.Feasible,
+                            objectives = best.Objectives,
+                            constraints = best.Constraints
+                        },
+                        failures = failures
+                    },
+                    final_values = finalValues
+                };
+
+                return NXResult.Success(result, "NX OptimizationBuilder 执行异常，已切换到表达式安全搜索并写入最佳候选");
+            }
+            catch (Exception ex)
+            {
+                TryRestoreVariables(originalValues);
+                return NXResult.FromException(ex, "表达式安全搜索失败");
+            }
+        }
+
+        private static List<Dictionary<string, double>> GenerateCandidates(List<OptimizerVariableItem> variables)
+        {
+            var candidates = new List<Dictionary<string, double>>();
+            var variableCandidates = new List<KeyValuePair<string, List<double>>>();
+
+            foreach (var variable in variables)
+            {
+                string name = NormalizeName(variable == null ? null : variable.name, null);
+                double lower = ParseDoubleOrDefault(variable == null ? null : variable.lower, 0);
+                double upper = ParseDoubleOrDefault(variable == null ? null : variable.upper, lower);
+                double current = ReadExpressionValue(name).GetValueOrDefault((lower + upper) / 2.0);
+                variableCandidates.Add(new KeyValuePair<string, List<double>>(name, BuildVariableCandidateValues(lower, upper, current)));
+            }
+
+            AddCandidate(candidates, variableCandidates, 0, new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase));
+            return candidates;
+        }
+
+        private static void AddCandidate(
+            List<Dictionary<string, double>> candidates,
+            List<KeyValuePair<string, List<double>>> variableCandidates,
+            int index,
+            Dictionary<string, double> current)
+        {
+            if (index >= variableCandidates.Count)
+            {
+                candidates.Add(new Dictionary<string, double>(current, StringComparer.OrdinalIgnoreCase));
+                return;
+            }
+
+            if (candidates.Count >= MaxSafeSearchCandidates)
+                return;
+
+            var item = variableCandidates[index];
+            foreach (var value in item.Value)
+            {
+                if (candidates.Count >= MaxSafeSearchCandidates)
+                    return;
+
+                current[item.Key] = value;
+                AddCandidate(candidates, variableCandidates, index + 1, current);
+            }
+        }
+
+        private static List<double> BuildVariableCandidateValues(double lower, double upper, double current)
+        {
+            var values = new List<double>();
+            AddDistinctValue(values, lower);
+            AddDistinctValue(values, Clamp(current, lower, upper));
+            AddDistinctValue(values, (lower + upper) / 2.0);
+            AddDistinctValue(values, lower + (upper - lower) * 0.25);
+            AddDistinctValue(values, lower + (upper - lower) * 0.75);
+            AddDistinctValue(values, upper);
+            return values;
+        }
+
+        private static void AddDistinctValue(List<double> values, double value)
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value)) return;
+            foreach (var existed in values)
+            {
+                if (Math.Abs(existed - value) <= 1e-9) return;
+            }
+            values.Add(value);
+        }
+
+        private static Dictionary<string, double> SnapshotVariableValues(List<OptimizerVariableItem> variables)
+        {
+            var snapshot = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            if (variables == null) return snapshot;
+
+            foreach (var variable in variables)
+            {
+                string name = NormalizeName(variable == null ? null : variable.name, null);
+                double? value = ReadExpressionValue(name);
+                if (value.HasValue)
+                    snapshot[name] = value.Value;
+            }
+
+            return snapshot;
+        }
+
+        private static CandidateEvaluation EvaluateCandidate(
+            Dictionary<string, double> values,
+            List<OptimizerObjectiveItem> objectives,
+            List<OptimizerConstraintItem> constraints)
+        {
+            var objectiveDetails = new List<object>();
+            var constraintDetails = new List<object>();
+            double objectiveScore = 0.0;
+            double penalty = 0.0;
+            bool feasible = true;
+
+            foreach (var objective in objectives)
+            {
+                string name = NormalizeName(objective == null ? null : objective.name, null);
+                double value = ReadExpressionValue(name).GetValueOrDefault(0);
+                double weight = ParseDoubleOrDefault(objective == null ? null : objective.weight, 1.0);
+                double scale = ParseDoubleOrDefault(objective == null ? null : objective.scale_factor, 1.0);
+                if (Math.Abs(scale) <= 1e-12) scale = 1.0;
+                ObjectiveMode mode = ParseObjectiveMode(objective == null ? null : objective.objective_type);
+                double contribution = ObjectiveContribution(value, weight, scale, mode);
+                objectiveScore += contribution;
+
+                objectiveDetails.Add(new
+                {
+                    name = name,
+                    value = value,
+                    objective_type = mode.Kind,
+                    target = mode.Target,
+                    contribution = contribution
+                });
+            }
+
+            if (constraints != null)
+            {
+                foreach (var constraint in constraints)
+                {
+                    string name = NormalizeName(constraint == null ? null : constraint.name, null);
+                    double value = ReadExpressionValue(name).GetValueOrDefault(0);
+                    double limit = ParseDoubleOrDefault(constraint == null ? null : constraint.value, 0);
+                    ConstraintMode mode = ParseConstraintMode(constraint == null ? null : constraint.constraint_type);
+                    double violation = ConstraintViolation(value, limit, mode);
+                    if (violation > 1e-9) feasible = false;
+                    penalty += violation * violation * ConstraintPenaltyWeight;
+
+                    constraintDetails.Add(new
+                    {
+                        name = name,
+                        value = value,
+                        constraint_type = mode.Kind,
+                        limit = limit,
+                        violation = violation
+                    });
+                }
+            }
+
+            return new CandidateEvaluation
+            {
+                Values = new Dictionary<string, double>(values, StringComparer.OrdinalIgnoreCase),
+                ObjectiveScore = objectiveScore,
+                ConstraintPenalty = penalty,
+                RankScore = objectiveScore + penalty,
+                Feasible = feasible,
+                Objectives = objectiveDetails,
+                Constraints = constraintDetails
+            };
+        }
+
+        private static double ObjectiveContribution(double value, double weight, double scale, ObjectiveMode mode)
+        {
+            if (mode.Kind == "maximize")
+                return -weight * value / scale;
+
+            if (mode.Kind == "target")
+            {
+                double delta = value - mode.Target.GetValueOrDefault(0);
+                return weight * delta * delta / (scale * scale);
+            }
+
+            return weight * value / scale;
+        }
+
+        private static double ConstraintViolation(double value, double limit, ConstraintMode mode)
+        {
+            if (mode.Kind == "upper")
+                return Math.Max(0.0, value - limit);
+            if (mode.Kind == "lower")
+                return Math.Max(0.0, limit - value);
+            return 0.0;
+        }
+
+        private static void ApplyVariableValues(Dictionary<string, double> values)
+        {
+            var part = NXContext.WorkPart();
+            foreach (var item in values)
+            {
+                Expression exp = FindExpressionOrThrow(item.Key);
+                if (exp.IsNoEdit)
+                    throw new ArgumentException("表达式不可编辑：" + item.Key);
+                part.Expressions.Edit(exp, ToInvariant(item.Value));
+            }
+        }
+
+        private static void TryRestoreVariables(Dictionary<string, double> values)
+        {
+            if (values == null || values.Count == 0) return;
+            try
+            {
+                ApplyVariableValues(values);
+                NXContext.Update(false, "RunOptimizationStudy restore variables");
+            }
+            catch { }
+        }
+
+        private static double? ReadExpressionValue(string name)
+        {
+            Expression exp = FindExpressionOrNull(name);
+            return exp == null ? null : SafeReadDouble(exp, "Value");
+        }
+
+        private static bool IsInternalObjectiveExpression(string name)
+        {
+            return string.Equals(NormalizeName(name, null), DefaultObjectiveExpressionName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static double Clamp(double value, double lower, double upper)
+        {
+            return Math.Max(lower, Math.Min(upper, value));
         }
 
         private static Expression CreateOrUpdateExpression(string name, string formula)
@@ -880,6 +1199,17 @@ namespace NXTools
         {
             public bool IsValid;
             public string Kind;
+        }
+
+        private class CandidateEvaluation
+        {
+            public Dictionary<string, double> Values;
+            public double ObjectiveScore;
+            public double ConstraintPenalty;
+            public double RankScore;
+            public bool Feasible;
+            public List<object> Objectives;
+            public List<object> Constraints;
         }
     }
 }

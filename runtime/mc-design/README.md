@@ -28,7 +28,7 @@ The NX plugin payload is stored in this project, but Siemens NX still needs its
 `dependencies/nx-plugin` directory before the plugin HTTP API can start.
 
 Use the `mc_design_prepare_nx_plugin` tool to check or register that path. It
-only writes `custom_dirs.dat` when called with `register: true` and
+only writes `custom_dirs.dat` when called with `write: true` and
 `confirmed: true`, and it creates a `.beya-mc-design.*.bak` backup before
 replacing the managed mc-design block.
 
