@@ -672,6 +672,23 @@ function dropDuplicateTranscriptTextMessages(messages: UIMessage[]): UIMessage[]
   return changed ? deduped : messages
 }
 
+function restoredHistoryCoversStreamingText(
+  restoredMessages: UIMessage[],
+  streamingText: string,
+): boolean {
+  const pendingText = streamingText.trim()
+  if (!pendingText) return false
+
+  for (let index = restoredMessages.length - 1; index >= 0; index -= 1) {
+    const message = restoredMessages[index]
+    if (message?.type === 'assistant_text') {
+      return message.content.trim().includes(pendingText)
+    }
+  }
+
+  return false
+}
+
 function mergeRestoredHistoryIntoLiveMessages(
   messages: UIMessage[],
   restoredMessages: UIMessage[],
@@ -1137,6 +1154,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             historyStatus: 'ready',
             historyError: null,
             messages: mergeBackgroundTaskMessages(uiMessages, restoredBackgroundTasks),
+            ...(restoredHistoryCoversStreamingText(uiMessages, s.streamingText)
+              ? { streamingText: '' }
+              : {}),
             activeGoal,
             agentTaskNotifications: { ...s.agentTaskNotifications, ...restoredNotifications },
             backgroundAgentTasks: mergeBackgroundAgentTaskRecords(

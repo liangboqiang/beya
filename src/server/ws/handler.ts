@@ -478,7 +478,7 @@ async function handleDesktopClearCommand(
   })
   sendMessage(ws, {
     type: 'message_complete',
-    usage: { input_tokens: 0, output_tokens: 0 },
+    usage: { status: 'unavailable', source: 'none' },
   })
 }
 

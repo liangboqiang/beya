@@ -14,13 +14,13 @@ import type { ExecutionMode } from '../services/executionModeService.js'
 import type { SavedProvider } from '../types/provider.js'
 import type {
   LocalCliRuntimeProfile,
-  ProviderRequestPolicy,
   ProviderRuntimeProfile,
   ResolvedRuntime,
   RuntimeCapabilities,
   RuntimeModel,
   RuntimeProfile,
 } from './protocol.js'
+import { resolveProviderRequestPolicy } from './providerPolicy.js'
 
 const VALID_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'max'])
 
@@ -170,61 +170,6 @@ function resolveSelectedLocalCliModel(
   return candidates[0] ?? 'default'
 }
 
-function providerRequestPolicy(provider: SavedProvider): ProviderRequestPolicy {
-  const providerId = provider.providerId.toLowerCase()
-  const baseUrl = provider.baseUrl.toLowerCase()
-  const isDeepSeekCompatible =
-    providerId === 'deepseek' ||
-    /(^|[./-])deepseek([./-]|$)/i.test(baseUrl) ||
-    /(^|[./-])opencode\.ai([:/]|$)/i.test(baseUrl)
-
-  if (isDeepSeekCompatible) {
-    return {
-      imageMode: 'text_only',
-      reasoningMode: 'native',
-      usageTrust: 'high',
-    }
-  }
-
-  if (providerId === 'qwen') {
-    return {
-      stripParams: [
-        'thinking',
-        'reasoning',
-        'reasoning_content',
-        'redacted_thinking',
-        'reasoning_effort',
-        'thinking_budget',
-      ],
-      imageMode: 'unsupported',
-      reasoningMode: 'unsupported',
-      usageTrust: 'medium',
-    }
-  }
-
-  if (providerId === 'custom') {
-    return {
-      stripParams: [
-        'thinking',
-        'reasoning',
-        'reasoning_content',
-        'redacted_thinking',
-        'reasoning_effort',
-        'thinking_budget',
-      ],
-      imageMode: 'unsupported',
-      reasoningMode: 'unsupported',
-      usageTrust: 'low',
-    }
-  }
-
-  return {
-    imageMode: 'native',
-    reasoningMode: 'native',
-    usageTrust: 'high',
-  }
-}
-
 function modelDefinitionById(providerId: string): Map<string, ModelDefinition> {
   return new Map(getProviderModels(providerId).map((model) => [model.id, model]))
 }
@@ -274,7 +219,7 @@ function selectedLocalCliRuntimeModels(cli: SelectedLocalCliRuntime): RuntimeMod
 }
 
 function providerCapabilities(provider: SavedProvider): RuntimeCapabilities {
-  const policy = providerRequestPolicy(provider)
+  const policy = resolveProviderRequestPolicy(provider)
   const runtimeModels = providerRuntimeModels(provider)
   const modelCapabilities = runtimeModels.flatMap((model) => model.capabilities ?? [])
   const isCustom = provider.providerId === 'custom'
@@ -325,7 +270,7 @@ export function toProviderRuntimeProfile(
     apiFormat: provider.apiFormat ?? getProviderDefinition(provider.providerId)?.apiFormat ?? 'anthropic',
     baseUrl: provider.baseUrl,
     authStrategy: provider.authStrategy ?? getProviderDefinition(provider.providerId)?.authStrategy ?? 'none',
-    requestPolicy: providerRequestPolicy(provider),
+    requestPolicy: resolveProviderRequestPolicy(provider),
   }
 }
 

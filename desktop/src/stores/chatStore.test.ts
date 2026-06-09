@@ -748,6 +748,52 @@ describe('chatStore history mapping', () => {
     expect(notifyDesktopMock).not.toHaveBeenCalled()
   })
 
+  it('clears streaming text already covered by restored transcript history', async () => {
+    vi.mocked(sessionsApi.getMessages).mockResolvedValueOnce({
+      messages: [
+        {
+          id: 'transcript-user-1',
+          type: 'user',
+          timestamp: '2026-04-06T00:00:00.000Z',
+          content: 'live prompt',
+        },
+        {
+          id: 'transcript-assistant-1',
+          type: 'assistant',
+          timestamp: '2026-04-06T00:00:01.000Z',
+          content: 'live answer',
+        },
+      ],
+    })
+
+    useChatStore.setState({
+      sessions: {
+        [TEST_SESSION_ID]: makeSession({
+          messages: [],
+          streamingText: 'live answer',
+          chatState: 'streaming',
+        }),
+      },
+    })
+
+    await useChatStore.getState().loadHistory(TEST_SESSION_ID)
+
+    const session = useChatStore.getState().sessions[TEST_SESSION_ID]
+    expect(session?.streamingText).toBe('')
+    expect(session?.messages.filter((message) => message.type === 'assistant_text')).toHaveLength(1)
+    expect(session?.messages).toMatchObject([
+      {
+        type: 'user_text',
+        transcriptMessageId: 'transcript-user-1',
+      },
+      {
+        type: 'assistant_text',
+        content: 'live answer',
+        transcriptMessageId: 'transcript-assistant-1',
+      },
+    ])
+  })
+
   it('collapses duplicate assistant replies after transcript id hydration', async () => {
     vi.mocked(sessionsApi.getMessages).mockResolvedValueOnce({
       messages: [

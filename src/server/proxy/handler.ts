@@ -18,6 +18,7 @@ import { openaiChatStreamToAnthropic } from './streaming/openaiChatStreamToAnthr
 import { openaiResponsesStreamToAnthropic } from './streaming/openaiResponsesStreamToAnthropic.js'
 import type { AnthropicRequest } from './transform/types.js'
 import { getProxyFetchOptions } from '../../utils/proxy.js'
+import { resolveProviderRequestPolicy } from '../runtime/providerPolicy.js'
 import { getManualNetworkProxyUrl, loadNetworkSettings } from '../services/networkSettings.js'
 import { normalizeProviderBaseUrl, resolveProviderUpstreamUrl } from '../services/providerEndpoint.js'
 
@@ -163,12 +164,13 @@ async function handleOpenaiChat(
   aiRequestTimeoutMs: number,
   proxyUrl: string | undefined,
 ): Promise<Response> {
-  const policy = getOpenAIChatProxyPolicy(providerId, baseUrl)
+  const policy = resolveProviderRequestPolicy({ providerId, baseUrl })
+  const reasoningNative = policy.reasoningMode === 'native'
   const transformed = anthropicToOpenaiChat(body, {
-    roundTripReasoningContent: policy.reasoningMode === 'native',
-    passReasoningEffort: policy.reasoningMode === 'native',
-    passThinkingToggle: policy.reasoningMode === 'native',
-    imageContentMode: policy.imageContentMode,
+    roundTripReasoningContent: reasoningNative,
+    passReasoningEffort: reasoningNative,
+    passThinkingToggle: reasoningNative,
+    imageContentMode: policy.imageMode === 'native' ? 'vision' : 'text_only',
   })
   const url = resolveProviderUpstreamUrl(baseUrl, 'openai_chat')
   const proxyOptions = getProxyFetchOptions({ proxyUrl })
@@ -219,38 +221,6 @@ async function handleOpenaiChat(
   const responseBody = await upstream.json()
   const anthropicResponse = openaiChatToAnthropic(responseBody, body.model)
   return Response.json(anthropicResponse)
-}
-
-function getOpenAIChatProxyPolicy(
-  providerId: string,
-  baseUrl: string,
-): {
-  reasoningMode: 'native' | 'unsupported'
-  imageContentMode: 'vision' | 'text_only'
-} {
-  if (providerId === 'qwen' || providerId === 'custom') {
-    return {
-      reasoningMode: 'unsupported',
-      imageContentMode: 'text_only',
-    }
-  }
-  if (shouldUseDeepSeekReasoningCompat(baseUrl)) {
-    return {
-      reasoningMode: 'native',
-      imageContentMode: 'text_only',
-    }
-  }
-  return {
-    reasoningMode: 'unsupported',
-    imageContentMode: 'vision',
-  }
-}
-
-function shouldUseDeepSeekReasoningCompat(baseUrl: string): boolean {
-  return (
-    /(^|[./-])deepseek([./-]|$)/i.test(baseUrl) ||
-    /(^|[./-])opencode\.ai([:/]|$)/i.test(baseUrl)
-  )
 }
 
 async function handleOpenaiResponses(

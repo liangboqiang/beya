@@ -830,7 +830,10 @@ export class ConversationService {
           subtype: 'error',
           is_error: true,
           result: exitError,
-          usage: { input_tokens: 0, output_tokens: 0 },
+          usage: {
+            status: 'unavailable',
+            source: activeSession.runtimeKind === 'local_cli' ? 'local_cli' : 'provider',
+          },
           session_id: sessionId,
         })
       }
