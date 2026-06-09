@@ -491,6 +491,7 @@ export class ProviderService {
   // --- Proxy support ---
 
   async getProviderForProxy(providerId?: string): Promise<{
+    providerId: string
     baseUrl: string
     apiKey: string
     apiFormat: ApiFormat
@@ -498,6 +499,7 @@ export class ProviderService {
     if (providerId) {
       const provider = await this.getProvider(providerId)
       return {
+        providerId: provider.providerId,
         baseUrl: normalizeProviderBaseUrl(provider.baseUrl, provider.apiFormat ?? 'anthropic'),
         apiKey: provider.apiKey || 'local',
         apiFormat: provider.apiFormat ?? 'anthropic',
@@ -509,6 +511,7 @@ export class ProviderService {
     const provider = await this.getProvider(index.activeId).catch(() => null)
     if (!provider) return null
     return {
+      providerId: provider.providerId,
       baseUrl: normalizeProviderBaseUrl(provider.baseUrl, provider.apiFormat ?? 'anthropic'),
       apiKey: provider.apiKey || 'local',
       apiFormat: provider.apiFormat ?? 'anthropic',
@@ -516,6 +519,7 @@ export class ProviderService {
   }
 
   async getActiveProviderForProxy(): Promise<{
+    providerId: string
     baseUrl: string
     apiKey: string
     apiFormat: ApiFormat

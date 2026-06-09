@@ -429,6 +429,9 @@ describe('mc-design local tools', () => {
       if (toolName === 'Test') {
         return jsonResponse({ ok: true, data: { passed: true } })
       }
+      if (toolName === 'OpenPart') {
+        return jsonResponse({ ok: true, data: { part_opened: true } })
+      }
       if (toolName === 'GetWorkPartInfo') {
         return jsonResponse({
           ok: true,
@@ -493,6 +496,7 @@ describe('mc-design local tools', () => {
     expect(payload.mappings.every(mapping => mapping.matched)).toBe(true)
     expect(payload.called_tools).toEqual([
       'Test',
+      'OpenPart',
       'GetWorkPartInfo',
       'GetDriveParamsList',
       'BatchUpdateParams',

@@ -1,5 +1,6 @@
 import { api } from './client'
 import type { AgentTaskNotification } from '../types/chat'
+import type { RuntimeProfile } from '../types/runtime'
 import type { SessionListItem, MessageEntry } from '../types/session'
 import type { PermissionMode } from '../types/settings'
 
@@ -194,6 +195,27 @@ export type SessionContextSnapshot = {
 
 export type SessionInspectionResponse = {
   active: boolean
+  runtime?: RuntimeProfile
+  telemetry?: {
+    usage: {
+      status: 'actual' | 'estimated' | 'unavailable'
+      inputTokens?: number
+      outputTokens?: number
+      cacheReadTokens?: number
+      cacheCreationTokens?: number
+      totalTokens?: number
+      costUsd?: number
+      source: 'provider' | 'local_cli' | 'transcript_estimate' | 'none'
+    }
+    contextUsage: {
+      status: 'actual' | 'estimated' | 'unavailable'
+      totalTokens?: number
+      maxTokens?: number
+      percentage?: number
+      model?: string
+      source: 'control_channel' | 'transcript_estimate' | 'none'
+    }
+  }
   status: {
     sessionId: string
     workDir: string

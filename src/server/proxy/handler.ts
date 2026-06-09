@@ -135,7 +135,7 @@ export async function handleProxyRequest(req: Request, url: URL): Promise<Respon
 
   try {
     if (config.apiFormat === 'openai_chat') {
-      return await handleOpenaiChat(body, baseUrl, config.apiKey, isStream, networkSettings.aiRequestTimeoutMs, proxyUrl)
+      return await handleOpenaiChat(body, config.providerId, baseUrl, config.apiKey, isStream, networkSettings.aiRequestTimeoutMs, proxyUrl)
     } else {
       return await handleOpenaiResponses(body, baseUrl, config.apiKey, isStream, networkSettings.aiRequestTimeoutMs, proxyUrl)
     }
@@ -156,17 +156,19 @@ export async function handleProxyRequest(req: Request, url: URL): Promise<Respon
 
 async function handleOpenaiChat(
   body: AnthropicRequest,
+  providerId: string,
   baseUrl: string,
   apiKey: string,
   isStream: boolean,
   aiRequestTimeoutMs: number,
   proxyUrl: string | undefined,
 ): Promise<Response> {
-  const deepSeekCompatible = shouldUseDeepSeekReasoningCompat(baseUrl)
+  const policy = getOpenAIChatProxyPolicy(providerId, baseUrl)
   const transformed = anthropicToOpenaiChat(body, {
-    roundTripReasoningContent: deepSeekCompatible,
-    passThinkingToggle: deepSeekCompatible,
-    imageContentMode: shouldUseTextOnlyOpenAIChatContent(baseUrl) ? 'text_only' : 'vision',
+    roundTripReasoningContent: policy.reasoningMode === 'native',
+    passReasoningEffort: policy.reasoningMode === 'native',
+    passThinkingToggle: policy.reasoningMode === 'native',
+    imageContentMode: policy.imageContentMode,
   })
   const url = resolveProviderUpstreamUrl(baseUrl, 'openai_chat')
   const proxyOptions = getProxyFetchOptions({ proxyUrl })
@@ -219,15 +221,36 @@ async function handleOpenaiChat(
   return Response.json(anthropicResponse)
 }
 
+function getOpenAIChatProxyPolicy(
+  providerId: string,
+  baseUrl: string,
+): {
+  reasoningMode: 'native' | 'unsupported'
+  imageContentMode: 'vision' | 'text_only'
+} {
+  if (providerId === 'qwen' || providerId === 'custom') {
+    return {
+      reasoningMode: 'unsupported',
+      imageContentMode: 'text_only',
+    }
+  }
+  if (shouldUseDeepSeekReasoningCompat(baseUrl)) {
+    return {
+      reasoningMode: 'native',
+      imageContentMode: 'text_only',
+    }
+  }
+  return {
+    reasoningMode: 'unsupported',
+    imageContentMode: 'vision',
+  }
+}
+
 function shouldUseDeepSeekReasoningCompat(baseUrl: string): boolean {
   return (
     /(^|[./-])deepseek([./-]|$)/i.test(baseUrl) ||
     /(^|[./-])opencode\.ai([:/]|$)/i.test(baseUrl)
   )
-}
-
-function shouldUseTextOnlyOpenAIChatContent(baseUrl: string): boolean {
-  return shouldUseDeepSeekReasoningCompat(baseUrl)
 }
 
 async function handleOpenaiResponses(

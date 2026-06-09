@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { sessionsApi, type SessionContextSnapshot } from '../../api/sessions'
 import { useTranslation } from '../../i18n'
 import type { ChatState } from '../../types/chat'
+import type { RuntimeCapabilities } from '../../types/runtime'
 import { MobileBottomSheet } from '../shared/MobileBottomSheet'
 
 type Props = {
@@ -9,6 +10,7 @@ type Props = {
   chatState: ChatState
   messageCount: number
   runtimeSelectionKey?: string
+  runtimeCapabilities?: RuntimeCapabilities | null
   fallbackModelLabel?: string
   draft?: boolean
   compact?: boolean
@@ -55,8 +57,14 @@ function isDocumentVisible() {
   return typeof document === 'undefined' || document.visibilityState !== 'hidden'
 }
 
-function shouldFetchContext(sessionId: string | undefined, draft: boolean) {
-  return Boolean(sessionId) && !draft
+function shouldFetchContext(
+  sessionId: string | undefined,
+  draft: boolean,
+  runtimeCapabilities?: RuntimeCapabilities | null,
+) {
+  return Boolean(sessionId) &&
+    !draft &&
+    runtimeCapabilities?.contextUsage !== 'unavailable'
 }
 
 export function ContextUsageIndicator({
@@ -64,6 +72,7 @@ export function ContextUsageIndicator({
   chatState,
   messageCount,
   runtimeSelectionKey = '',
+  runtimeCapabilities,
   fallbackModelLabel,
   draft = false,
   compact = false,
@@ -71,7 +80,7 @@ export function ContextUsageIndicator({
   const t = useTranslation()
   const [context, setContext] = useState<SessionContextSnapshot | null>(null)
   const [contextSource, setContextSource] = useState<'live' | 'estimate' | null>(null)
-  const [loading, setLoading] = useState(() => shouldFetchContext(sessionId, draft))
+  const [loading, setLoading] = useState(() => shouldFetchContext(sessionId, draft, runtimeCapabilities))
   const [error, setError] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<number | null>(null)
   const [inspectionModel, setInspectionModel] = useState<string | null>(null)
@@ -83,8 +92,13 @@ export function ContextUsageIndicator({
   const lastAutoRefreshAtRef = useRef(0)
 
   const refresh = useCallback(async (mode: 'auto' | 'manual' = 'manual') => {
-    if (!sessionId || draft) {
+    if (!shouldFetchContext(sessionId, draft, runtimeCapabilities)) {
       setLoading(false)
+      setContext(null)
+      setContextSource(null)
+      setError(runtimeCapabilities?.contextUsage === 'unavailable'
+        ? t('contextIndicator.unavailableDetail')
+        : null)
       return
     }
     if (mode === 'auto' && !isDocumentVisible()) {
@@ -95,6 +109,10 @@ export function ContextUsageIndicator({
       return inFlightRequestRef.current ?? undefined
     }
     if (typeof sessionsApi.getInspection !== 'function') {
+      setLoading(false)
+      return
+    }
+    if (!sessionId) {
       setLoading(false)
       return
     }
@@ -144,7 +162,7 @@ export function ContextUsageIndicator({
     inFlightRequestRef.current = request
     inFlightIdentityRef.current = activeContextIdentity
     return request
-  }, [draft, runtimeSelectionKey, sessionId])
+  }, [draft, runtimeCapabilities, runtimeSelectionKey, sessionId, t])
 
   useEffect(() => {
     const contextIdentity = `${sessionId}:${runtimeSelectionKey}`
@@ -160,7 +178,7 @@ export function ContextUsageIndicator({
       setInspectionModel(null)
     }
     void refresh('auto')
-  }, [messageCount, refresh, runtimeSelectionKey, sessionId])
+  }, [messageCount, refresh, runtimeCapabilities?.contextUsage, runtimeSelectionKey, sessionId])
 
   useEffect(() => {
     if (typeof document === 'undefined') return

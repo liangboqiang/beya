@@ -57,10 +57,10 @@ describe('LocalCliRuntimeService', () => {
         CODEX_BIN: codexPath,
       },
       modelRoles: {
-        primary: 'default',
-        fast: 'default',
-        balanced: 'default',
-        powerful: 'default',
+        primary: 'gpt-5-codex',
+        fast: 'gpt-5-codex',
+        balanced: 'gpt-5-codex',
+        powerful: 'gpt-5-codex',
       },
     })
   })
@@ -79,7 +79,6 @@ describe('LocalCliRuntimeService', () => {
     const codex = list.clis.find((cli) => cli.id === 'codex')
 
     expect(codex?.models).toEqual([
-      { id: 'default', label: 'CLI default' },
       { id: 'gpt-live', label: 'GPT Live' },
       { id: 'gpt-id-only', label: 'GPT ID Only' },
     ])

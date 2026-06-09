@@ -10,20 +10,18 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { ProviderService } from './providerService.js'
-import { sessionService } from './sessionService.js'
 import { diagnosticsService } from './diagnosticsService.js'
-import type { ExecutionMode } from './executionModeService.js'
+import { resolveSelectedLocalCliRuntimeSync } from './localCliRuntimeService.js'
+import { executionSessionFacade } from '../execution/executionSessionFacade.js'
+import { localCliExecutionBackend } from '../execution/localCliExecutionBackend.js'
+import { sanitizeModelArgument } from '../execution/modelSelection.js'
 import {
-  getWellKnownUserToolchainBins,
-  resolveSelectedLocalCliRuntimeSync,
-  type SelectedLocalCliRuntime,
-} from './localCliRuntimeService.js'
-import {
-  isMaterializedWorktreeLaunch,
-  prepareSessionWorkspace,
-  shouldCreateWorktreeForSessionLaunch,
-  type PreparedSessionWorkspace,
-} from './repositoryLaunchService.js'
+  ConversationStartupError,
+  type ExecutionBackendHost,
+  type SessionProcess,
+  type SessionStartOptions,
+} from '../execution/types.js'
+import type { PreparedSessionWorkspace } from './repositoryLaunchService.js'
 import {
   buildClaudeCliArgs,
   resolveClaudeCliLauncher,
@@ -49,13 +47,6 @@ const OPENAI_OAUTH_PROVIDER_ENV_KEY = 'BEYA_OPENAI_OAUTH_PROVIDER'
 const OPENAI_CODEX_OAUTH_FILE_ENV_KEY = 'OPENAI_CODEX_OAUTH_FILE'
 export const DESKTOP_CLI_GRACEFUL_SHUTDOWN_TIMEOUT_MS = 6_000
 
-function quoteWindowsCommandArg(arg: string): string {
-  if (!/[()\][%!^"`<>&|;,\s]/.test(arg)) {
-    return arg
-  }
-  return `"${arg.replace(/(["\\])/g, '\\$1')}"`
-}
-
 type AttachmentRef = {
   type: 'file' | 'image'
   name?: string
@@ -73,37 +64,6 @@ type MaterializedAttachments = {
   imageMetadataTexts: string[]
 }
 
-type SessionProcess = {
-  runtimeKind: 'sdk' | 'local_cli'
-  proc?: ReturnType<typeof Bun.spawn>
-  activeLocalCliProc?: ReturnType<typeof Bun.spawn>
-  localCliRuntime?: SelectedLocalCliRuntime
-  localCliModel?: string
-  outputCallbacks: Array<(msg: any) => void>
-  workDir: string
-  permissionMode: string
-  sdkToken: string
-  sdkSocket: { send(data: string): void } | null
-  pendingOutbound: string[]
-  startupPending: boolean
-  startupExitCode: number | null
-  stdoutLines: string[]
-  stderrLines: string[]
-  outputDrain: Promise<void>
-  sdkMessages: any[]
-  initMessage: any | null
-  pendingPermissionRequests: Map<
-    string,
-    {
-      toolName: string
-      toolUseId?: string
-      description?: string
-      input: Record<string, unknown>
-      permissionSuggestions?: unknown[]
-    }
-  >
-}
-
 export type PendingPermissionRequest = {
   requestId: string
   toolName: string
@@ -112,52 +72,7 @@ export type PendingPermissionRequest = {
   description?: string
 }
 
-type SessionStartOptions = {
-  permissionMode?: string
-  model?: string
-  effort?: string
-  thinking?: 'enabled' | 'adaptive' | 'disabled'
-  providerId?: string | null
-  localCliId?: string | null
-  executionMode?: ExecutionMode
-  metadata?: Record<string, unknown>
-}
-
-function sanitizeModelArgument(value: string | undefined | null): string | null {
-  const trimmed = value?.trim()
-  if (!trimmed) return null
-  if (trimmed.length > 200) return null
-  if (!/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(trimmed)) return null
-  return trimmed
-}
-
-function resolveLocalCliStartupModel(
-  runtime: SelectedLocalCliRuntime,
-  requestedModel?: string | null,
-): string | undefined {
-  const requested = sanitizeModelArgument(requestedModel)
-  if (requested) return requested
-  const roleModel = runtime.modelRoles?.primary?.trim()
-  if (roleModel) return roleModel
-  return undefined
-}
-
-export class ConversationStartupError extends Error {
-  constructor(
-    message: string,
-    readonly code:
-      | 'WORKDIR_INVALID'
-      | 'CLI_AUTH_REQUIRED'
-      | 'CLI_SESSION_CONFLICT'
-      | 'CLI_START_FAILED'
-      | 'CLI_SPAWN_FAILED'
-      | 'SESSION_DELETED',
-    readonly retryable = false,
-  ) {
-    super(message)
-    this.name = 'ConversationStartupError'
-  }
-}
+export { ConversationStartupError }
 
 export class ConversationService {
   private sessions = new Map<string, SessionProcess>()
@@ -209,290 +124,52 @@ export class ConversationService {
     sdkUrl: string,
     options?: SessionStartOptions,
   ): Promise<void> {
-    if (this.deletedSessions.has(sessionId)) {
-      throw new ConversationStartupError(
-        `Session was deleted before startup completed: ${sessionId}`,
-        'SESSION_DELETED',
-      )
-    }
-    if (this.sessions.has(sessionId)) return
-
-    const launchInfo = await sessionService.getSessionLaunchInfo(sessionId)
-    const shouldResume = !!launchInfo && launchInfo.transcriptMessageCount > 0
-    const shouldReplacePlaceholder =
-      !!launchInfo && launchInfo.transcriptMessageCount === 0
-    const shouldCreateWorktree =
-      !!launchInfo && shouldCreateWorktreeForSessionLaunch(launchInfo)
-    const hasMaterializedWorktree =
-      !!launchInfo && isMaterializedWorktreeLaunch(launchInfo)
-
-    if (this.deletedSessions.has(sessionId)) {
-      throw new ConversationStartupError(
-        `Session was deleted before startup completed: ${sessionId}`,
-        'SESSION_DELETED',
-      )
-    }
-
-    if (!fs.existsSync(workDir) || !fs.statSync(workDir).isDirectory()) {
-      throw new ConversationStartupError(
-        `Working directory does not exist or is not a directory: ${workDir}`,
-        'WORKDIR_INVALID',
-      )
-    }
-
-    if (shouldReplacePlaceholder) {
-      await sessionService.clearSessionTranscript(sessionId, workDir)
-    }
-
-    let launchWorkDir = workDir
-    let launchRepository = launchInfo?.repository
-    if (shouldCreateWorktree && launchRepository?.worktree) {
-      launchWorkDir = launchRepository.requestedWorkDir || launchRepository.repoRoot || workDir
-    } else if (!shouldResume && launchRepository && !hasMaterializedWorktree) {
-      const preparedWorkspace = await prepareSessionWorkspace(
-        workDir,
-        {
-          branch: launchRepository.branch,
-          worktree: false,
-        },
-        sessionId,
-      )
-      launchWorkDir = preparedWorkspace.workDir
-      launchRepository = preparedWorkspace.repository
-    }
-
-    if (!shouldCreateWorktree && launchRepository?.worktree) {
-      launchRepository = {
-        ...launchRepository,
-        worktree: false,
-      }
-    }
-
-    if (!fs.existsSync(launchWorkDir) || !fs.statSync(launchWorkDir).isDirectory()) {
-      throw new ConversationStartupError(
-        `Working directory does not exist or is not a directory: ${launchWorkDir}`,
-        'WORKDIR_INVALID',
-      )
-    }
-
-    if (options?.executionMode === 'local_cli') {
-      await this.startLocalCliAdapterSession(
-        sessionId,
-        launchWorkDir,
-        options,
-        launchInfo,
-        launchRepository,
-        shouldReplacePlaceholder,
-      )
-      return
-    }
-
-    const args = this.buildSessionCliArgs(
-      sessionId,
-      sdkUrl,
-      shouldResume,
-      options,
-      launchRepository,
+    await executionSessionFacade.startSession(
+      { sessionId, workDir, sdkUrl, options },
+      this.getExecutionBackendHost(),
     )
-
-    console.log(
-      `[ConversationService] Starting agent runtime for ${sessionId}, cwd: ${launchWorkDir} (process.cwd()=${process.cwd()}, CALLER_DIR will be pinned to workDir)`,
-    )
-
-    // IMPORTANT (Bug#5): 必须覆盖子进程继承的 CALLER_DIR / PWD。
-    // preload.ts 顶层读 process.env.CALLER_DIR 并调用 process.chdir(CALLER_DIR)。
-    // 在 bundled 桌面端里，server sidecar 被 Tauri 从 cwd=/ 启动，beya-sidecar.ts
-    // 在 server/cli 模式入口把 CALLER_DIR 默认设成 process.cwd()（即 '/'），
-    // 随后这个 env 被完整继承到 Bun.spawn 的 CLI 子进程；即使这里显式传了
-    // cwd: workDir，CLI 子进程里 preload.ts 还是会 chdir('/')，结果把
-    // STATE.cwd / "Primary working directory" 打回根目录，IM 会话里 AI 感知的
-    // 工作目录就变成 `/`。把 CALLER_DIR / PWD 显式覆盖成 workDir，preload.ts
-    // chdir 后落到正确目录。
-    //
-    const childEnv = await this.buildChildEnv(launchWorkDir, sdkUrl, options)
-
-    let proc: ReturnType<typeof Bun.spawn>
-    try {
-      proc = Bun.spawn(args, {
-        cwd: launchWorkDir,
-        env: childEnv,
-        stdin: 'pipe',
-        stdout: 'pipe',
-        stderr: 'pipe',
-      })
-    } catch (spawnErr) {
-      void diagnosticsService.recordEvent({
-        type: 'cli_spawn_failed',
-        severity: 'error',
-        sessionId,
-        summary: spawnErr instanceof Error ? spawnErr.message : String(spawnErr),
-        details: {
-          workDir,
-          permissionMode: options?.permissionMode || 'default',
-          providerId: options?.providerId ?? null,
-          model: options?.model ?? null,
-          error: spawnErr,
-        },
-      })
-      throw new ConversationStartupError(
-        `Failed to spawn agent runtime in ${launchWorkDir}: ${
-          spawnErr instanceof Error ? spawnErr.message : String(spawnErr)
-        }`,
-        'CLI_SPAWN_FAILED',
-      )
-    }
-
-    const session: SessionProcess = {
-      runtimeKind: 'sdk',
-      proc,
-      outputCallbacks: [],
-      workDir: launchWorkDir,
-      permissionMode: options?.permissionMode || 'default',
-      sdkToken: this.getSdkTokenFromUrl(sdkUrl),
-      sdkSocket: null,
-      pendingOutbound: [],
-      startupPending: true,
-      startupExitCode: null,
-      stdoutLines: [],
-      stderrLines: [],
-      outputDrain: Promise.resolve(),
-      sdkMessages: [],
-      initMessage: null,
-      pendingPermissionRequests: new Map(),
-    }
-    this.sessions.set(sessionId, session)
-
-    session.outputDrain = Promise.all([
-      this.readProcessOutputStream(sessionId, proc.stdout, 'stdout'),
-      this.readProcessOutputStream(sessionId, proc.stderr, 'stderr'),
-    ]).then(() => undefined)
-
-    proc.exited.then((code) => {
-      void this.handleProcessExit(sessionId, proc, code)
-    })
-
-    const STARTUP_GRACE_MS = 3000
-    const earlyExitCode = await Promise.race([
-      proc.exited,
-      new Promise<null>((resolve) =>
-        setTimeout(() => resolve(null), STARTUP_GRACE_MS),
-      ),
-    ])
-
-    const startupExitCode = earlyExitCode ?? session.startupExitCode
-    if (startupExitCode !== null) {
-      await this.waitForProcessOutputDrain(session)
-      const startupError = this.buildStartupError(sessionId, startupExitCode)
-      this.sessions.delete(sessionId)
-
-      if (this.clearStaleLock(sessionId)) {
-        console.log(
-          `[ConversationService] Removed stale lock for ${sessionId}, retrying...`,
-        )
-        return this.startSession(sessionId, workDir, sdkUrl, options)
-      }
-
-      console.error(
-        `[ConversationService] Agent runtime exited with code ${startupExitCode} for ${sessionId}: ${startupError.message}`,
-      )
-      void diagnosticsService.recordEvent({
-        type: 'cli_start_failed',
-        severity: 'error',
-        sessionId,
-        summary: startupError.message,
-        details: {
-          code: startupError.code,
-          exitCode: startupExitCode,
-          retryable: startupError.retryable,
-          workDir: launchWorkDir,
-          permissionMode: options?.permissionMode || 'default',
-          providerId: options?.providerId ?? null,
-          model: options?.model ?? null,
-          capturedOutput: this.buildCapturedProcessOutputDetail(session),
-          sdkMessages: this.summarizeSdkMessages(session.sdkMessages),
-        },
-      })
-      throw startupError
-    }
-
-    session.startupPending = false
-
-    if (shouldReplacePlaceholder || !launchInfo) {
-      await sessionService.appendSessionMetadata(sessionId, {
-        workDir: launchWorkDir,
-        customTitle: launchInfo?.customTitle ?? null,
-        repository: launchRepository,
-        permissionMode: options?.permissionMode || launchInfo?.permissionMode,
-      })
-    }
-
-    console.log(`[ConversationService] Agent runtime started successfully for ${sessionId}`)
   }
 
-  private async startLocalCliAdapterSession(
-    sessionId: string,
-    launchWorkDir: string,
-    options: SessionStartOptions | undefined,
-    launchInfo: Awaited<ReturnType<typeof sessionService.getSessionLaunchInfo>>,
-    launchRepository: PreparedSessionWorkspace['repository'] | undefined,
-    shouldReplacePlaceholder: boolean,
-  ): Promise<void> {
-    const selectedLocalCliRuntime = resolveSelectedLocalCliRuntimeSync({
-      id: options?.localCliId,
-    })
-    if (!selectedLocalCliRuntime) {
-      throw new ConversationStartupError(
-        'Local CLI execution mode is enabled, but no configured local CLI can be resolved. Choose and configure a local CLI in Settings > Execution Mode.',
-        'CLI_START_FAILED',
-        true,
-      )
-    }
-
-    const session: SessionProcess = {
-      runtimeKind: 'local_cli',
-      localCliRuntime: selectedLocalCliRuntime,
-      localCliModel: resolveLocalCliStartupModel(selectedLocalCliRuntime, options?.model),
-      outputCallbacks: [],
-      workDir: launchWorkDir,
-      permissionMode: options?.permissionMode || 'default',
-      sdkToken: '',
-      sdkSocket: null,
-      pendingOutbound: [],
-      startupPending: false,
-      startupExitCode: null,
-      stdoutLines: [],
-      stderrLines: [],
-      outputDrain: Promise.resolve(),
-      sdkMessages: [],
-      initMessage: {
-        type: 'system',
-        subtype: 'init',
-        model: selectedLocalCliRuntime.displayName,
+  private getExecutionBackendHost(): ExecutionBackendHost {
+    return {
+      hasSession: (sessionId) => this.sessions.has(sessionId),
+      isSessionDeleted: (sessionId) => this.deletedSessions.has(sessionId),
+      registerSession: (sessionId, session) => this.sessions.set(sessionId, session),
+      getSession: (sessionId) => this.sessions.get(sessionId),
+      deleteSession: (sessionId) => {
+        this.sessions.delete(sessionId)
       },
-      pendingPermissionRequests: new Map(),
+      buildProviderCliArgs: (
+        sessionId,
+        sdkUrl,
+        shouldResume,
+        options,
+        repository,
+      ) => this.buildSessionCliArgs(
+        sessionId,
+        sdkUrl,
+        shouldResume,
+        options,
+        repository,
+      ),
+      buildChildEnv: (workDir, sdkUrl, options) =>
+        this.buildChildEnv(workDir, sdkUrl, options),
+      getSdkTokenFromUrl: (sdkUrl) => this.getSdkTokenFromUrl(sdkUrl),
+      readProcessOutputStream: (sessionId, stream, streamName) =>
+        this.readProcessOutputStream(sessionId, stream, streamName),
+      handleProcessExit: (sessionId, proc, code) =>
+        this.handleProcessExit(sessionId, proc, code),
+      waitForProcessOutputDrain: (session, timeoutMs) =>
+        this.waitForProcessOutputDrain(session, timeoutMs),
+      buildStartupError: (sessionId, exitCode) =>
+        this.buildStartupError(sessionId, exitCode),
+      clearStaleLock: (sessionId) => this.clearStaleLock(sessionId),
+      restartSession: (sessionId, workDir, sdkUrl, options) =>
+        this.startSession(sessionId, workDir, sdkUrl, options),
+      buildCapturedProcessOutputDetail: (session) =>
+        this.buildCapturedProcessOutputDetail(session),
+      summarizeSdkMessages: (messages) => this.summarizeSdkMessages(messages),
     }
-
-    this.sessions.set(sessionId, session)
-
-    if (shouldReplacePlaceholder || !launchInfo) {
-      await sessionService.appendSessionMetadata(sessionId, {
-        workDir: launchWorkDir,
-        customTitle: launchInfo?.customTitle ?? null,
-        repository: launchRepository,
-        permissionMode: options?.permissionMode || launchInfo?.permissionMode,
-        runtimeKind: 'local_cli',
-        runtimeProviderId: null,
-        runtimeLocalCliId: selectedLocalCliRuntime.id,
-        ...(resolveLocalCliStartupModel(selectedLocalCliRuntime, options?.model)
-          ? { runtimeModelId: resolveLocalCliStartupModel(selectedLocalCliRuntime, options?.model) }
-          : {}),
-        ...(options?.effort ? { effortLevel: options.effort } : {}),
-      })
-    }
-
-    console.log(
-      `[ConversationService] Local CLI runtime ${selectedLocalCliRuntime.id} ready for ${sessionId}, cwd: ${launchWorkDir}`,
-    )
   }
 
   onOutput(sessionId: string, callback: (msg: any) => void): void {
@@ -523,6 +200,10 @@ export class ConversationService {
     return this.sessions.get(sessionId)?.initMessage ?? null
   }
 
+  getSessionRuntimeProfile(sessionId: string) {
+    return this.sessions.get(sessionId)?.runtimeProfile ?? null
+  }
+
   async sendMessage(
     sessionId: string,
     content: string,
@@ -530,14 +211,14 @@ export class ConversationService {
   ): Promise<boolean> {
     const session = this.sessions.get(sessionId)
     if (session?.runtimeKind === 'local_cli') {
-      if (session.activeLocalCliProc) return false
-      void this.runLocalCliTurn(sessionId, session, content).catch((error) => {
+      if (session.activeLocalCliTurn) return false
+      void this.startLocalCliTurn(sessionId, session, content).catch((error) => {
         this.emitToSession(sessionId, {
           type: 'result',
           subtype: 'error',
           is_error: true,
           result: error instanceof Error ? error.message : String(error),
-          usage: { input_tokens: 0, output_tokens: 0 },
+          usage: { status: 'unavailable', source: 'local_cli' },
           session_id: sessionId,
         })
       })
@@ -564,7 +245,7 @@ export class ConversationService {
     }
   }
 
-  private async runLocalCliTurn(
+  private async startLocalCliTurn(
     sessionId: string,
     session: SessionProcess,
     content: string,
@@ -574,345 +255,46 @@ export class ConversationService {
       throw new Error('No local CLI runtime is selected for this session.')
     }
 
-    const invocation = this.buildLocalCliTurnInvocation(runtime, session, content)
-    const childEnv = this.buildLocalCliProcessEnv(
-      await this.buildChildEnv(session.workDir, undefined, {
-        executionMode: 'local_cli',
-        localCliId: runtime.id,
-        model: session.localCliModel,
-      }),
-      runtime,
-    )
-    const command = this.wrapLocalCliCommandForPlatform(runtime.launchPath, invocation.args)
-
-    const proc = Bun.spawn(command, {
-      cwd: session.workDir,
-      env: childEnv,
-      stdin: 'pipe',
-      stdout: 'pipe',
-      stderr: 'pipe',
+    const baseEnv = await this.buildChildEnv(session.workDir, undefined, {
+      executionMode: 'local_cli',
+      localCliId: runtime.id,
+      model: session.localCliModel,
     })
-    session.activeLocalCliProc = proc
 
-    const stdoutPromise = this.collectLocalCliOutputStream(sessionId, proc.stdout, 'stdout')
-    const stderrPromise = this.collectLocalCliOutputStream(sessionId, proc.stderr, 'stderr')
+    const turn = localCliExecutionBackend.startTurn({
+      sessionId,
+      runtime,
+      workDir: session.workDir,
+      model: session.localCliModel,
+      content,
+      baseEnv,
+      redactOutput: (text) => this.redactProcessOutput(text),
+      onCapturedLine: (streamName, line) => {
+        const activeSession = this.sessions.get(sessionId)
+        if (activeSession !== session) return
+        const lines = streamName === 'stderr' ? session.stderrLines : session.stdoutLines
+        lines.push(line)
+        if (lines.length > MAX_CAPTURED_PROCESS_LINES) {
+          lines.splice(0, lines.length - MAX_CAPTURED_PROCESS_LINES)
+        }
+      },
+      onEvent: (event) => {
+        const activeSession = this.sessions.get(sessionId)
+        if (activeSession !== session) return
+        this.emitToSession(sessionId, event)
+      },
+    })
+    session.activeLocalCliTurn = turn
+    session.outputDrain = turn.outputDrain
 
     try {
-      await this.writeLocalCliStdin(proc, invocation.stdin)
-
-      const exitCode = await proc.exited
-      const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise])
-      const activeSession = this.sessions.get(sessionId)
-      if (activeSession !== session) return
-
-      if (exitCode !== 0) {
-        const detail = this.redactProcessOutput(`${stderr}\n${stdout}`.trim())
-        this.emitToSession(sessionId, {
-          type: 'result',
-          subtype: 'error',
-          is_error: true,
-          result: detail || `${runtime.displayName} exited with code ${exitCode}.`,
-          usage: { input_tokens: 0, output_tokens: 0 },
-          session_id: sessionId,
-        })
-        return
-      }
-
-      const assistantText = this.extractLocalCliAssistantText(runtime.id, stdout) ||
-        stdout.trim()
-      if (assistantText.trim()) {
-        this.emitToSession(sessionId, {
-          type: 'assistant',
-          message: {
-            role: 'assistant',
-            content: [{ type: 'text', text: assistantText.trim() }],
-          },
-          session_id: sessionId,
-        })
-      }
-      this.emitToSession(sessionId, {
-        type: 'result',
-        subtype: 'success',
-        is_error: false,
-        result: '',
-        usage: { input_tokens: 0, output_tokens: 0 },
-        session_id: sessionId,
-      })
+      await turn.done
     } finally {
       const activeSession = this.sessions.get(sessionId)
-      if (activeSession === session && session.activeLocalCliProc === proc) {
-        session.activeLocalCliProc = undefined
+      if (activeSession === session && session.activeLocalCliTurn === turn) {
+        session.activeLocalCliTurn = undefined
       }
     }
-  }
-
-  private async writeLocalCliStdin(
-    proc: ReturnType<typeof Bun.spawn>,
-    input: string,
-  ): Promise<void> {
-    if (!proc.stdin) return
-    const stdin = proc.stdin as unknown as {
-      write?: (chunk: string | Uint8Array) => unknown
-      end?: () => unknown
-      getWriter?: () => {
-        write: (chunk: Uint8Array) => Promise<void>
-        close: () => Promise<void>
-      }
-    }
-
-    try {
-      if (typeof stdin.write === 'function') {
-        if (input.length > 0) stdin.write(input)
-        if (typeof stdin.end === 'function') stdin.end()
-        return
-      }
-
-      if (typeof stdin.getWriter === 'function') {
-        const writer = stdin.getWriter()
-        if (input.length > 0) {
-          await writer.write(new TextEncoder().encode(input))
-        }
-        await writer.close()
-      }
-    } catch (error) {
-      try {
-        proc.kill('SIGKILL')
-      } catch {
-        // ignore cleanup failure
-      }
-      throw error
-    }
-  }
-
-  private buildLocalCliTurnInvocation(
-    runtime: SelectedLocalCliRuntime,
-    session: SessionProcess,
-    content: string,
-  ): { args: string[]; stdin: string } {
-    if (runtime.id === 'codex') {
-      const args = process.platform === 'win32' || process.env.WSL_DISTRO_NAME?.trim()
-        ? ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'danger-full-access']
-        : [
-            'exec',
-            '--json',
-            '--skip-git-repo-check',
-            '--sandbox',
-            'workspace-write',
-            '-c',
-            'sandbox_workspace_write.network_access=true',
-          ]
-      args.push('-c', 'default_permissions=":workspace"')
-      if (session.localCliModel?.trim() && session.localCliModel.trim() !== 'default') {
-        args.push('--model', session.localCliModel.trim())
-      }
-      args.push('-C', session.workDir)
-      return { args, stdin: content }
-    }
-
-    if (runtime.id === 'claude') {
-      const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose']
-      if (session.localCliModel?.trim() && session.localCliModel.trim() !== 'default') {
-        args.push('--model', session.localCliModel.trim())
-      }
-      return {
-        args,
-        stdin: JSON.stringify({
-          type: 'user',
-          message: {
-            role: 'user',
-            content,
-          },
-        }) + '\n',
-      }
-    }
-
-    return { args: [], stdin: content }
-  }
-
-  private buildLocalCliProcessEnv(
-    baseEnv: Record<string, string>,
-    runtime: SelectedLocalCliRuntime,
-  ): Record<string, string> {
-    const env = { ...baseEnv, ...runtime.env }
-
-    const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'PATH'
-    const existingPath = env[pathKey] ?? ''
-    const prepend = [
-      path.dirname(process.execPath),
-      ...runtime.childPathPrepend,
-      path.dirname(runtime.launchPath),
-    ]
-    const append = getWellKnownUserToolchainBins()
-    const normalize = (entry: string) =>
-      process.platform === 'win32'
-        ? entry.replace(/[\\/]+$/, '').toLowerCase()
-        : entry.replace(/[\\/]+$/, '')
-    const seen = new Set<string>()
-    const merged: string[] = []
-    for (const entry of [
-      ...prepend,
-      ...existingPath.split(path.delimiter),
-      ...append,
-    ]) {
-      if (!entry) continue
-      const normalized = normalize(entry)
-      if (seen.has(normalized)) continue
-      seen.add(normalized)
-      merged.push(entry)
-    }
-    env[pathKey] = merged.join(path.delimiter)
-    return env
-  }
-
-  private wrapLocalCliCommandForPlatform(command: string, args: string[]): string[] {
-    const extension = path.extname(command).toLowerCase()
-    if (process.platform === 'win32' && (extension === '.cmd' || extension === '.bat')) {
-      return [
-        'cmd.exe',
-        '/d',
-        '/s',
-        '/c',
-        [quoteWindowsCommandArg(command), ...args.map(quoteWindowsCommandArg)].join(' '),
-      ]
-    }
-    return [command, ...args]
-  }
-
-  private async collectLocalCliOutputStream(
-    sessionId: string,
-    stream: ReadableStream | null | undefined,
-    streamName: 'stdout' | 'stderr',
-  ): Promise<string> {
-    if (!stream) return ''
-    const reader = stream.getReader()
-    const decoder = new TextDecoder()
-    let output = ''
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        const text = decoder.decode(value, { stream: true })
-        output += text
-
-        const session = this.sessions.get(sessionId)
-        if (!session) continue
-        for (const line of text
-          .split('\n')
-          .map((entry) => entry.trim())
-          .filter(Boolean)) {
-          const lines =
-            streamName === 'stderr' ? session.stderrLines : session.stdoutLines
-          lines.push(this.redactProcessOutput(line))
-          if (lines.length > MAX_CAPTURED_PROCESS_LINES) {
-            lines.splice(0, lines.length - MAX_CAPTURED_PROCESS_LINES)
-          }
-        }
-      }
-    } catch {
-      // Output capture failure should not kill the session.
-    }
-
-    return output
-  }
-
-  private extractLocalCliAssistantText(runtimeId: string, stdout: string): string {
-    if (runtimeId === 'claude') {
-      const messages = this.parseJsonLines(stdout)
-      return messages
-        .map((message) => this.extractAssistantTextFromCliMessage(message))
-        .filter(Boolean)
-        .join('\n')
-    }
-
-    if (runtimeId === 'codex') {
-      const messages = this.parseJsonLines(stdout)
-      return messages
-        .map((message) => this.extractCodexEventText(message))
-        .filter(Boolean)
-        .join('')
-    }
-
-    return ''
-  }
-
-  private parseJsonLines(stdout: string): unknown[] {
-    const result: unknown[] = []
-    for (const line of stdout.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      try {
-        result.push(JSON.parse(trimmed))
-      } catch {
-        // Some CLIs mix progress text with JSON; ignore non-JSON lines here.
-      }
-    }
-    return result
-  }
-
-  private extractAssistantTextFromCliMessage(message: unknown): string {
-    if (!message || typeof message !== 'object') return ''
-    const record = message as Record<string, unknown>
-    if (record.type !== 'assistant') return ''
-    const nested = record.message
-    if (!nested || typeof nested !== 'object') return ''
-    const content = (nested as Record<string, unknown>).content
-    if (!Array.isArray(content)) return ''
-    return content
-      .map((block) => {
-        if (!block || typeof block !== 'object') return ''
-        const blockRecord = block as Record<string, unknown>
-        return blockRecord.type === 'text' && typeof blockRecord.text === 'string'
-          ? blockRecord.text
-          : ''
-      })
-      .filter(Boolean)
-      .join('\n')
-  }
-
-  private extractCodexEventText(message: unknown): string {
-    if (!message || typeof message !== 'object') return ''
-    const record = message as Record<string, unknown>
-    const type = typeof record.type === 'string' ? record.type : ''
-    if (!/(message|output_text|delta|completed)/i.test(type)) return ''
-
-    const directText = this.readTextField(record, ['delta', 'text', 'output_text'])
-    if (directText) return directText
-
-    const item = record.item
-    if (item && typeof item === 'object') {
-      const itemRecord = item as Record<string, unknown>
-      const itemText = this.readTextField(itemRecord, ['text', 'content', 'message'])
-      if (itemText) return itemText
-    }
-
-    const messageValue = record.message
-    if (messageValue && typeof messageValue === 'object') {
-      return this.readTextField(messageValue as Record<string, unknown>, ['text', 'content'])
-    }
-
-    return ''
-  }
-
-  private readTextField(record: Record<string, unknown>, keys: string[]): string {
-    for (const key of keys) {
-      const value = record[key]
-      if (typeof value === 'string') return value
-      if (Array.isArray(value)) {
-        const text = value
-          .map((entry) => {
-            if (typeof entry === 'string') return entry
-            if (entry && typeof entry === 'object') {
-              return this.readTextField(entry as Record<string, unknown>, ['text', 'content'])
-            }
-            return ''
-          })
-          .filter(Boolean)
-          .join('')
-        if (text) return text
-      }
-    }
-    return ''
   }
 
   respondToPermission(
@@ -995,7 +377,7 @@ export class ConversationService {
   sendInterrupt(sessionId: string): boolean {
     const session = this.sessions.get(sessionId)
     if (session?.runtimeKind === 'local_cli') {
-      if (!session.activeLocalCliProc) return false
+      if (!session.activeLocalCliTurn) return false
       this.killProcess(sessionId, session, 'SIGTERM')
       return true
     }
@@ -1279,7 +661,7 @@ export class ConversationService {
   ): Promise<void> {
     this.killProcess(sessionId, session, 'SIGTERM')
 
-    const proc = session.proc ?? session.activeLocalCliProc
+    const proc = session.proc ?? session.activeLocalCliTurn?.proc
     if (!proc) return
 
     const exited = await Promise.race([
@@ -1301,7 +683,7 @@ export class ConversationService {
     session: SessionProcess,
     signal?: NodeJS.Signals,
   ): void {
-    const proc = session.proc ?? session.activeLocalCliProc
+    const proc = session.proc ?? session.activeLocalCliTurn?.proc
     if (!proc) return
     try {
       proc.kill(signal)
@@ -1551,33 +933,9 @@ export class ConversationService {
       options?.executionMode !== 'local_cli' && typeof options?.providerId === 'string'
         ? await this.providerService.getProviderRuntimeEnv(options.providerId)
         : null
-    const selectedLocalCliRuntime = options?.executionMode === 'local_cli'
-      ? resolveSelectedLocalCliRuntimeSync({ id: options.localCliId })
-      : null
-    const selectedLocalCliContextEnv: Record<string, string> = {}
-    if (selectedLocalCliRuntime?.autoCompactWindow) {
-      selectedLocalCliContextEnv.CLAUDE_CODE_AUTO_COMPACT_WINDOW =
-        String(selectedLocalCliRuntime.autoCompactWindow)
-    }
-    if (
-      selectedLocalCliRuntime?.modelContextWindows &&
-      Object.keys(selectedLocalCliRuntime.modelContextWindows).length > 0
-    ) {
-      selectedLocalCliContextEnv.CLAUDE_CODE_MODEL_CONTEXT_WINDOWS =
-        JSON.stringify(selectedLocalCliRuntime.modelContextWindows)
-    }
-    const selectedLocalCliEnv = selectedLocalCliRuntime
-      ? {
-          BEYA_EXECUTION_MODE: 'local_cli',
-          BEYA_LOCAL_CLI_ID: selectedLocalCliRuntime.id,
-          BEYA_LOCAL_CLI_PATH: selectedLocalCliRuntime.launchPath,
-          BEYA_LOCAL_CLI_SELECTED_PATH: selectedLocalCliRuntime.executablePath,
-          ...selectedLocalCliContextEnv,
-          ...selectedLocalCliRuntime.env,
-        }
-      : options?.executionMode === 'local_cli'
-        ? { BEYA_EXECUTION_MODE: 'local_cli' }
-        : {}
+    const selectedLocalCliEnv = options?.executionMode === 'local_cli'
+      ? { BEYA_EXECUTION_MODE: 'local_cli' }
+      : {}
     const networkEnv = buildNetworkEnvironment(await loadNetworkSettings())
     if (explicitProviderEnv && options?.model?.trim()) {
       explicitProviderEnv.ANTHROPIC_MODEL = options.model.trim()

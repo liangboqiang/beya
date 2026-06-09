@@ -23,6 +23,7 @@ import { RepositoryLaunchControls } from '../shared/RepositoryLaunchControls'
 import { FileSearchMenu, type FileSearchMenuHandle } from './FileSearchMenu'
 import { LocalSlashCommandPanel, type LocalSlashCommandName } from './LocalSlashCommandPanel'
 import { ContextUsageIndicator } from './ContextUsageIndicator'
+import type { RuntimeCapabilities } from '../../types/runtime'
 import {
   getLocalizedFallbackCommands,
   filterSlashCommands,
@@ -51,6 +52,18 @@ type ChatInputProps = {
 }
 
 const EMPTY_WORKSPACE_REFERENCES: WorkspaceChatReference[] = []
+
+const LOCAL_CLI_CONTEXT_UNAVAILABLE_CAPABILITIES: RuntimeCapabilities = {
+  streaming: false,
+  tools: 'limited',
+  contextUsage: 'unavailable',
+  tokenUsage: 'unavailable',
+  prewarm: false,
+  resume: 'beya_transcript',
+  vision: false,
+  thinking: false,
+  promptInput: 'stdin',
+}
 
 function workspaceReferenceToAttachment(reference: WorkspaceChatReference): Attachment {
   return {
@@ -138,6 +151,8 @@ export function ChatInput({ variant = 'default', compact = false }: ChatInputPro
     ? `${runtimeSelectionKind}:${runtimeSelection.localCliId ?? runtimeSelection.providerId ?? 'official'}:${runtimeSelection.modelId}:${runtimeSelection.effortLevel ?? 'auto'}`
     : undefined
   const runtimeModelLabel = runtimeSelection?.modelId ?? currentModel?.name ?? currentModel?.id
+  const runtimeCapabilities = sessionState?.runtimeProfile?.capabilities ??
+    (runtimeSelectionKind === 'local_cli' ? LOCAL_CLI_CONTEXT_UNAVAILABLE_CAPABILITIES : null)
   const activeSession = useSessionStore((state) => activeTabId ? state.sessions.find((session) => session.id === activeTabId) ?? null : null)
   const loadedMessageCount = sessionState?.messages?.length ?? 0
   const messageCount = Math.max(loadedMessageCount, activeSession?.messageCount ?? 0)
@@ -1092,6 +1107,7 @@ export function ChatInput({ variant = 'default', compact = false }: ChatInputPro
                   chatState={chatState}
                   messageCount={messageCount}
                   runtimeSelectionKey={runtimeSelectionKey}
+                  runtimeCapabilities={runtimeCapabilities}
                   fallbackModelLabel={runtimeModelLabel}
                   compact={useCompactControls}
                 />

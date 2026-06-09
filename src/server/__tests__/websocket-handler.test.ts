@@ -335,6 +335,27 @@ describe('WebSocket handler session isolation', () => {
     spyOn(conversationService, 'hasSession').mockReturnValue(false)
     spyOn(conversationService, 'getSessionWorkDir').mockReturnValue(null)
     spyOn(sessionService, 'getSessionWorkDir').mockResolvedValue(workDir)
+    spyOn(ProviderService.prototype, 'listProviders').mockResolvedValue({
+      activeId: 'provider-a',
+      providers: [
+        {
+          providerId: 'provider-a',
+          displayName: 'Provider A',
+          apiKey: 'test-key',
+          authStrategy: 'api_key',
+          baseUrl: 'http://127.0.0.1:1/anthropic',
+          apiFormat: 'anthropic',
+          runtimeKind: 'anthropic_compatible',
+          modelRoles: {
+            primary: 'provider-main',
+            fast: 'provider-fast',
+            balanced: 'provider-balanced',
+            powerful: 'provider-powerful',
+          },
+          enabledModels: ['provider-main'],
+        },
+      ],
+    })
     const appendMetadata = spyOn(sessionService, 'appendSessionMetadata').mockResolvedValue()
 
     handleWebSocket.message(ws, JSON.stringify({
@@ -524,7 +545,7 @@ describe('WebSocket handler session isolation', () => {
     }))
   })
 
-  it('falls back to default runtime when a persisted local CLI is stale', async () => {
+  it('rejects startup when a stale persisted local CLI leaves no default runtime', async () => {
     const originalConfigDir = process.env.BEYA_CONFIG_DIR
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'beya-ws-runtime-'))
     process.env.BEYA_CONFIG_DIR = tmpDir
@@ -552,13 +573,13 @@ describe('WebSocket handler session isolation', () => {
         type: 'user_message',
         content: '',
       }))
-      await waitForCall(startSession)
+      await waitForAsyncHandlers()
 
-      expect(startSession.mock.calls[0]?.[3]).toEqual(expect.objectContaining({
-        permissionMode: 'default',
-        providerId: null,
-        localCliId: null,
-        executionMode: 'provider',
+      expect(startSession).not.toHaveBeenCalled()
+      expect(sentMessages(ws)).toContainEqual(expect.objectContaining({
+        type: 'error',
+        code: 'CLI_START_FAILED',
+        message: expect.stringContaining('no active provider is configured'),
       }))
     } finally {
       if (originalConfigDir === undefined) delete process.env.BEYA_CONFIG_DIR

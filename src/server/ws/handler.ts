@@ -1,10 +1,8 @@
-/**
+﻿/**
  * WebSocket connection handler
  *
- * 管理 WebSocket 连接生命周期，处理消息路由。
- * 用户消息通过 CLI 子进程（stream-json 模式）处理，
- * CLI stdout 消息被转换为 ServerMessage 并转发到 WebSocket。
- */
+ * 绠＄悊 WebSocket 杩炴帴鐢熷懡鍛ㄦ湡锛屽鐞嗘秷鎭矾鐢便€? * 鐢ㄦ埛娑堟伅閫氳繃 CLI 瀛愯繘绋嬶紙stream-json 妯″紡锛夊鐞嗭紝
+ * CLI stdout 娑堟伅琚浆鎹负 ServerMessage 骞惰浆鍙戝埌 WebSocket銆? */
 
 import type { ServerWebSocket } from 'bun'
 import type { ClientMessage, ServerMessage } from './events.js'
@@ -22,13 +20,7 @@ import {
   normalizeExecutionMode,
   type ExecutionMode,
 } from '../services/executionModeService.js'
-import {
-  localCliRuntimeService,
-  type LocalCliRuntimeInfo,
-  type LocalCliRuntimeList,
-} from '../services/localCliRuntimeService.js'
 import { deriveTitle, generateTitle, saveAiTitle } from '../services/titleService.js'
-import type { SavedProvider } from '../types/provider.js'
 import { parseSlashCommand } from '../../utils/slashCommandParsing.js'
 import {
   COMMAND_NAME_TAG,
@@ -36,6 +28,12 @@ import {
   LOCAL_COMMAND_STDOUT_TAG,
 } from '../../constants/xml.js'
 import { shouldCreateWorktreeForSessionLaunch } from '../services/repositoryLaunchService.js'
+import {
+  runtimeResolver,
+  RuntimeResolutionError,
+  type RuntimeSelectionInput,
+} from '../runtime/runtimeResolver.js'
+import type { ResolvedRuntime, RuntimeProfile } from '../runtime/protocol.js'
 
 const settingsService = new SettingsService()
 const providerService = new ProviderService()
@@ -60,8 +58,8 @@ const PENDING_PERMISSION_DISCONNECT_CLEANUP_MS = 30 * 60_000
 const sessionCleanupTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 /**
- * Track sessions where user requested stop — suppress the CLI_ERROR that
- * follows an interrupt so the frontend doesn't show "处理过程中发生错误".
+ * Track sessions where user requested stop 鈥?suppress the CLI_ERROR that
+ * follows an interrupt so the frontend doesn't show "澶勭悊杩囩▼涓彂鐢熼敊璇?.
  */
 const sessionStopRequested = new Set<string>()
 
@@ -82,6 +80,7 @@ type RuntimeOverride = {
   localCliId?: string | null
   modelId: string
   effort?: string
+  profile: RuntimeProfile
 }
 
 const runtimeOverrides = new Map<string, RuntimeOverride>()
@@ -96,178 +95,39 @@ const prewarmPendingSessions = new Set<string>()
 const prewarmedSessions = new Set<string>()
 const prewarmIdleTimers = new Map<string, ReturnType<typeof setTimeout>>()
 const DEFAULT_PREWARM_IDLE_TIMEOUT_MS = 5 * 60_000
-const VALID_EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'max'])
-
-function sanitizeRuntimeModelId(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  if (!trimmed || trimmed.length > 200) return null
-  if (!/^[A-Za-z0-9][A-Za-z0-9._/:@-]*$/.test(trimmed)) return null
-  return trimmed
-}
-
-function splitRuntimeModelContext(modelId: string): { base: string; contextSuffix: string } {
-  const colon = modelId.indexOf(':')
-  if (colon === -1) return { base: modelId, contextSuffix: '' }
-  return {
-    base: modelId.slice(0, colon),
-    contextSuffix: modelId.slice(colon),
-  }
-}
-
-function uniqueModelIds(values: Array<string | null | undefined>): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const value of values) {
-    const trimmed = value?.trim()
-    if (!trimmed || seen.has(trimmed)) continue
-    seen.add(trimmed)
-    out.push(trimmed)
-  }
-  return out
-}
-
-function getProviderModelCandidates(provider: SavedProvider): string[] {
-  const roleModels = [
-    provider.modelRoles?.primary,
-    provider.modelRoles?.fast,
-    provider.modelRoles?.balanced,
-    provider.modelRoles?.powerful,
-  ]
-  return uniqueModelIds([...(provider.enabledModels ?? []), ...roleModels])
-}
-
-function resolveProviderRuntimeModel(
-  provider: SavedProvider,
-  requestedModelId?: string | null,
-): string | null {
-  const candidates = getProviderModelCandidates(provider)
-  const candidateSet = new Set(candidates)
-  const requested = sanitizeRuntimeModelId(requestedModelId)
-  if (requested) {
-    const { base, contextSuffix } = splitRuntimeModelContext(requested)
-    if (candidateSet.has(base)) return `${base}${contextSuffix}`
-  }
-
-  const fallback = uniqueModelIds([
-    provider.modelRoles?.primary,
-    provider.modelRoles?.fast,
-    provider.modelRoles?.balanced,
-    provider.modelRoles?.powerful,
-  ])[0]
-  if (fallback && candidateSet.has(fallback)) {
-    const requestedContext = requested ? splitRuntimeModelContext(requested).contextSuffix : ''
-    return `${fallback}${requestedContext}`
-  }
-
-  if (candidates.length > 0) {
-    const requestedContext = requested ? splitRuntimeModelContext(requested).contextSuffix : ''
-    return `${candidates[0]}${requestedContext}`
-  }
-
-  return requested
-}
-
-function getLocalCliModelCandidates(cli: LocalCliRuntimeInfo): string[] {
-  const roleModels = [
-    cli.modelRoles?.primary,
-    cli.modelRoles?.fast,
-    cli.modelRoles?.balanced,
-    cli.modelRoles?.powerful,
-  ]
-  return uniqueModelIds([...(cli.models ?? []).map((model) => model.id), ...roleModels])
-}
-
-function resolveLocalCliRuntimeModel(
-  cli: LocalCliRuntimeInfo,
-  requestedModelId?: string | null,
-): string | null {
-  const candidates = getLocalCliModelCandidates(cli)
-  const candidateSet = new Set(candidates)
-  const requested = sanitizeRuntimeModelId(requestedModelId)
-  if (requested) {
-    const { base } = splitRuntimeModelContext(requested)
-    if (candidateSet.has(base) || requested === 'default') return requested
-  }
-  const fallback = uniqueModelIds([
-    cli.modelRoles?.primary,
-    cli.modelRoles?.fast,
-    cli.modelRoles?.balanced,
-    cli.modelRoles?.powerful,
-  ]).find((id) => candidateSet.has(id))
-  if (fallback) return fallback
-  return candidates[0] ?? null
-}
 
 async function resolveRuntimeOverrideFromMessage(
   message: Extract<ClientMessage, { type: 'set_runtime_config' }>,
-): Promise<RuntimeOverride | null> {
-  const requestedKind = message.kind === 'local_cli' || message.localCliId ? 'local_cli' : 'provider'
-  const effortLevel =
-    typeof message.effortLevel === 'string' ? message.effortLevel.trim() : undefined
-  if (effortLevel !== undefined && !VALID_EFFORT_LEVELS.has(effortLevel)) return null
-
-  if (requestedKind === 'local_cli') {
-    const localCliId = typeof message.localCliId === 'string' && message.localCliId.trim()
-      ? message.localCliId.trim()
-      : null
-    if (!localCliId) return null
-    const { clis } = await localCliRuntimeService.listLocalClis()
-    const cli = clis.find((candidate) => candidate.id === localCliId && candidate.available)
-    if (!cli) return null
-    const modelId = resolveLocalCliRuntimeModel(cli, sanitizeRuntimeModelId(message.modelId))
-    if (!modelId) return null
-
-    return {
-      kind: 'local_cli',
-      providerId: null,
-      localCliId,
-      modelId,
-      ...(effortLevel ? { effort: effortLevel } : {}),
-    }
-  }
-
-  const { providers, activeId } = await providerService.listProviders()
-  const requestedProviderId =
-    typeof message.providerId === 'string' && message.providerId.trim()
-      ? message.providerId.trim()
-      : activeId
-  const provider = requestedProviderId
-    ? providers.find((entry) => entry.providerId === requestedProviderId)
-    : null
-  if (!provider) return null
-  const modelId = resolveProviderRuntimeModel(provider, sanitizeRuntimeModelId(message.modelId))
-  if (!modelId) return null
-
-  return {
-    kind: 'provider',
-    providerId: provider.providerId,
-    localCliId: null,
-    modelId,
-    ...(effortLevel ? { effort: effortLevel } : {}),
-  }
+): Promise<RuntimeOverride> {
+  return runtimeOverrideFromResolved(await runtimeResolver.resolve(message))
 }
 
 async function getResolvedRuntimeFromProviderList(
   input: RuntimeOverride,
 ): Promise<RuntimeOverride | null> {
-  if (input.kind === 'local_cli') {
-    const { clis } = await localCliRuntimeService.listLocalClis()
-    const cli = clis.find((candidate) => candidate.id === input.localCliId && candidate.available)
-    if (!cli) return null
-    const modelId = resolveLocalCliRuntimeModel(cli, input.modelId)
-    if (!modelId) return null
-    return { ...input, localCliId: cli.id, modelId }
+  try {
+    return runtimeOverrideFromResolved(await runtimeResolver.resolve({
+      kind: input.kind,
+      providerId: input.providerId,
+      localCliId: input.localCliId,
+      modelId: input.modelId,
+      effort: input.effort,
+    }))
+  } catch (error) {
+    if (error instanceof RuntimeResolutionError) return null
+    throw error
   }
+}
 
-  const { providers, activeId } = await providerService.listProviders()
-  const providerId = input.providerId ?? activeId
-  if (!providerId) return null
-  const provider = providers.find((entry) => entry.providerId === providerId)
-  if (!provider) return null
-  const modelId = resolveProviderRuntimeModel(provider, input.modelId)
-  if (!modelId) return null
-  return { ...input, providerId: provider.providerId, localCliId: null, modelId }
+function runtimeOverrideFromResolved(resolved: ResolvedRuntime): RuntimeOverride {
+  return {
+    kind: resolved.kind,
+    providerId: resolved.providerId,
+    localCliId: resolved.localCliId,
+    modelId: resolved.modelId,
+    ...(resolved.effort ? { effort: resolved.effort } : {}),
+    profile: resolved.profile,
+  }
 }
 
 async function sendRepositoryStartupStatus(
@@ -524,7 +384,7 @@ async function handleUserMessage(
     triggerTitleGeneration(ws, sessionId)
   }
 
-  // 启动 CLI 子进程（如果还没有）
+  // 鍚姩 CLI 瀛愯繘绋嬶紙濡傛灉杩樻病鏈夛級
   try {
     await ensureCliSessionStarted(ws, sessionId, 'user_message')
   } catch (err) {
@@ -631,6 +491,19 @@ async function handlePrewarmSession(ws: ServerWebSocket<WebSocketData>) {
   const launchInfo = await sessionService.getSessionLaunchInfo(sessionId).catch(() => null)
   if (launchInfo?.repository) {
     console.log(`[WS] Skipping prewarm for pending repository launch session ${sessionId}`)
+    return
+  }
+
+  const runtimeSettings = await getRuntimeSettings(sessionId).catch((err) => {
+    console.warn(
+      `[WS] Skipping prewarm for ${sessionId}: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    )
+    return null
+  })
+  if (!runtimeSettings?.runtimeProfile?.capabilities.prewarm) {
+    console.log(`[WS] Skipping prewarm for ${sessionId}: runtime does not support prewarm`)
     return
   }
 
@@ -762,48 +635,17 @@ async function handleSetRuntimeConfig(
     })
     return
   }
-  const effortLevel =
-    typeof message.effortLevel === 'string' ? message.effortLevel.trim() : undefined
-  if (effortLevel !== undefined && !VALID_EFFORT_LEVELS.has(effortLevel)) {
+  let resolvedOverride: RuntimeOverride
+  try {
+    resolvedOverride = await resolveRuntimeOverrideFromMessage(message)
+  } catch (error) {
+    const message =
+      error instanceof RuntimeResolutionError
+        ? error.message
+        : 'Runtime selection is invalid.'
     sendMessage(ws, {
       type: 'error',
-      message: 'Runtime effort selection is invalid.',
-      code: 'RUNTIME_CONFIG_INVALID',
-    })
-    return
-  }
-  const kind = message.kind === 'local_cli' || message.localCliId
-    ? 'local_cli'
-    : 'provider'
-  const localCliId = typeof message.localCliId === 'string' && message.localCliId.trim()
-    ? message.localCliId.trim()
-    : null
-  if (kind === 'local_cli') {
-    if (!localCliId) {
-      sendMessage(ws, {
-        type: 'error',
-        message: 'Local CLI runtime selection is invalid.',
-        code: 'RUNTIME_CONFIG_INVALID',
-      })
-      return
-    }
-    const { clis } = await localCliRuntimeService.listLocalClis()
-    const selectedCli = clis.find((cli) => cli.id === localCliId && cli.available)
-    if (!selectedCli) {
-      sendMessage(ws, {
-        type: 'error',
-        message: 'Selected local CLI is no longer available.',
-        code: 'RUNTIME_CONFIG_INVALID',
-      })
-      return
-    }
-  }
-
-  const resolvedOverride = await resolveRuntimeOverrideFromMessage(message)
-  if (!resolvedOverride) {
-    sendMessage(ws, {
-      type: 'error',
-      message: 'Runtime selection is invalid.',
+      message,
       code: 'RUNTIME_CONFIG_INVALID',
     })
     return
@@ -811,9 +653,9 @@ async function handleSetRuntimeConfig(
 
   const nextOverride: RuntimeOverride = {
     ...resolvedOverride,
-    ...(effortLevel ? { effort: effortLevel } : {}),
   }
   const prevOverride = runtimeOverrides.get(sessionId)
+  sendRuntimeConfigResolved(ws, sessionId, nextOverride)
   if (
     prevOverride &&
     prevOverride.kind === nextOverride.kind &&
@@ -869,6 +711,30 @@ async function handleSetRuntimeConfig(
   }
 
   await persistSessionRuntimeConfig(sessionId, nextOverride)
+}
+
+function sendRuntimeConfigResolved(
+  ws: ServerWebSocket<WebSocketData>,
+  sessionId: string,
+  runtime: RuntimeOverride,
+): void {
+  sendMessage(ws, {
+    type: 'system_notification',
+    subtype: 'runtime_config',
+    data: {
+      sessionId,
+      selection: {
+        kind: runtime.kind,
+        providerId: runtime.providerId,
+        localCliId: runtime.localCliId ?? null,
+        modelId: runtime.modelId,
+        ...(runtime.effort ? { effortLevel: runtime.effort } : {}),
+      },
+      profile: runtime.profile,
+      capabilities: runtime.profile.capabilities,
+      prewarm: runtime.profile.capabilities.prewarm,
+    },
+  })
 }
 
 async function restartSessionWithPermissionMode(
@@ -1092,7 +958,7 @@ type SessionStreamState = {
   activeToolBlocks: Map<number, { toolName: string; toolUseId: string; inputJson: string; parentToolUseId?: string }>
   pendingLocalCommand?: { name: string; args: string }
   /** Tool blocks whose input JSON failed to parse in content_block_stop.
-   *  The assistant message carries the complete input — defer to that. */
+   *  The assistant message carries the complete input 鈥?defer to that. */
   pendingToolBlocks: Map<string, { toolName: string; toolUseId: string; parentToolUseId?: string }>
   toolParentUseIds: Map<string, string>
   lastApiError?: {
@@ -1118,6 +984,49 @@ function getStreamState(sessionId: string): SessionStreamState {
     sessionStreamStates.set(sessionId, state)
   }
   return state
+}
+
+function normalizeResultUsage(usage: unknown): Extract<ServerMessage, { type: 'message_complete' }>['usage'] {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
+    return { status: 'unavailable', source: 'none' }
+  }
+  const record = usage as Record<string, unknown>
+  if (record.status === 'unavailable') {
+    return {
+      status: 'unavailable',
+      source: record.source === 'local_cli' ? 'local_cli' : 'none',
+    }
+  }
+  const inputTokens = typeof record.input_tokens === 'number' ? record.input_tokens : undefined
+  const outputTokens = typeof record.output_tokens === 'number' ? record.output_tokens : undefined
+  const cacheReadTokens = typeof record.cache_read_input_tokens === 'number'
+    ? record.cache_read_input_tokens
+    : typeof record.cache_read_tokens === 'number'
+      ? record.cache_read_tokens
+      : undefined
+  const cacheCreationTokens = typeof record.cache_creation_input_tokens === 'number'
+    ? record.cache_creation_input_tokens
+    : typeof record.cache_creation_tokens === 'number'
+      ? record.cache_creation_tokens
+      : undefined
+
+  if (
+    inputTokens === undefined &&
+    outputTokens === undefined &&
+    cacheReadTokens === undefined &&
+    cacheCreationTokens === undefined
+  ) {
+    return { status: 'unavailable', source: 'none' }
+  }
+
+  return {
+    status: 'actual',
+    source: 'provider',
+    ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+    ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+    ...(cacheReadTokens !== undefined ? { cache_read_tokens: cacheReadTokens } : {}),
+    ...(cacheCreationTokens !== undefined ? { cache_creation_tokens: cacheCreationTokens } : {}),
+  }
 }
 
 function cliParentToolUseId(cliMsg: any): string | undefined {
@@ -1354,7 +1263,7 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
 
         for (const block of cliMsg.message.content) {
           if (streamState.hasReceivedStreamEvents) {
-            // Stream events handled most blocks — but any tool_use whose
+            // Stream events handled most blocks 鈥?but any tool_use whose
             // input JSON failed to parse in content_block_stop was deferred.
             // Emit those now with the complete input from the assistant message.
             if (block.type === 'tool_use' && streamState.pendingToolBlocks.has(block.id)) {
@@ -1370,7 +1279,7 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
               })
             }
           } else {
-            // No stream events received — this is the only source, process everything
+            // No stream events received 鈥?this is the only source, process everything
             if (block.type === 'thinking' && block.thinking) {
               messages.push({ type: 'thinking', text: block.thinking })
             } else if (block.type === 'text' && block.text) {
@@ -1399,8 +1308,7 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
     }
 
     case 'user': {
-      // Bug #1: 处理 tool_result 消息
-      // CLI 发送 type:'user' 消息，其中 content 包含 tool_result 块
+      // Bug #1: 澶勭悊 tool_result 娑堟伅
       const messages: ServerMessage[] = []
 
       if (isCompactSummaryMessageContent(cliMsg.message?.content)) {
@@ -1548,7 +1456,7 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
                 }]
               }
 
-              // JSON parse failed — defer to the assistant message which
+              // JSON parse failed 鈥?defer to the assistant message which
               // carries the complete, already-parsed tool input.
               console.warn(
                 `[WS] Tool input JSON parse failed for ${toolBlock.toolName} (${toolBlock.toolUseId}), deferring to assistant message`,
@@ -1579,7 +1487,6 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
     }
 
     case 'control_request': {
-      // 权限请求 — CLI 需要用户授权才能执行工具
       if (cliMsg.request?.subtype === 'can_use_tool') {
         return [{
           type: 'permission_request',
@@ -1600,15 +1507,11 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
       return []
 
     case 'result': {
-      // 对话结果（成功或错误）
-      const usage = {
-        input_tokens: cliMsg.usage?.input_tokens || 0,
-        output_tokens: cliMsg.usage?.output_tokens || 0,
-      }
+      const usage = normalizeResultUsage(cliMsg.usage)
 
       if (cliMsg.is_error) {
         // If the user requested stop, this "error" is just the interrupt
-        // result — don't show it as an error in the chat UI.
+        // result 鈥?don't show it as an error in the chat UI.
         if (sessionStopRequested.has(sessionId)) {
           sessionStopRequested.delete(sessionId)
           return [{ type: 'message_complete', usage }]
@@ -1623,7 +1526,6 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
           streamState.lastApiError = undefined
           return [{ type: 'message_complete', usage }]
         }
-        // 错误和完成消息都发送
         return [
           {
             type: 'error',
@@ -1641,15 +1543,13 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
     }
 
     case 'system': {
-      // 区分不同的 system 子类型
       const subtype = cliMsg.subtype
       if (subtype === 'api_retry') {
         const apiRetryMessage = toApiRetryServerMessage(cliMsg)
         return apiRetryMessage ? [apiRetryMessage] : []
       }
       if (subtype === 'init') {
-        // CLI 初始化完成 — 缓存 slash commands 并发送模型信息
-        // NOTE: Do NOT send status:idle here — the CLI init fires while
+        // NOTE: Do NOT send status:idle here 鈥?the CLI init fires while
         // processing the first user message, and sending idle would reset
         // the frontend's streaming state prematurely.
         cacheSessionInitMetadata(sessionId, cliMsg)
@@ -1694,7 +1594,7 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
         return []
       }
       if (subtype === 'hook_started' || subtype === 'hook_response') {
-        // Hook 执行中 — 不转发给前端
+        // Hook 鎵ц涓?鈥?涓嶈浆鍙戠粰鍓嶇
         return []
       }
       if (subtype === 'local_command' || subtype === 'local_command_output') {
@@ -1727,7 +1627,7 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
           { type: 'content_delta', text: localCommandOutput },
         ]
       }
-      // Bug #7: 处理 task/team system 消息
+      // Bug #7: 澶勭悊 task/team system 娑堟伅
       if (subtype === 'task_notification') {
         return [{
           type: 'system_notification',
@@ -1782,12 +1682,12 @@ export function translateCliMessage(cliMsg: any, sessionId: string): ServerMessa
           data: cliMsg.compact_metadata ?? cliMsg,
         }]
       }
-      // 其他 system 消息
+      // 鍏朵粬 system 娑堟伅
       return []
     }
 
     default:
-      // 未知类型 — 调试输出但不转发
+      // 鏈煡绫诲瀷 鈥?璋冭瘯杈撳嚭浣嗕笉杞彂
       console.log(`[WS] Unknown CLI message type: ${cliMsg.type}`, JSON.stringify(cliMsg).substring(0, 200))
       return []
   }
@@ -2178,6 +2078,7 @@ type RuntimeSettings = {
   localCliId?: string | null
   executionMode?: ExecutionMode
   metadata?: Record<string, unknown>
+  runtimeProfile?: RuntimeProfile
 }
 
 function setSessionRuntimeMetadata(
@@ -2197,13 +2098,6 @@ function getSessionRuntimeMetadata(
   return runtimeMetadataOverrides.get(sessionId)
 }
 
-function isKnownRuntimeProviderId(
-  providerId: string,
-  providers: Array<{ providerId: string }>,
-): boolean {
-  return providers.some((provider) => provider.providerId === providerId)
-}
-
 async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> {
   const launchInfo = sessionId
     ? await sessionService.getSessionLaunchInfo(sessionId).catch(() => null)
@@ -2211,7 +2105,7 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
   const sessionPermissionMode = sessionId
     ? launchInfo?.permissionMode ?? await getSessionPermissionMode(sessionId)
     : undefined
-  const persistedRuntimeOverride =
+  const persistedRuntimeSelection =
     launchInfo?.runtimeModelId
       ? {
           kind: launchInfo.runtimeKind ?? (launchInfo.runtimeLocalCliId ? 'local_cli' : 'provider'),
@@ -2219,10 +2113,10 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
           localCliId: launchInfo.runtimeLocalCliId ?? null,
           modelId: launchInfo.runtimeModelId,
           ...(launchInfo.effortLevel ? { effort: launchInfo.effortLevel } : {}),
-        } satisfies RuntimeOverride
+        } satisfies RuntimeSelectionInput
       : undefined
   const runtimeOverride = sessionId
-    ? runtimeOverrides.get(sessionId) ?? persistedRuntimeOverride
+    ? runtimeOverrides.get(sessionId)
     : undefined
   if (runtimeOverride) {
     const resolvedRuntime = await getResolvedRuntimeFromProviderList(runtimeOverride)
@@ -2246,9 +2140,43 @@ async function getRuntimeSettings(sessionId?: string): Promise<RuntimeSettings> 
       effort: resolvedRuntime.effort,
       thinking,
       providerId: resolvedRuntime.providerId,
-      localCliId: null,
-      executionMode: 'provider',
+      localCliId: resolvedRuntime.localCliId,
+      executionMode: resolvedRuntime.kind,
       metadata: getSessionRuntimeMetadata(sessionId),
+      runtimeProfile: resolvedRuntime.profile,
+    }
+  }
+
+  if (persistedRuntimeSelection && sessionId) {
+    const resolvedRuntime = await runtimeResolver.resolve(persistedRuntimeSelection)
+      .then(runtimeOverrideFromResolved)
+      .catch((error) => {
+        if (error instanceof RuntimeResolutionError) return null
+        throw error
+      })
+    if (!resolvedRuntime) {
+      runtimeOverrides.delete(sessionId)
+      const defaults = await getDefaultRuntimeSettings()
+      return {
+        ...defaults,
+        permissionMode: sessionPermissionMode ?? defaults.permissionMode,
+        effort: launchInfo?.effortLevel ?? defaults.effort,
+        metadata: getSessionRuntimeMetadata(sessionId),
+      }
+    }
+    runtimeOverrides.set(sessionId, resolvedRuntime)
+    const userSettings = await settingsService.getUserSettings()
+    const thinking = resolveDesktopThinkingMode(userSettings)
+    return {
+      permissionMode: sessionPermissionMode ?? await settingsService.getPermissionMode().catch(() => undefined),
+      model: resolvedRuntime.modelId,
+      effort: resolvedRuntime.effort,
+      thinking,
+      providerId: resolvedRuntime.providerId,
+      localCliId: resolvedRuntime.localCliId,
+      executionMode: resolvedRuntime.kind,
+      metadata: getSessionRuntimeMetadata(sessionId),
+      runtimeProfile: resolvedRuntime.profile,
     }
   }
 
@@ -2267,30 +2195,10 @@ async function getSessionPermissionMode(sessionId: string): Promise<string | und
 }
 
 async function getDefaultRuntimeSettings(): Promise<RuntimeSettings> {
-  // Check if a custom provider is active
-  const { providers, activeId } = await providerService.listProviders()
-  let resolvedActiveId = activeId
-  if (activeId && !isKnownRuntimeProviderId(activeId, providers)) {
-    console.warn(`[WS] Active provider id is stale, falling back to no provider: ${activeId}`)
-    resolvedActiveId = null
-  }
-
   const userSettings = await settingsService.getUserSettings()
   const executionMode = normalizeExecutionMode(userSettings.executionMode)
-  const runtimeProviderId = executionMode === 'provider' ? resolvedActiveId : null
-  let runtimeLocalCliId: string | null = null
-  let localCliModel: string | undefined
-  if (executionMode === 'local_cli') {
-    const { activeId: activeLocalCliId, clis } = await localCliRuntimeService.listLocalClis()
-    const selectedCli =
-      clis.find((cli) => cli.id === activeLocalCliId && cli.available) ??
-      clis.find((cli) => cli.available) ??
-      null
-    runtimeLocalCliId = selectedCli?.id ?? null
-    localCliModel = selectedCli?.modelRoles.primary || selectedCli?.models[0]?.id
-  }
-  const providerSettings = runtimeProviderId
-    ? await providerService.getManagedSettings()
+  const providerSettings = executionMode === 'provider'
+    ? await providerService.getManagedSettings().catch(() => undefined)
     : undefined
   const modelSettings = providerSettings ?? (executionMode === 'provider' ? userSettings : {})
   const modelContext =
@@ -2303,37 +2211,27 @@ async function getDefaultRuntimeSettings(): Promise<RuntimeSettings> {
       : undefined
   const thinking = resolveDesktopThinkingMode(userSettings)
 
-  let model: string | undefined
-  if (runtimeProviderId) {
-    // Provider is active — only consult provider-managed Beya settings.
-    // Global ~/.beya/settings.json model values must not bleed into provider mode.
-    const baseModel =
-      typeof modelSettings.model === 'string' && modelSettings.model.trim()
-        ? modelSettings.model
-        : ''
-    if (baseModel) {
-      model = baseModel
-      if (modelContext) model += `:${modelContext}`
-    }
-  } else if (executionMode === 'provider') {
-    // No provider — pass model normally
-    const baseModel =
-      typeof userSettings.model === 'string' && userSettings.model.trim()
-        ? userSettings.model
-        : undefined
-    model = baseModel ? (modelContext ? `${baseModel}:${modelContext}` : baseModel) : undefined
-  } else if (executionMode === 'local_cli') {
-    model = localCliModel
-  }
-
+  const baseModel =
+    typeof modelSettings.model === 'string' && modelSettings.model.trim()
+      ? modelSettings.model.trim()
+      : undefined
+  const requestedModelId = baseModel
+    ? (modelContext ? `${baseModel}:${modelContext}` : baseModel)
+    : undefined
+  const resolvedRuntime = await runtimeResolver.resolveDefault({
+    executionMode,
+    requestedModelId,
+    effort,
+  })
   return {
     permissionMode: await settingsService.getPermissionMode().catch(() => undefined),
-    model,
-    effort,
+    model: resolvedRuntime.modelId,
+    effort: resolvedRuntime.effort,
     thinking,
-    providerId: runtimeProviderId,
-    localCliId: runtimeLocalCliId,
-    executionMode,
+    providerId: resolvedRuntime.providerId,
+    localCliId: resolvedRuntime.localCliId,
+    executionMode: resolvedRuntime.kind,
+    runtimeProfile: resolvedRuntime.profile,
   }
 }
 

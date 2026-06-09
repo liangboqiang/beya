@@ -908,6 +908,26 @@ describe('WebSocket Chat Integration', () => {
     }
     throw new Error(`Timed out waiting for ${label}`)
   }
+
+  async function ensureDefaultProviderActive(): Promise<void> {
+    const providerService = new ProviderService()
+    const provider = await providerService.addProvider({
+      providerId: 'mock-default-provider',
+      displayName: 'Mock Default Provider',
+      apiKey: 'mock-default-key',
+      baseUrl: 'http://127.0.0.1:1/anthropic',
+      apiFormat: 'anthropic',
+      modelRoles: {
+        primary: 'mock-powerful',
+        fast: 'mock-fast',
+        balanced: 'mock-balanced',
+        powerful: 'mock-powerful',
+      },
+      enabledModels: ['mock-fast', 'mock-balanced', 'mock-powerful'],
+    })
+    await providerService.activateProvider(provider.providerId)
+  }
+
   const originalCliPath = process.env.CLAUDE_CLI_PATH
 
   beforeAll(async () => {
@@ -923,6 +943,7 @@ describe('WebSocket Chat Integration', () => {
     server = startServer(port, '127.0.0.1')
     baseUrl = `http://127.0.0.1:${port}`
     wsUrl = `ws://127.0.0.1:${port}`
+    await ensureDefaultProviderActive()
   })
 
   afterAll(async () => {
@@ -1201,7 +1222,7 @@ describe('WebSocket Chat Integration', () => {
       const messages = await runTurn(sessionId, 'Hello without thinking')
 
       expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
-      expect(startOptions).toEqual([{ thinking: 'disabled', model: undefined }])
+      expect(startOptions).toEqual([{ thinking: 'disabled', model: 'mock-powerful' }])
     } finally {
       conversationService.startSession = originalStartSession as typeof conversationService.startSession
       conversationService.stopSession(sessionId)
@@ -1288,7 +1309,7 @@ describe('WebSocket Chat Integration', () => {
       for (const sessionId of sessionIds) {
         conversationService.stopSession(sessionId)
       }
-      await providerService.deactivateProvider()
+      await ensureDefaultProviderActive()
       await fs.writeFile(path.join(tmpDir, 'settings.json'), '{}\n', 'utf-8')
     }
   }, 20_000)
@@ -1892,7 +1913,7 @@ describe('WebSocket Chat Integration', () => {
     } finally {
       conversationService.startSession = originalStartSession
       conversationService.stopSession(sessionId)
-      await providerService.deactivateProvider()
+      await ensureDefaultProviderActive()
     }
   }, 20_000)
 
@@ -2114,7 +2135,7 @@ describe('WebSocket Chat Integration', () => {
       )
 
       expect(startCalls[0]).toMatchObject({ sessionId })
-      expect(startCalls[0]?.options?.providerId).toBeNull()
+      expect(startCalls[0]?.options?.providerId).toBe('mock-default-provider')
       expect(startCalls[1]).toMatchObject({
         sessionId,
         options: {
@@ -2238,7 +2259,7 @@ describe('WebSocket Chat Integration', () => {
 
       expect(startCalls).toHaveLength(2)
       expect(startCalls[0]).toMatchObject({ sessionId })
-      expect(startCalls[0]?.options?.providerId).toBeNull()
+      expect(startCalls[0]?.options?.providerId).toBe('mock-default-provider')
       expect(startCalls[1]).toMatchObject({
         sessionId,
         options: {
@@ -2697,6 +2718,14 @@ describe('WebSocket Chat Integration', () => {
     const { sessionId } = await createRes.json() as { sessionId: string }
 
     const staleProviderId = crypto.randomUUID()
+    await sessionService.appendSessionMetadata(sessionId, {
+      workDir: process.cwd(),
+      runtimeKind: 'provider',
+      runtimeProviderId: staleProviderId,
+      runtimeLocalCliId: null,
+      runtimeModelId: 'stale-model',
+    })
+
     const originalStartSession = conversationService.startSession.bind(conversationService)
     const startCalls: Array<{
       sessionId: string
@@ -2727,11 +2756,6 @@ describe('WebSocket Chat Integration', () => {
           messages.push(msg)
 
           if (msg.type === 'connected') {
-            ws.send(JSON.stringify({
-              type: 'set_runtime_config',
-              providerId: staleProviderId,
-              modelId: 'stale-model',
-            }))
             ws.send(JSON.stringify({ type: 'user_message', content: 'resume old session' }))
             return
           }
@@ -2769,7 +2793,7 @@ describe('WebSocket Chat Integration', () => {
       ws.close()
       conversationService.startSession = originalStartSession
       conversationService.stopSession(sessionId)
-      await providerService.deactivateProvider()
+      await ensureDefaultProviderActive()
     }
   }, 20_000)
 
@@ -2807,23 +2831,21 @@ describe('WebSocket Chat Integration', () => {
     }) as typeof conversationService.startSession
 
     try {
-      const messages = await runTurn(sessionId, 'default runtime without removed ChatGPT Official provider')
+      const messages = await runTurn(sessionId, 'default runtime without removed ChatGPT Official provider', true)
 
-      expect(startCalls).toHaveLength(1)
-      expect(startCalls[0]).toMatchObject({
-        sessionId,
-        options: {
-          providerId: null,
-        },
-      })
-      expect(messages.some((msg) => msg.type === 'message_complete')).toBe(true)
+      expect(startCalls).toHaveLength(0)
+      expect(messages).toContainEqual(expect.objectContaining({
+        type: 'error',
+        code: 'CLI_START_FAILED',
+        message: expect.stringContaining('no active provider is configured'),
+      }))
       await expect(providerService.listProviders()).resolves.toMatchObject({
         activeId: null,
       })
     } finally {
       conversationService.startSession = originalStartSession
       conversationService.stopSession(sessionId)
-      await providerService.deactivateProvider()
+      await ensureDefaultProviderActive()
     }
   }, 20_000)
 

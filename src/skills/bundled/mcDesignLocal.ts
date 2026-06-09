@@ -1,4 +1,5 @@
 import { registerBundledSkill } from '../bundledSkills.js'
+import { getNxToolCatalog } from '../../server/services/mcDesignNxRuntime.js'
 
 const MC_DESIGN_LOCAL_PROMPT = `# MC Design Local：零部件设计智能体
 
@@ -17,7 +18,7 @@ const MC_DESIGN_LOCAL_PROMPT = `# MC Design Local：零部件设计智能体
 
 每次进入该 skill 后，先调用 \`mc_design_plan_workflow\`。根据返回的 \`intent\` 选择后续工具，不要把所有任务固定跑成一条流水线。
 
-- \`guided_design\`：用户只说“设计一个连杆/曲轴/凸轮轴”等模糊需求时，先引导补齐关键输入，不要自动查询任务、打开 NX、生成报告或 DFMEA。
+- \`guided_design\`：用户只说"设计一个连杆/曲轴/凸轮轴"等模糊需求时，先引导补齐关键输入，不要自动查询任务、打开 NX、生成报告或 DFMEA。
 - \`task_execution\`：只有用户明确提到任务号、IPM/ECS/TC/ECR/QPP、查询或执行任务时，才调用 \`mc_design_query_tasks\`。
 - \`parameter_modeling\`：先推荐模板和估算参数，再准备模板工作区，确认后调用 NX 参数工具写入。
 - \`direct_parameter_update\`：用户直接给 NX 标准表达式或参数修改要求时，仍必须先复制模板工作区并确认写入范围。
@@ -26,6 +27,19 @@ const MC_DESIGN_LOCAL_PROMPT = `# MC Design Local：零部件设计智能体
 - \`report_generation\`：只有用户明确要求设计说明书、报告、doc 或 docx 时才生成报告；DFMEA 也必须显式请求。
 - \`drawing_template_update\`：当前只支持连杆图纸模板更新和打印；曲轴/凸轮轴图纸请求应返回 blocker。
 - \`retrieval_comparison\`：只做本地资料检索和对比，不触发 NX、报告或写回。
+
+## NX Plugin 工具调用规范
+
+调用 \`mc_design_nx_call_tool\` 时，参数格式为：
+\`\`\`
+{
+  "tool": "<见下方NX工具列表中的工具名>",
+  "confirmed": true,
+  "arguments": { "<参数名>": "<值>", ... }
+}
+\`\`\`
+
+所有 NX 工具必须先通过 \`mc_design_nx_health\` 确认 plugin 在线。必须先调用 \`mc_design_find_nx\` 确认 NX 安装可用。操作模型前必须先用 \`mc_design_open_nx\` 确保 NX 运行，再用工具列表中的 \`nx_open_part\` 打开部件。写入参数前必须先用 \`nx_get_drive_params_list\` 读取当前驱动参数。
 
 ## 输出要求
 
@@ -65,9 +79,10 @@ export function registerMcDesignLocalSkill(): void {
     allowedTools: LOCAL_TOOL_NAMES,
     userInvocable: true,
     async getPromptForCommand(args) {
+      const nxCatalog = getNxToolCatalog()
       const prompt = args.trim()
-        ? `${MC_DESIGN_LOCAL_PROMPT}\n\n## User Request\n\n${args}`
-        : MC_DESIGN_LOCAL_PROMPT
+        ? `${MC_DESIGN_LOCAL_PROMPT}\n\n${nxCatalog}\n\n## User Request\n\n${args}`
+        : `${MC_DESIGN_LOCAL_PROMPT}\n\n${nxCatalog}`
       return [{ type: 'text', text: prompt }]
     },
   })

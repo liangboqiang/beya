@@ -34,11 +34,6 @@ replacing the managed mc-design block.
 
 ## Source Index
 
-The initial assets were distilled or copied from:
-
-- `E:\A0_Projects\A1_Dynamics_Design_LM\mc-design`
-- `F:\Desktop\压缩包归档`
-- `F:\Desktop\连杆2+图纸`
-
-Do not point runtime tools back to those source paths. Tools should read this
-directory first so the local chain is reproducible from this project checkout.
+The initial assets were distilled from local project sources. Do not point
+runtime tools back to external paths. Tools should read this directory first so
+the local chain is reproducible from this project checkout.

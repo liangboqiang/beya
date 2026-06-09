@@ -494,6 +494,9 @@ function fakeNxFetch(): typeof globalThis.fetch {
     if (toolName === 'Test') {
       return jsonResponse({ ok: true, data: { passed: true } })
     }
+    if (toolName === 'OpenPart') {
+      return jsonResponse({ ok: true, data: { part_opened: true } })
+    }
     if (toolName === 'GetWorkPartInfo') {
       return jsonResponse({
         ok: true,

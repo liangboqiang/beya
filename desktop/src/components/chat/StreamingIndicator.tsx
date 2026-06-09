@@ -106,9 +106,9 @@ export function StreamingIndicator() {
           {formatElapsed(elapsedSeconds)}
         </span>
       )}
-      {tokenUsage.output_tokens > 0 && (
+      {tokenUsage.status !== 'unavailable' && (tokenUsage.output_tokens ?? 0) > 0 && (
         <span className="text-[10px] text-[var(--color-text-tertiary)]">
-          · ↓ {tokenUsage.output_tokens}
+          · ↓ {tokenUsage.output_tokens ?? 0}
         </span>
       )}
     </div>

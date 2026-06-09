@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process'
 import { access, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, normalize, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { existsSync } from 'node:fs'
 import type { JsonObject } from '../types/serverRuntime.js'
 
 const execFileAsync = promisify(execFile)
@@ -70,6 +71,101 @@ const REQUIRED_PROJECT_NX_PLUGIN_FILES = [
   'sdk/NXSDK.dll',
 ]
 
+const NX_MANIFEST_PATH = join(PROJECT_ROOT, 'runtime', 'mc-design', 'dependencies', 'resources', 'nx_tools_manifest.json')
+
+type NxToolManifestEntry = {
+  name: string
+  namespace: string
+  source: string
+  description: string
+  danger_level: string
+  requires_connection: boolean
+  original_name: string
+  category: string
+  parameters: Array<{ name: string; type: string; isOptional: boolean }>
+  input_schema: {
+    type: string
+    properties: Record<string, unknown>
+    required?: string[]
+  }
+}
+
+type NxToolManifest = {
+  generated_by: string
+  registration_time: string
+  tools: NxToolManifestEntry[]
+}
+
+let cachedManifest: NxToolManifest | null = null
+
+function loadNxToolManifest(): NxToolManifest {
+  if (cachedManifest) return cachedManifest
+  if (!existsSync(NX_MANIFEST_PATH)) {
+    cachedManifest = { generated_by: 'fallback', registration_time: 'unknown', tools: [] }
+    return cachedManifest
+  }
+  try {
+    const raw = JSON.parse(readFileSync(NX_MANIFEST_PATH, 'utf8')) as unknown
+    cachedManifest = {
+      generated_by: String((raw as Record<string, unknown>).generated_by ?? 'unknown'),
+      registration_time: String((raw as Record<string, unknown>).registration_time ?? 'unknown'),
+      tools: Array.isArray((raw as Record<string, unknown>).tools)
+        ? ((raw as Record<string, unknown>).tools as Array<Record<string, unknown>>).map(t => ({
+          name: String(t.name ?? ''),
+          namespace: String(t.namespace ?? ''),
+          source: String(t.source ?? ''),
+          description: String(t.description ?? ''),
+          danger_level: String(t.danger_level ?? 'read'),
+          requires_connection: Boolean(t.requires_connection),
+          original_name: String(t.original_name ?? ''),
+          category: String(t.category ?? ''),
+          parameters: Array.isArray(t.parameters)
+            ? (t.parameters as Array<Record<string, unknown>>).map(p => ({
+              name: String(p.name ?? ''),
+              type: String(p.type ?? ''),
+              isOptional: Boolean(p.isOptional),
+            }))
+            : [],
+          input_schema: {
+            type: 'object',
+            properties: (t.input_schema as Record<string, unknown>)?.properties as Record<string, unknown> ?? {},
+            required: Array.isArray((t.input_schema as Record<string, unknown>)?.required)
+              ? ((t.input_schema as Record<string, unknown>).required as string[])
+              : undefined,
+          },
+        }))
+        : [],
+    }
+    return cachedManifest
+  } catch {
+    cachedManifest = { generated_by: 'fallback', registration_time: 'unknown', tools: [] }
+    return cachedManifest
+  }
+}
+
+export function getNxToolCatalog(): string {
+  const manifest = loadNxToolManifest()
+  if (manifest.tools.length === 0) return ''
+
+  const lines: string[] = ['## 可用 NX Plugin 工具', '']
+  for (const tool of manifest.tools) {
+    const required = tool.parameters.filter(p => !p.isOptional).map(p => `${p.name}: ${p.type}`).join(', ')
+    const optional = tool.parameters.filter(p => p.isOptional).map(p => `${p.name}: ${p.type}`).join(', ')
+    const params = [
+      required ? `必填(${required})` : '',
+      optional ? `可选(${optional})` : '',
+    ].filter(Boolean).join(' ')
+
+    lines.push(`- \`${tool.name}\` (→ ${tool.original_name}) ${tool.description}。参数: ${params || '无参数'}。危险级别: ${tool.danger_level}`)
+  }
+
+  return lines.join('\n')
+}
+
+export function getNxToolNames(): string[] {
+  return loadNxToolManifest().tools.map(t => t.name)
+}
+
 const NX_TOOL_NAME_MAP: Record<string, string> = {
   nx_test: 'Test',
   nx_get_work_part_info: 'GetWorkPartInfo',
@@ -78,6 +174,7 @@ const NX_TOOL_NAME_MAP: Record<string, string> = {
   nx_find_params: 'FindParams',
   nx_update_param: 'UpdateParam',
   nx_batch_update_params: 'BatchUpdateParams',
+  nx_create_param: 'CreateParam',
   nx_open_part: 'OpenPart',
   nx_open_tcpart: 'OpenTCPart',
   nx_open_tc_drawing: 'OpenTcDrawing',
@@ -85,15 +182,79 @@ const NX_TOOL_NAME_MAP: Record<string, string> = {
   nx_open_drawing_sheet: 'OpenDrawingSheet',
   nx_update_drawings: 'Updatedrawings',
   nx_create_image: 'CreateImage',
+  nx_create_new_part: 'CreateNewPart',
   nx_fit_view: 'FitView',
   nx_switch_view: 'SwitchView',
   nx_get_all_view_names: 'GetAllViewNames',
   nx_get_view_style: 'GetViewStyle',
   nx_set_view_style: 'SetViewStyle',
+  nx_rotate_and_scale_view: 'RotateAndScaleView',
+  nx_high_light_dim: 'HighLightDim',
+  nx_exit_animation: 'ExitAnimation',
   nx_get_optimization_tool_guide: 'GetOptimizationToolGuide',
   nx_validate_optimization_study: 'ValidateOptimizationStudy',
   nx_build_optimization_objective_expression: 'BuildOptimizationObjectiveExpression',
   nx_run_optimization_study: 'RunOptimizationStudy',
+  nx_fs_exists: 'fs_exists',
+  nx_fs_read_bytes: 'fs_read_bytes',
+  nx_fs_write_bytes: 'fs_write_bytes',
+  nx_fs_copy: 'fs_copy',
+}
+
+const NX_PARAM_ALIASES: Record<string, string> = {
+  part_path: 'path',
+  partPath: 'path',
+  file_path: 'path',
+  prt_path: 'path',
+  prtPath: 'path',
+  item_id: 'itemID',
+  itemId: 'itemID',
+  itemid: 'itemID',
+  item_rev: 'itemRev',
+  itemRev: 'itemRev',
+  itemrev: 'itemRev',
+  draw_sheet_name: 'drawSheetName',
+  drawSheetNameAlias: 'drawSheetName',
+  sheet_name: 'drawSheetName',
+  sheetName: 'drawSheetName',
+  image_path: 'filePath',
+  imagePath: 'filePath',
+  img_path: 'filePath',
+  output_path: 'filePath',
+  outputPath: 'filePath',
+  view_name: 'view_name',
+  viewName: 'view_name',
+  style_type: 'style_type',
+  styleType: 'style_type',
+  std_id: 'std_id',
+  stdId: 'std_id',
+  stdid: 'std_id',
+  param_name: 'std_id',
+  paramName: 'std_id',
+  exp_name: 'expName',
+  expNameAlias: 'expName',
+  is_high_asso: 'isHighAssoOBjI',
+  highAsso: 'isHighAssoOBjI',
+  folder_path: 'folder_path',
+  folderPath: 'folder_path',
+  folder: 'folder_path',
+  part_name: 'part_name',
+  partName: 'part_name',
+  expression_list: 'expressions',
+  expressionList: 'expressions',
+  params: 'expressions',
+  updates: 'expressions',
+  src_path: 'src_path',
+  srcPath: 'src_path',
+  source: 'src_path',
+  dst_path: 'dst_path',
+  dstPath: 'dst_path',
+  dest: 'dst_path',
+  target: 'dst_path',
+  base64: 'base64',
+  data: 'base64',
+  bytes: 'base64',
+  overwrite: 'overwrite',
 }
 
 const WRITE_NX_TOOLS = new Set([
@@ -433,19 +594,39 @@ export async function callNxPluginTool(
   options: NxRuntimeOptions = {},
 ): Promise<JsonObject> {
   const originalName = resolveNxToolName(toolName)
+  const normalizedArgs = normalizePluginArgs(originalName, args)
   const baseUrl = nxPluginBaseUrl(options)
   const result = await fetchNxJson(`${baseUrl}/tools/${encodeURIComponent(originalName)}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(args),
+    body: JSON.stringify(normalizedArgs),
   })
   return {
     ok: isPluginOk(result),
     tool: toolName,
     originalTool: originalName,
     baseUrl,
+    args: normalizedArgs,
     result: result as JsonObject,
   }
+}
+
+function normalizePluginArgs(toolName: string, args: JsonObject): JsonObject {
+  const normalized: JsonObject = {}
+  for (const [key, raw] of Object.entries(args)) {
+    const mappedKey = NX_PARAM_ALIASES[key] ?? NX_PARAM_ALIASES[key.toLowerCase()] ?? key
+    let value = raw
+    if (typeof value === 'string' && (mappedKey === 'path' || mappedKey === 'filePath' || mappedKey === 'src_path' || mappedKey === 'dst_path')) {
+      value = normalizeWindowsPath(value as string)
+    }
+    if (mappedKey !== key && normalized[mappedKey]) continue
+    normalized[mappedKey] = value
+  }
+  return normalized
+}
+
+function normalizeWindowsPath(path: string): string {
+  return path.replace(/\\/g, '/')
 }
 
 export function isNxWriteTool(toolName: string): boolean {

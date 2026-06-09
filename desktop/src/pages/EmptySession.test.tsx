@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import '@testing-library/jest-dom'
+import type { RuntimeProfile } from '../types/runtime'
 
 const mocks = vi.hoisted(() => ({
   createSession: vi.fn(),
@@ -412,8 +413,48 @@ describe('EmptySession', () => {
           modelId: 'model-explicit',
         },
       ],
-      ['draft-session', { type: 'prewarm_session' }],
+      [
+        'draft-session',
+        {
+          type: 'user_message',
+          content: 'draft question',
+          attachments: [],
+        },
+      ],
     ])
+    expect(mocks.wsSend).not.toHaveBeenCalledWith('draft-session', { type: 'prewarm_session' })
+
+    const profile: RuntimeProfile = {
+      id: 'provider:provider-explicit',
+      kind: 'provider',
+      displayName: 'Provider Explicit',
+      defaultModelId: 'model-explicit',
+      models: [{ id: 'model-explicit', displayName: 'model-explicit' }],
+      capabilities: {
+        streaming: true,
+        tools: 'native',
+        contextUsage: 'actual',
+        tokenUsage: 'actual',
+        prewarm: true,
+        resume: 'native',
+        vision: false,
+        thinking: false,
+        promptInput: 'sdk',
+      },
+    }
+    act(() => {
+      useChatStore.getState().handleServerMessage('draft-session', {
+        type: 'system_notification',
+        subtype: 'runtime_config',
+        data: {
+          prewarm: true,
+          profile,
+          capabilities: profile.capabilities,
+        },
+      })
+    })
+
+    expect(mocks.wsSend).toHaveBeenCalledWith('draft-session', { type: 'prewarm_session' })
   })
 
   it('uses native desktop file paths for draft attachments', async () => {

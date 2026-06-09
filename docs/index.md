@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Beya
   text: 先进动力与车辆智能控制研发工作台
-  tagline: 基于泄露源码修复，支持接入任意 Anthropic 兼容 API（MiniMax、OpenRouter 等）
+  tagline: 支持接入任意 Anthropic 兼容 API（MiniMax、OpenRouter 等）
   image:
     src: /images/logo-horizontal.png
     alt: Beya

@@ -139,6 +139,17 @@ describe('anthropicToOpenaiChat', () => {
     expect(anthropicToOpenaiChat(highReq).reasoning_effort).toBe('high')
   })
 
+  test('can disable reasoning_effort for providers without thinking support', () => {
+    const req: AnthropicRequest = {
+      model: 'qwen',
+      max_tokens: 100,
+      messages: [{ role: 'user', content: 'Hi' }],
+      thinking: { type: 'enabled', budget_tokens: 4096 },
+    }
+
+    expect(anthropicToOpenaiChat(req, { passReasoningEffort: false }).reasoning_effort).toBeUndefined()
+  })
+
   test('passes explicit thinking toggle for DeepSeek-compatible chat proxies', () => {
     const req: AnthropicRequest = {
       model: 'deepseek-v4-flash',

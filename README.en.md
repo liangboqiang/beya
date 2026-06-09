@@ -12,14 +12,14 @@
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/tju-apvic/beya)](https://github.com/tju-apvic/beya/pulls)
 [![中文](https://img.shields.io/badge/🇨🇳_中文-Available-green)](README.md)
 [![English](https://img.shields.io/badge/🇺🇸_English-当前-blue)](README.en.md)
-[![Docs](https://img.shields.io/badge/📖_Documentation-Visit-FF7A00)](https://github.com/tju-apvic/beya)
+[![Docs](https://img.shields.io/badge/📖_Documentation-Visit-FF7A00)](docs/en/)
 
 </div>
 
 Beya is a local research workspace for Tianjin University's Advanced Power and Vehicle Intelligent Control group, bringing code, simulation scripts, experiment analysis, and automated tasks into one desktop workflow.
 
 <p align="center">
-  <a href="#desktop-preview">Desktop Preview</a> · <a href="#install-the-desktop-app">Install</a> · <a href="#desktop-highlights">Highlights</a> · <a href="#sponsorship--partnership">Sponsorship</a> · <a href="#more-documentation">More Docs</a>
+  <a href="#desktop-preview">Desktop Preview</a> · <a href="#install-the-desktop-app">Install</a> · <a href="#desktop-highlights">Highlights</a> · <a href="#more-documentation">More Docs</a>
 </p>
 
 ---
@@ -57,15 +57,25 @@ Beya brings sessions, multi-project navigation, branch / Worktree controls, righ
 2. On first launch, configure your model provider, API key, and default model in Settings.
 3. If macOS blocks the app on first open, follow the [desktop installation guide](docs/desktop/04-installation.md) for Gatekeeper steps.
 
-## Run the CLI from Source
+## Run from Source
 
-For users who want to debug the underlying CLI, server, or local development flow:
+The project provides a unified launcher `start-beya` for Windows (.cmd / .ps1).
 
 ```bash
 bun install
 cp .env.example .env
-./bin/beya
+
+# Web UI + backend (default)
+.\start-beya.cmd
+
+# CLI mode
+.\start-beya.cmd -Mode cli
+
+# Show all launch modes
+.\start-beya.cmd -Mode help
 ```
+
+Launch modes: `web` (default), `cli`, `desktop`, `tauri`, `docs`, `telegram`, `feishu`, `wechat`, `dingtalk`.
 
 See [environment variables](docs/en/guide/env-vars.md) and [global usage](docs/en/guide/global-usage.md) for more configuration options.
 
@@ -101,73 +111,8 @@ See [environment variables](docs/en/guide/env-vars.md) and [global usage](docs/e
 | [Desktop App](docs/desktop/) | Tauri 2 + React GUI client — [Quick Start](docs/desktop/01-quick-start.md) \| [Architecture](docs/desktop/02-architecture.md) \| [Installation](docs/desktop/04-installation.md) |
 | [Global Usage](docs/en/guide/global-usage.md) | Run beya from any directory |
 | [FAQ](docs/en/guide/faq.md) | Common error troubleshooting |
-| [Source Fixes](docs/en/reference/fixes.md) | Fixes compared with the original leaked source |
+| [Source Fixes](docs/en/reference/fixes.md) | Fixes compared with the original source |
 | [Project Structure](docs/en/reference/project-structure.md) | Code directory structure |
-
----
-
-## Sponsorship & Partnership
-
-This project is maintained in the author's spare time. Corporate or individual sponsorships are welcome to support ongoing development. Custom features, integrations, and business partnerships are also open for discussion.
-
-<table>
-  <thead>
-    <tr>
-      <th width="220">Sponsor</th>
-      <th align="left">Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center" valign="middle">
-        <a href="https://jiekou.ai/referral?invited_code=OBNU3K">
-          <img src="docs/images/sponsors/jiekou-logo.svg" width="72" alt="JieKou AI"><br>
-          <strong>接口AI</strong>
-        </a>
-      </td>
-      <td valign="middle">
-        Thanks to <a href="https://jiekou.ai/referral?invited_code=OBNU3K">JieKou AI</a> for sponsoring this project. JieKou AI provides official model resources with stable, high-performance API access. Subscription bundles are priced at 20% off the official rate; new users who register through <a href="https://jiekou.ai/referral?invited_code=OBNU3K">this link</a> and bind GitHub can claim a $3 coupon.
-      </td>
-    </tr>
-    <tr>
-      <td align="center" valign="middle">
-        <a href="https://www.shengsuanyun.com/?from=CH_LEJ88KWR">
-          <img src="docs/images/sponsors/shengsuanyun-logo.svg" width="180" alt="ShengSuanYun">
-        </a>
-      </td>
-      <td valign="middle">
-        Thanks to <a href="https://www.shengsuanyun.com/?from=CH_LEJ88KWR">ShengSuanYun</a> for sponsoring this project. ShengSuanYun is an industrial-grade AI task parallel execution platform for AI Native Teams, aggregating Claude, ChatGPT, Gemini, and other LLM, image, and video model capacity through direct, non-reverse-engineered access. Its platform SLA reaches 99.7%, with <a href="https://watch.shengsuanyun.com/status/shengsuanyun">service status</a> available online. It also supports dedicated enterprise gateways, cost and permission controls, smart routing, security protection, BYOK, usage-based billing, upcoming tokens plans, and invoicing. New users registering through <a href="https://www.shengsuanyun.com/?from=CH_LEJ88KWR">this link</a> can receive 10 yuan in model credits plus a 10% first top-up bonus.
-      </td>
-    </tr>
-  </tbody>
-</table>
-
-📧 **Contact**: https://github.com/tju-apvic/beya/issues
-
----
-
-## ☕ Buy Me a Coffee
-
-If this project helps you, consider buying me a coffee — every bit of support keeps this project going ❤️
-
-<table>
-<tr>
-<td align="center" width="33%">
-<img src="docs/images/donate/wechat_pay.jpeg" width="250" alt="WeChat Pay"><br>
-<b>WeChat Pay</b>
-</td>
-<td align="center" width="33%">
-<img src="docs/images/donate/zfb_pay.png" width="250" alt="Alipay"><br>
-<b>Alipay</b>
-</td>
-<td align="center" width="33%">
-<a href="https://github.com/tju-apvic/beya" target="_blank">
-<img src="docs/images/donate/bmc_button.png" width="250" alt="Buy Me a Coffee">
-</a><br>
-<b>Buy Me a Coffee</b>
-</td>
-</tr>
-</table>
 
 ---
 
@@ -184,26 +129,5 @@ If this project helps you, consider buying me a coffee — every bit of support 
 | API | Anthropic SDK |
 | Protocols | MCP, LSP |
 
-## Thanks
 
-Thanks to the following open-source projects and community practices for reference and inspiration:
 
-- [React](https://github.com/facebook/react): frontend engineering and component-based UI ecosystem.
-- [Tauri](https://github.com/tauri-apps/tauri): cross-platform desktop app capabilities and engineering practices.
-- [cc-switch](https://github.com/farion1231/cc-switch): reference for model provider configuration.
-
----
-
-## ⭐ Star History
-
-If this project helps you, please support it with a ⭐ Star so more people can discover Beya.
-
-<a href="https://www.star-history.com/#tju-apvic/beya&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=tju-apvic/beya&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=tju-apvic/beya&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=tju-apvic/beya&type=Date" />
-  </picture>
-</a>
-
----

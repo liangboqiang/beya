@@ -14,7 +14,7 @@ import { AGENT_LIFECYCLE_TYPES } from '../types/team'
 import type { ComposerAttachment } from '../lib/composerAttachments'
 import type { MessageEntry } from '../types/session'
 import type { PermissionMode } from '../types/settings'
-import type { RuntimeSelection } from '../types/runtime'
+import type { RuntimeProfile, RuntimeSelection } from '../types/runtime'
 import type {
   ActiveGoalState,
   AgentTaskNotification,
@@ -84,6 +84,7 @@ export type PerSessionState = {
   agentTaskNotifications: Record<string, AgentTaskNotification>
   backgroundAgentTasks?: Record<string, BackgroundAgentTask>
   activeGoal?: ActiveGoalState | null
+  runtimeProfile?: RuntimeProfile | null
   elapsedTimer: ReturnType<typeof setInterval> | null
   composerPrefill?: {
     text: string
@@ -115,6 +116,7 @@ const DEFAULT_SESSION_STATE: PerSessionState = {
   agentTaskNotifications: {},
   backgroundAgentTasks: {},
   activeGoal: null,
+  runtimeProfile: null,
   elapsedTimer: null,
   composerPrefill: null,
   composerInsertion: null,
@@ -235,6 +237,35 @@ const nextId = () => `msg-${++msgCounter}-${Date.now()}`
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isRuntimeProfile(value: unknown): value is RuntimeProfile {
+  if (!isRecord(value)) return false
+  if (value.kind !== 'provider' && value.kind !== 'local_cli') return false
+  if (typeof value.id !== 'string' || typeof value.displayName !== 'string') return false
+  if (!isRecord(value.capabilities)) return false
+  const capabilities = value.capabilities
+  return (
+    typeof capabilities.streaming === 'boolean' &&
+    typeof capabilities.prewarm === 'boolean' &&
+    (capabilities.contextUsage === 'actual' ||
+      capabilities.contextUsage === 'estimated' ||
+      capabilities.contextUsage === 'unavailable') &&
+    (capabilities.tokenUsage === 'actual' ||
+      capabilities.tokenUsage === 'estimated' ||
+      capabilities.tokenUsage === 'unavailable')
+  )
+}
+
+function runtimeConfigAckFromData(data: unknown): {
+  profile: RuntimeProfile
+  prewarm: boolean
+} | null {
+  if (!isRecord(data) || !isRuntimeProfile(data.profile)) return null
+  return {
+    profile: data.profile,
+    prewarm: data.prewarm === true || data.profile.capabilities.prewarm === true,
+  }
 }
 
 function readJsonStringLiteral(source: string, quoteIndex: number): string | undefined {
@@ -842,8 +873,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const runtimeSelection = useSessionRuntimeStore.getState().selections[sessionId]
     if (runtimeSelection) {
       wsManager.send(sessionId, { type: 'set_runtime_config', ...runtimeSelection })
-    }
-    if (!sessionId.startsWith('__') && !useTeamStore.getState().getMemberBySessionId(sessionId)) {
+    } else if (!sessionId.startsWith('__') && !useTeamStore.getState().getMemberBySessionId(sessionId)) {
       wsManager.send(sessionId, { type: 'prewarm_session' })
     }
 
@@ -1309,7 +1339,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               : msg.verb && msg.verb !== 'Thinking'
                 ? msg.verb
                 : '',
-            ...(msg.tokens ? { tokenUsage: { ...session.tokenUsage, output_tokens: msg.tokens } } : {}),
+            ...(msg.tokens ? { tokenUsage: { ...session.tokenUsage, status: 'actual', output_tokens: msg.tokens } } : {}),
             ...(msg.state === 'idle' ? { activeThinkingId: null } : {}),
             ...(msg.state === 'idle' ? { apiRetry: null } : {}),
             ...(nextMessages !== session.messages ? { messages: nextMessages } : {}),
@@ -1701,6 +1731,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         useTabStore.getState().updateTabTitle(msg.sessionId, msg.title)
         break
       case 'system_notification':
+        if (msg.subtype === 'runtime_config') {
+          const ack = runtimeConfigAckFromData(msg.data)
+          if (ack) {
+            useSessionRuntimeStore.getState().setResolvedProfile(sessionId, ack.profile)
+            update(() => ({ runtimeProfile: ack.profile }))
+            if (
+              ack.prewarm &&
+              !sessionId.startsWith('__') &&
+              !useTeamStore.getState().getMemberBySessionId(sessionId)
+            ) {
+              wsManager.send(sessionId, { type: 'prewarm_session' })
+            }
+          }
+        }
         if (msg.subtype === 'slash_commands' && Array.isArray(msg.data)) {
           const incomingCommands = normalizeSlashCommandList(msg.data)
           update((session) => ({

@@ -708,7 +708,8 @@ async function generateConrodDrawing(args: JsonObject, extra: ToolCallExtra): Pr
     try {
       const partPath = template.localPartPath || template.localDrawingTemplatePath
       if (partPath) {
-        const openResult = await callNxPluginTool('nx_open_part', { filePath: partPath }, nxOpts)
+        const resolvedPartPath = resolve(PROJECT_ROOT, partPath)
+        const openResult = await callNxPluginTool('nx_open_part', { path: resolvedPartPath }, nxOpts)
         calledTools.push('OpenPart')
         if (!openResult.ok) {
           const infoResult = await callNxPluginTool('nx_get_work_part_info', {}, nxOpts)
@@ -857,15 +858,44 @@ async function prepareNxPluginTool(args: JsonObject): Promise<JsonObject> {
 }
 
 async function openNxTool(args: JsonObject, extra: ToolCallExtra): Promise<JsonObject> {
+  const partPath = stringValue(args.part_path) ?? stringValue(args.partPath)
+  const baseUrl = stringValue(args.base_url) ?? stringValue(args.baseUrl)
+  const port = positiveInteger(args.port) ?? positiveInteger(args.nx_plugin_port)
   const result = await openNx({
     executablePath: stringValue(args.executable_path) ?? stringValue(args.executablePath),
-    partPath: stringValue(args.part_path) ?? stringValue(args.partPath),
+    partPath,
     waitSeconds: positiveInteger(args.wait_seconds) ?? positiveInteger(args.waitSeconds) ?? 20,
     sessionId: extra.sessionId || extra.taskId,
     reuseRunning: args.reuse_running !== false && args.reuseRunning !== false,
-    baseUrl: stringValue(args.base_url) ?? stringValue(args.baseUrl),
-    port: positiveInteger(args.port) ?? positiveInteger(args.nx_plugin_port),
+    baseUrl,
+    port,
   })
+
+  if (result.ok && result.alreadyRunning && result.partOpenRequired && partPath) {
+    const resolvedPath = resolve(PROJECT_ROOT, partPath)
+    const openResult = await callNxPluginTool('nx_open_part', { path: resolvedPath }, { baseUrl, port })
+    return {
+      ...result,
+      data_source: MC_DESIGN_LOCAL_SOURCE,
+      part_opened_via_plugin: openResult.ok,
+      part_open_result: openResult,
+    }
+  }
+
+  if (result.ok && !result.alreadyRunning && partPath) {
+    const resolvedPath = resolve(PROJECT_ROOT, partPath)
+    const health = await getNxPluginStatus({ baseUrl, port })
+    if (health.ok) {
+      const openResult = await callNxPluginTool('nx_open_part', { path: resolvedPath }, { baseUrl, port })
+      return {
+        ...result,
+        data_source: MC_DESIGN_LOCAL_SOURCE,
+        part_opened_via_plugin: openResult.ok,
+        part_open_result: openResult,
+      }
+    }
+  }
+
   return { ...result, data_source: MC_DESIGN_LOCAL_SOURCE }
 }
 
@@ -992,6 +1022,16 @@ async function runLocalChainCheck(args: JsonObject, extra: ToolCallExtra): Promi
     port: positiveInteger(args.port) ?? positiveInteger(args.nx_plugin_port),
   })
   calledTools.push('Test')
+
+  const templateObj = getMcDesignTemplate(templateId)
+  if (templateObj?.localPartPath) {
+    const resolvedPartPath = resolve(PROJECT_ROOT, templateObj.localPartPath)
+    await callNxPluginTool('nx_open_part', { path: resolvedPartPath }, {
+      baseUrl: stringValue(args.base_url),
+      port: positiveInteger(args.port) ?? positiveInteger(args.nx_plugin_port),
+    })
+    calledTools.push('OpenPart')
+  }
 
   const partInfo = await callNxPluginTool('nx_get_work_part_info', {}, {
     baseUrl: stringValue(args.base_url),

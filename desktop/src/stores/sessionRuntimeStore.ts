@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { RuntimeSelection } from '../types/runtime'
+import type { RuntimeProfile, RuntimeSelection } from '../types/runtime'
 
 const STORAGE_KEY = 'beya-session-runtime'
 
@@ -7,7 +7,9 @@ export const DRAFT_RUNTIME_SELECTION_KEY = '__draft__'
 
 type SessionRuntimeStore = {
   selections: Record<string, RuntimeSelection>
+  resolvedProfiles: Record<string, RuntimeProfile>
   setSelection: (key: string, selection: RuntimeSelection) => void
+  setResolvedProfile: (key: string, profile: RuntimeProfile | null) => void
   clearSelection: (key: string) => void
   moveSelection: (fromKey: string, toKey: string) => void
 }
@@ -35,6 +37,7 @@ function persistSelections(selections: Record<string, RuntimeSelection>) {
 
 export const useSessionRuntimeStore = create<SessionRuntimeStore>((set) => ({
   selections: loadSelections(),
+  resolvedProfiles: {},
 
   setSelection: (key, selection) =>
     set((state) => {
@@ -46,12 +49,28 @@ export const useSessionRuntimeStore = create<SessionRuntimeStore>((set) => ({
       return { selections }
     }),
 
+  setResolvedProfile: (key, profile) =>
+    set((state) => {
+      if (!profile) {
+        if (!(key in state.resolvedProfiles)) return state
+        const { [key]: _removed, ...rest } = state.resolvedProfiles
+        return { resolvedProfiles: rest }
+      }
+      return {
+        resolvedProfiles: {
+          ...state.resolvedProfiles,
+          [key]: profile,
+        },
+      }
+    }),
+
   clearSelection: (key) =>
     set((state) => {
       if (!(key in state.selections)) return state
       const { [key]: _removed, ...rest } = state.selections
       persistSelections(rest)
-      return { selections: rest }
+      const { [key]: _removedProfile, ...resolvedProfiles } = state.resolvedProfiles
+      return { selections: rest, resolvedProfiles }
     }),
 
   moveSelection: (fromKey, toKey) =>
@@ -63,7 +82,14 @@ export const useSessionRuntimeStore = create<SessionRuntimeStore>((set) => ({
         ...rest,
         [toKey]: selection,
       }
+      const profile = state.resolvedProfiles[fromKey]
+      const { [fromKey]: _removedProfile, ...profileRest } = state.resolvedProfiles
       persistSelections(selections)
-      return { selections }
+      return {
+        selections,
+        resolvedProfiles: profile
+          ? { ...profileRest, [toKey]: profile }
+          : profileRest,
+      }
     }),
 }))

@@ -417,7 +417,7 @@ describe('ConversationService', () => {
     }
   })
 
-  test('injects selected local CLI config only in local_cli execution mode', async () => {
+  test('marks local_cli mode without injecting CLI-specific runtime config in session env', async () => {
     const localCliPath = path.join(tmpDir, process.platform === 'win32' ? 'codex.cmd' : 'codex')
     const previousAnthropicKey = process.env.ANTHROPIC_API_KEY
     await fs.writeFile(localCliPath, process.platform === 'win32' ? '@echo off\r\n' : '#!/bin/sh\n', 'utf-8')
@@ -452,11 +452,11 @@ describe('ConversationService', () => {
       expect(localCliModeEnv.ANTHROPIC_API_KEY).toBeUndefined()
       expect(localCliModeEnv).toMatchObject({
         BEYA_EXECUTION_MODE: 'local_cli',
-        BEYA_LOCAL_CLI_ID: 'codex',
-        BEYA_LOCAL_CLI_PATH: localCliPath,
-        CODEX_BIN: localCliPath,
-        CODEX_HOME: path.join(tmpDir, '.codex'),
       })
+      expect(localCliModeEnv.BEYA_LOCAL_CLI_ID).toBeUndefined()
+      expect(localCliModeEnv.BEYA_LOCAL_CLI_PATH).toBeUndefined()
+      expect(localCliModeEnv.CODEX_BIN).toBeUndefined()
+      expect(localCliModeEnv.CODEX_HOME).toBeUndefined()
     } finally {
       if (previousAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY
       else process.env.ANTHROPIC_API_KEY = previousAnthropicKey

@@ -18,6 +18,7 @@ type OpenAIChatImageContentMode = 'vision' | 'text_only'
 
 type OpenAIChatTransformOptions = {
   roundTripReasoningContent?: boolean
+  passReasoningEffort?: boolean
   passThinkingToggle?: boolean
   imageContentMode?: OpenAIChatImageContentMode
 }
@@ -88,7 +89,7 @@ export function anthropicToOpenaiChat(
   }
 
   // thinking → reasoning_effort
-  if (body.thinking) {
+  if (body.thinking && options.passReasoningEffort !== false) {
     const budget = body.thinking.budget_tokens
     if (budget !== undefined) {
       if (budget <= 1024) result.reasoning_effort = 'low'

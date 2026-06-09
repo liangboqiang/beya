@@ -98,4 +98,4 @@ Agent 流式文本里的 markdown 图片引用 `![alt](path|url|data:)` 会被 `
 
 非图片类出站(Agent 产的 pdf/zip 等)暂不支持。
 
-设计细节: `docs/superpowers/specs/2026-04-11-im-attachment-support-design.md`。
+设计细节见 `docs/superpowers/specs/` 目录下相关文档。

@@ -96,8 +96,10 @@ export type ServerMessage =
   | { type: 'session_title_updated'; sessionId: string; title: string }
 
 export type TokenUsage = {
-  input_tokens: number
-  output_tokens: number
+  status?: 'actual' | 'estimated' | 'unavailable'
+  source?: 'provider' | 'local_cli' | 'transcript_estimate' | 'none'
+  input_tokens?: number
+  output_tokens?: number
   cache_read_tokens?: number
   cache_creation_tokens?: number
 }

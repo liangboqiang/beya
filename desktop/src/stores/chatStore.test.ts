@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MessageEntry } from '../types/session'
+import type { RuntimeProfile } from '../types/runtime'
 import { useSessionRuntimeStore } from './sessionRuntimeStore'
 
 const {
@@ -1691,7 +1692,7 @@ describe('chatStore history mapping', () => {
     expect(setTasksFromTodosMock).toHaveBeenCalledWith(todos, TEST_SESSION_ID)
   })
 
-  it('replays saved runtime selection when reconnecting a session', () => {
+  it('replays saved runtime selection and prewarms after server runtime ack', () => {
     useSessionRuntimeStore.getState().setSelection(TEST_SESSION_ID, {
       providerId: 'provider-1',
       modelId: 'kimi-k2.6',
@@ -1706,18 +1707,37 @@ describe('chatStore history mapping', () => {
       modelId: 'kimi-k2.6',
       effortLevel: 'high',
     })
-    expect(sendMock.mock.calls.slice(0, 2)).toEqual([
-      [
-        TEST_SESSION_ID,
-        {
-          type: 'set_runtime_config',
-          providerId: 'provider-1',
-          modelId: 'kimi-k2.6',
-          effortLevel: 'high',
-        },
-      ],
-      [TEST_SESSION_ID, { type: 'prewarm_session' }],
-    ])
+    expect(sendMock).not.toHaveBeenCalledWith(TEST_SESSION_ID, { type: 'prewarm_session' })
+
+    const profile: RuntimeProfile = {
+      id: 'provider:provider-1',
+      kind: 'provider',
+      displayName: 'Provider 1',
+      defaultModelId: 'kimi-k2.6',
+      models: [{ id: 'kimi-k2.6', displayName: 'kimi-k2.6' }],
+      capabilities: {
+        streaming: true,
+        tools: 'native',
+        contextUsage: 'actual',
+        tokenUsage: 'actual',
+        prewarm: true,
+        resume: 'native',
+        vision: false,
+        thinking: false,
+        promptInput: 'sdk',
+      },
+    }
+    useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
+      type: 'system_notification',
+      subtype: 'runtime_config',
+      data: {
+        prewarm: true,
+        profile,
+        capabilities: profile.capabilities,
+      },
+    })
+
+    expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, { type: 'prewarm_session' })
   })
 
   it('prewarms regular desktop sessions when connecting', () => {

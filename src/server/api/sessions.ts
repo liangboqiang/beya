@@ -39,6 +39,12 @@ import {
   SessionBranchingError,
 } from '../../utils/sessionBranching.js'
 import { registerFilesystemAccessRoot } from '../services/filesystemAccessRoots.js'
+import {
+  contextTelemetryFromSnapshot,
+  unavailableRuntimeContextUsage,
+  unavailableRuntimeUsage,
+  type RuntimeProfile,
+} from '../runtime/protocol.js'
 
 const workspaceService = new WorkspaceService(
   async (sessionId) => (
@@ -512,6 +518,7 @@ async function getSessionInspection(sessionId: string, url: URL): Promise<Respon
     .reverse()
     .find((message) => message?.type === 'system' && message.subtype === 'init')
   const transcriptMetadata = await sessionService.getTranscriptMetadata(sessionId)
+  const runtimeProfile = conversationService.getSessionRuntimeProfile(sessionId)
   const cachedSlashCommands = getSlashCommands(sessionId)
   const skillSlashCommands = await listSkillSlashCommands(workDir)
   const fallbackSlashCommands = cachedSlashCommands.length > 0
@@ -537,6 +544,7 @@ async function getSessionInspection(sessionId: string, url: URL): Promise<Respon
       slashCommandCount,
       skillCount: Array.isArray(initMessage?.skills) ? initMessage.skills.length : 0,
     },
+    ...(runtimeProfile ? { runtime: runtimeProfile } : {}),
     errors: {},
   }
   const transcriptUsage = await sessionService.getTranscriptUsage(sessionId)
@@ -549,6 +557,11 @@ async function getSessionInspection(sessionId: string, url: URL): Promise<Respon
     if (transcriptUsage) {
       response.usage = transcriptUsage
     }
+    response.telemetry = buildRuntimeTelemetry(transcriptUsage, transcriptContextEstimate, {
+      usageSource: transcriptUsage ? 'transcript_estimate' : 'none',
+      contextSource: transcriptContextEstimate ? 'transcript_estimate' : 'none',
+      contextStatus: transcriptContextEstimate ? 'estimated' : 'unavailable',
+    })
     response.errors = {
       ...(transcriptUsage ? {} : { usage: 'CLI session is not running' }),
       ...(includeContext ? { context: 'CLI session is not running' } : {}),
@@ -557,62 +570,184 @@ async function getSessionInspection(sessionId: string, url: URL): Promise<Respon
   }
 
   const errors: Record<string, string> = {}
+  const capabilities = runtimeProfile?.capabilities
+  const usageCapability = capabilities?.tokenUsage ?? 'actual'
+  const contextCapability = capabilities?.contextUsage ?? 'actual'
+  const canUseControlChannel = runtimeProfile?.kind !== 'local_cli'
   if (contextOnly) {
-    try {
-      response.context = await conversationService.requestControl(
-        sessionId,
-        { subtype: 'get_context_usage', estimateOnly: true },
-        20_000,
-      )
-    } catch (error) {
-      errors.context = error instanceof Error ? error.message : String(error)
-    }
+    await attachContextTelemetry({
+      response,
+      errors,
+      sessionId,
+      contextCapability,
+      transcriptContextEstimate,
+      canUseControlChannel,
+      timeoutMs: 20_000,
+    })
   } else {
     const basicControlTimeoutMs = includeContext ? 10_000 : 4_000
-    const [usageResult, contextResult, mcpResult] = await Promise.allSettled([
-      conversationService.requestControl(sessionId, { subtype: 'get_session_usage' }, basicControlTimeoutMs),
-      includeContext
-        ? conversationService.requestControl(
-            sessionId,
-            { subtype: 'get_context_usage', estimateOnly: true },
-            20_000,
-          )
-        : Promise.resolve(null),
-      conversationService.requestControl(sessionId, { subtype: 'mcp_status' }, basicControlTimeoutMs),
-    ])
-
-    if (usageResult.status === 'fulfilled') {
-      response.usage = chooseRicherUsage(
-        { ...usageResult.value, source: 'current_process' },
-        transcriptUsage,
-      )
+    if (usageCapability === 'actual' && canUseControlChannel) {
+      try {
+        const currentUsage = await conversationService.requestControl(
+          sessionId,
+          { subtype: 'get_session_usage' },
+          basicControlTimeoutMs,
+        )
+        response.usage = chooseRicherUsage(
+          { ...currentUsage, source: 'current_process' },
+          transcriptUsage,
+        )
+      } catch (error) {
+        if (transcriptUsage) {
+          response.usage = transcriptUsage
+        } else {
+          errors.usage = error instanceof Error ? error.message : String(error)
+        }
+      }
     } else {
       if (transcriptUsage) {
         response.usage = transcriptUsage
       } else {
-        errors.usage = usageResult.reason instanceof Error ? usageResult.reason.message : String(usageResult.reason)
+        errors.usage = usageCapability === 'unavailable'
+          ? runtimeUnavailableMessage(runtimeProfile, 'Token usage')
+          : 'Token usage is unavailable'
       }
     }
 
     if (!includeContext) {
       // Context can be expensive on large live sessions. The desktop UI loads it
       // separately when the context tab is actually selected.
-    } else if (contextResult.status === 'fulfilled' && contextResult.value) {
-      response.context = contextResult.value
     } else {
-      errors.context = contextResult.reason instanceof Error ? contextResult.reason.message : String(contextResult.reason)
+      await attachContextTelemetry({
+        response,
+        errors,
+        sessionId,
+        contextCapability,
+        transcriptContextEstimate,
+        canUseControlChannel,
+        timeoutMs: 20_000,
+      })
     }
 
-    if (mcpResult.status === 'fulfilled' && response.status && typeof response.status === 'object') {
-      response.status = {
-        ...response.status,
-        mcpServers: Array.isArray(mcpResult.value.mcpServers) ? mcpResult.value.mcpServers : (response.status as Record<string, unknown>).mcpServers,
+    if (canUseControlChannel) {
+      try {
+        const mcpStatus = await conversationService.requestControl(
+          sessionId,
+          { subtype: 'mcp_status' },
+          basicControlTimeoutMs,
+        )
+        if (response.status && typeof response.status === 'object') {
+          response.status = {
+            ...response.status,
+            mcpServers: Array.isArray(mcpStatus.mcpServers)
+              ? mcpStatus.mcpServers
+              : (response.status as Record<string, unknown>).mcpServers,
+          }
+        }
+      } catch {
+        // MCP status is advisory and should not make capability telemetry fail.
       }
     }
   }
 
+  response.telemetry = buildRuntimeTelemetry(
+    response.usage as Record<string, unknown> | undefined,
+    (response.context ?? response.contextEstimate) as Record<string, unknown> | undefined,
+    {
+      usageSource: response.usage ? (usageCapability === 'actual' ? 'provider' : 'transcript_estimate') : 'none',
+      contextSource: response.context ? 'control_channel' : response.contextEstimate ? 'transcript_estimate' : 'none',
+      contextStatus: response.context ? 'actual' : response.contextEstimate ? 'estimated' : 'unavailable',
+    },
+  )
   response.errors = errors
   return Response.json(response)
+}
+
+async function attachContextTelemetry(input: {
+  response: Record<string, unknown>
+  errors: Record<string, string>
+  sessionId: string
+  contextCapability: 'actual' | 'estimated' | 'unavailable'
+  transcriptContextEstimate: Record<string, unknown> | null
+  canUseControlChannel: boolean
+  timeoutMs: number
+}): Promise<void> {
+  if (input.contextCapability === 'unavailable' || !input.canUseControlChannel) {
+    if (input.transcriptContextEstimate && input.contextCapability === 'estimated') {
+      input.response.contextEstimate = input.transcriptContextEstimate
+      return
+    }
+    input.errors.context = 'Context usage is unavailable for this runtime.'
+    return
+  }
+
+  if (input.contextCapability === 'estimated') {
+    if (input.transcriptContextEstimate) {
+      input.response.contextEstimate = input.transcriptContextEstimate
+    } else {
+      input.errors.context = 'Context usage estimate is unavailable.'
+    }
+    return
+  }
+
+  try {
+    input.response.context = await conversationService.requestControl(
+      input.sessionId,
+      { subtype: 'get_context_usage', estimateOnly: true },
+      input.timeoutMs,
+    )
+  } catch (error) {
+    if (input.transcriptContextEstimate) {
+      input.response.contextEstimate = input.transcriptContextEstimate
+    } else {
+      input.errors.context = error instanceof Error ? error.message : String(error)
+    }
+  }
+}
+
+function runtimeUnavailableMessage(
+  runtimeProfile: RuntimeProfile | null,
+  label: string,
+): string {
+  return runtimeProfile
+    ? `${label} is unavailable for ${runtimeProfile.displayName}.`
+    : `${label} is unavailable for this runtime.`
+}
+
+function buildRuntimeTelemetry(
+  usage: Record<string, unknown> | null | undefined,
+  context: Record<string, unknown> | null | undefined,
+  options: {
+    usageSource: 'provider' | 'local_cli' | 'transcript_estimate' | 'none'
+    contextSource: 'control_channel' | 'transcript_estimate' | 'none'
+    contextStatus: 'actual' | 'estimated' | 'unavailable'
+  },
+) {
+  const totalTokens = usage ? usageTokenTotal(usage) : 0
+  const usageTelemetry = usage && totalTokens > 0
+    ? {
+        status: options.usageSource === 'transcript_estimate' ? 'estimated' as const : 'actual' as const,
+        inputTokens: typeof usage.totalInputTokens === 'number' ? usage.totalInputTokens : undefined,
+        outputTokens: typeof usage.totalOutputTokens === 'number' ? usage.totalOutputTokens : undefined,
+        cacheReadTokens: typeof usage.totalCacheReadInputTokens === 'number' ? usage.totalCacheReadInputTokens : undefined,
+        cacheCreationTokens: typeof usage.totalCacheCreationInputTokens === 'number' ? usage.totalCacheCreationInputTokens : undefined,
+        totalTokens,
+        costUsd: typeof usage.totalCostUSD === 'number' ? usage.totalCostUSD : undefined,
+        source: options.usageSource,
+      }
+    : unavailableRuntimeUsage(options.usageSource)
+  const contextTelemetry = context
+    ? {
+        ...contextTelemetryFromSnapshot(context),
+        status: options.contextStatus,
+        source: options.contextSource,
+      }
+    : unavailableRuntimeContextUsage(options.contextSource)
+
+  return {
+    usage: usageTelemetry,
+    contextUsage: contextTelemetry,
+  }
 }
 
 function usageTokenTotal(usage: unknown): number {

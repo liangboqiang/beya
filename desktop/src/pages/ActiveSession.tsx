@@ -348,7 +348,10 @@ export function ActiveSession() {
   const isActive = chatState !== 'idle' ||
     (trackedTaskSessionId === activeTabId && hasRunningTasks) ||
     hasRunningBackgroundTasks
-  const totalTokens = tokenUsage.input_tokens + tokenUsage.output_tokens
+  const totalTokens =
+    tokenUsage.status === 'unavailable'
+      ? 0
+      : (tokenUsage.input_tokens ?? 0) + (tokenUsage.output_tokens ?? 0)
 
   const lastUpdated = useMemo(() => {
     if (!session?.modifiedAt) return ''
