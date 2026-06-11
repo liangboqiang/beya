@@ -1,0 +1,53 @@
+id: capability-registry
+version: v1
+name: Capability Registry
+layer: capability
+layerOrder: 5
+stability: stable
+description: Tools, MCP, skills, plugins, agents, and workflow capability registration.
+paths:
+  server:
+    - src/modules/capability-registry
+    - src/tools
+    - src/services/mcp
+  contracts:
+    - contracts/capabilities/v1/registry.yaml
+owns:
+  - Tool registry and metadata.
+  - MCP server/resource/tool capability discovery.
+  - Skills and plugin capability loading.
+  - Workflow capability registration.
+resourceMethods:
+  - tools.execute
+  - tools.list
+  - tools.get
+  - skills.list
+  - skills.get
+  - plugins.list
+  - plugins.get
+  - plugins.install
+  - plugins.enable
+  - plugins.disable
+  - plugins.update
+  - plugins.uninstall
+  - plugins.reload
+  - mcp.list
+  - mcp.projectpaths
+  - mcp.status
+  - mcp.create
+  - mcp.update
+  - mcp.delete
+  - mcp.toggle
+  - mcp.reconnect
+allowedDependencies:
+  - foundation
+forbiddenDependencies:
+  - access-surfaces
+  - gateway
+  - session-host
+  - agent-core
+  - model-runtime
+implementationRoots:
+  - src/modules/capability-registry
+  - src/tools
+  - src/services/mcp

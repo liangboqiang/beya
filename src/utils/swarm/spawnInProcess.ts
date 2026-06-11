@@ -27,7 +27,7 @@ import { createAbortController } from '../abortController.js'
 import { formatAgentId } from '../agentId.js'
 import { registerCleanup } from '../cleanupRegistry.js'
 import { logForDebugging } from '../debug.js'
-import { emitTaskTerminatedSdk } from '../sdkEventQueue.js'
+import { emitTaskTerminatedSdk } from '../runtimeEventQueue.js'
 import { evictTaskOutput } from '../task/diskOutput.js'
 import {
   evictTerminalTask,

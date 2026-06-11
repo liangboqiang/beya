@@ -1,4 +1,4 @@
-export type H5RequestKind = 'local-trusted' | 'internal-sdk' | 'h5-browser'
+export type H5RequestKind = 'local-trusted' | 'internal-runtime' | 'h5-browser'
 export type H5RequestContext = {
   clientAddress: string | null
 }
@@ -42,8 +42,12 @@ export function classifyH5Request(
     isLoopbackHost(context.clientAddress!) &&
     isLocalOrigin(request.headers.get('Origin'))
 
-  if (url.pathname.startsWith('/sdk/') && localTrusted) {
-    return 'internal-sdk'
+  if (
+    url.pathname.startsWith('/sessions/') &&
+    url.pathname.endsWith('/runtime') &&
+    localTrusted
+  ) {
+    return 'internal-runtime'
   }
 
   if (localTrusted) {
@@ -101,12 +105,13 @@ export function shouldBlockDisabledH5Access({
 
 function isH5ProtectedCapabilityPath(pathname: string): boolean {
   return pathname.startsWith('/proxy/') ||
-    pathname.startsWith('/ws/') ||
-    pathname.startsWith('/sdk/') ||
+    pathname === '/rpc' ||
+    pathname.startsWith('/sessions/') ||
     pathname.startsWith('/open-target-icons/')
 }
 
 function isH5BrowserCapabilityPath(pathname: string): boolean {
   return pathname.startsWith('/proxy/') ||
-    pathname.startsWith('/ws/')
+    pathname === '/rpc' ||
+    pathname.startsWith('/sessions/')
 }

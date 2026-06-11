@@ -1,7 +1,15 @@
 import { baselineCases } from './baseline/cases'
 import type { BaselineTarget, LaneDefinition, QualityGateMode } from './types'
 
-export function lanesForMode(mode: QualityGateMode, baselineTargets: BaselineTarget[] = []): LaneDefinition[] {
+export function lanesForMode(
+  mode: QualityGateMode,
+  baselineTargets: BaselineTarget[] = [],
+  options: { fast?: boolean } = {},
+): LaneDefinition[] {
+  const serverCheckCommand = options.fast
+    ? ['bun', 'run', 'check:server:fast']
+    : ['bun', 'run', 'check:server']
+
   const lanes: LaneDefinition[] = [
     {
       id: 'impact-report',
@@ -35,9 +43,11 @@ export function lanesForMode(mode: QualityGateMode, baselineTargets: BaselineTar
     {
       id: 'server-checks',
       title: 'Server checks',
-      description: 'Run server, provider, runtime, MCP, OAuth, WebSocket, and API tests when server paths changed.',
+      description: options.fast
+        ? 'Run the fast server/provider/runtime/MCP/OAuth/WebSocket/API test profile when server paths changed.'
+        : 'Run server, provider, runtime, MCP, OAuth, WebSocket, and API tests when server paths changed.',
       kind: 'command',
-      command: ['bun', 'run', 'check:server'],
+      command: serverCheckCommand,
       impactRequiredCheck: 'bun run check:server',
       requiredForModes: ['pr'],
       category: 'unit',
@@ -96,6 +106,7 @@ export function lanesForMode(mode: QualityGateMode, baselineTargets: BaselineTar
       description: 'Run unit/component coverage suites and enforce the ratcheted coverage baseline.',
       kind: 'command',
       command: ['bun', 'run', 'check:coverage'],
+      impactRequiredCheck: 'bun run check:coverage',
       requiredForModes: ['pr', 'baseline', 'release'],
       category: 'coverage',
     },

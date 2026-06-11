@@ -84,6 +84,113 @@ function Test-HttpReady([string]$Url) {
   }
 }
 
+function Test-AppRpcReady([string]$Address, [int]$Port) {
+  $socket = [System.Net.WebSockets.ClientWebSocket]::new()
+  $uri = [System.Uri]::new("ws://${Address}:$Port/rpc")
+  $probeId = "startup-probe"
+
+  try {
+    $connectTask = $socket.ConnectAsync($uri, [System.Threading.CancellationToken]::None)
+    if (-not $connectTask.Wait(2000)) {
+      return $false
+    }
+    if ($socket.State -ne [System.Net.WebSockets.WebSocketState]::Open) {
+      return $false
+    }
+
+    $payload = "{""type"":""rpc.request"",""id"":""$probeId"",""method"":""status.read"",""params"":{}}"
+    $payloadBytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
+    $sendTask = $socket.SendAsync(
+      [System.ArraySegment[byte]]::new($payloadBytes),
+      [System.Net.WebSockets.WebSocketMessageType]::Text,
+      $true,
+      [System.Threading.CancellationToken]::None
+    )
+    if (-not $sendTask.Wait(2000)) {
+      return $false
+    }
+
+    $buffer = New-Object byte[] 8192
+    $message = [System.Text.StringBuilder]::new()
+    $deadline = [DateTime]::UtcNow.AddSeconds(3)
+    while ([DateTime]::UtcNow -lt $deadline) {
+      $remainingMs = [Math]::Max(1, [int]($deadline - [DateTime]::UtcNow).TotalMilliseconds)
+      $cts = [System.Threading.CancellationTokenSource]::new($remainingMs)
+      try {
+        $receiveTask = $socket.ReceiveAsync([System.ArraySegment[byte]]::new($buffer), $cts.Token)
+        if (-not $receiveTask.Wait($remainingMs)) {
+          return $false
+        }
+        $result = $receiveTask.Result
+      } catch {
+        return $false
+      } finally {
+        $cts.Dispose()
+      }
+
+      if ($result.MessageType -eq [System.Net.WebSockets.WebSocketMessageType]::Close) {
+        return $false
+      }
+
+      if ($result.Count -gt 0) {
+        [void]$message.Append([System.Text.Encoding]::UTF8.GetString($buffer, 0, $result.Count))
+      }
+
+      if (-not $result.EndOfMessage) {
+        continue
+      }
+
+      $rawMessage = $message.ToString()
+      [void]$message.Clear()
+      try {
+        $rpcMessage = $rawMessage | ConvertFrom-Json
+      } catch {
+        continue
+      }
+
+      if ($rpcMessage.type -eq "rpc.connected") {
+        continue
+      }
+      if ($rpcMessage.type -eq "rpc.response" -and $rpcMessage.id -eq $probeId -and [int]$rpcMessage.status -eq 200) {
+        return $true
+      }
+      return $false
+    }
+
+    return $false
+  } catch {
+    return $false
+  } finally {
+    if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
+      try {
+        $closeTask = $socket.CloseAsync(
+          [System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure,
+          "startup probe complete",
+          [System.Threading.CancellationToken]::None
+        )
+        $closeTask.Wait(1000) | Out-Null
+      } catch {
+        # Ignore close failures; the probe result has already been decided.
+      }
+    }
+    $socket.Dispose()
+  }
+}
+
+function Wait-AppRpc([string]$Address, [int]$Port, [string[]]$LogFiles, [scriptblock]$IsAlive) {
+  for ($i = 0; $i -lt 120; $i++) {
+    if (Test-AppRpcReady $Address $Port) {
+      return
+    }
+    if (-not (& $IsAlive)) {
+      Write-Error "Process exited before ws://${Address}:$Port/rpc became ready. Recent log:`n$(Read-RecentLogs -LogFiles $LogFiles)"
+    }
+    Start-Sleep -Seconds 1
+  }
+
+  throw "Timed out waiting for ws://${Address}:$Port/rpc. Recent log:`n$(Read-RecentLogs -LogFiles $LogFiles)"
+}
+
 function Wait-PortAvailable([string]$Address, [int]$Port) {
   for ($i = 0; $i -lt 30; $i++) {
     if (-not (Test-PortInUse $Address $Port)) {
@@ -203,18 +310,20 @@ if (-not $beyaConfigDir) {
 
 $server = $null
 $serverOwned = $false
+$replacedIncompatibleServer = $false
 if (Test-PortInUse $HostAddress $serverPortResolved) {
   Write-Host "Server port $serverPortResolved is in use; trying to reconnect."
-  if (Test-HttpReady $serverHealthUrl) {
+  if ((Test-HttpReady $serverHealthUrl) -and (Test-AppRpcReady $HostAddress $serverPortResolved)) {
     Write-Host "Reusing existing server: $serverUrl"
   } else {
-    Write-Host "Existing listener on server port $serverPortResolved is not healthy; stopping it."
+    Write-Host "Existing listener on server port $serverPortResolved is not a compatible Beya RPC server; stopping it."
     Stop-ListenerOnPort -Port $serverPortResolved -ExpectedRoot $rootDir -ForceAny
     Wait-PortAvailable $HostAddress $serverPortResolved
+    $replacedIncompatibleServer = $true
   }
 }
 
-if (-not (Test-HttpReady $serverHealthUrl)) {
+if ((-not (Test-HttpReady $serverHealthUrl)) -or (-not (Test-AppRpcReady $HostAddress $serverPortResolved))) {
   Write-Host "Starting server: $serverUrl"
   $serverCommand = @(
     "Set-Location -LiteralPath $(Quote-PowerShell $rootDir)"
@@ -230,16 +339,21 @@ if (-not (Test-HttpReady $serverHealthUrl)) {
 try {
   if ($serverOwned) {
     Wait-Http $serverHealthUrl @($serverLog, $serverErr) { -not $server.HasExited }
+    Wait-AppRpc $HostAddress $serverPortResolved @($serverLog, $serverErr) { -not $server.HasExited }
   }
 
   $web = $null
   $webOwned = $false
   if (Test-PortInUse $HostAddress $webPortResolved) {
     Write-Host "Web port $webPortResolved is in use; trying to reconnect."
-    if (Test-HttpReady $webStatusUrl) {
+    if ((-not $replacedIncompatibleServer) -and (Test-HttpReady $webStatusUrl)) {
       Write-Host "Reusing existing Web UI: $webOrigin"
     } else {
-      Write-Host "Existing listener on web port $webPortResolved is not the Beya Web UI; stopping it."
+      if ($replacedIncompatibleServer) {
+        Write-Host "Server was replaced; restarting Web UI on port $webPortResolved."
+      } else {
+        Write-Host "Existing listener on web port $webPortResolved is not the Beya Web UI; stopping it."
+      }
       Stop-ListenerOnPort -Port $webPortResolved -ExpectedRoot $rootDir -ForceAny
       Wait-PortAvailable $HostAddress $webPortResolved
     }

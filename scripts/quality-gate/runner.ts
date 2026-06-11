@@ -433,7 +433,7 @@ function enforceReleaseLiveLanes(
 }
 
 export async function runQualityGate(options: QualityGateOptions) {
-  return runQualityGateLanes(options, lanesForMode(options.mode, options.baselineTargets))
+  return runQualityGateLanes(options, lanesForMode(options.mode, options.baselineTargets, { fast: options.fast }))
 }
 
 export async function runQualityGateLanes(

@@ -373,7 +373,7 @@ describe('EmptySession', () => {
       content: 'draft question',
     })
     expect(mocks.wsSend).toHaveBeenCalledWith('draft-session', {
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'draft question',
       attachments: [],
     })
@@ -408,7 +408,7 @@ describe('EmptySession', () => {
       [
         'draft-session',
         {
-          type: 'set_runtime_config',
+          type: 'session.runtime.select',
           providerId: 'provider-explicit',
           modelId: 'model-explicit',
         },
@@ -416,13 +416,13 @@ describe('EmptySession', () => {
       [
         'draft-session',
         {
-          type: 'user_message',
+          type: 'session.message.send',
           content: 'draft question',
           attachments: [],
         },
       ],
     ])
-    expect(mocks.wsSend).not.toHaveBeenCalledWith('draft-session', { type: 'prewarm_session' })
+    expect(mocks.wsSend).not.toHaveBeenCalledWith('draft-session', { type: 'session.prewarm' })
 
     const profile: RuntimeProfile = {
       id: 'provider:provider-explicit',
@@ -444,7 +444,7 @@ describe('EmptySession', () => {
     }
     act(() => {
       useChatStore.getState().handleServerMessage('draft-session', {
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'runtime_config',
         data: {
           prewarm: true,
@@ -454,7 +454,7 @@ describe('EmptySession', () => {
       })
     })
 
-    expect(mocks.wsSend).toHaveBeenCalledWith('draft-session', { type: 'prewarm_session' })
+    expect(mocks.wsSend).toHaveBeenCalledWith('draft-session', { type: 'session.prewarm' })
   })
 
   it('uses native desktop file paths for draft attachments', async () => {
@@ -481,7 +481,7 @@ describe('EmptySession', () => {
       expect(mocks.createSession).toHaveBeenCalledWith({ permissionMode: 'default' })
     })
     expect(mocks.wsSend).toHaveBeenCalledWith('draft-session', {
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'check these files',
       attachments: [
         expect.objectContaining({
@@ -533,7 +533,7 @@ describe('EmptySession', () => {
       expect(mocks.createSession).toHaveBeenCalledWith({ permissionMode: 'default' })
     })
     expect(mocks.wsSend).toHaveBeenCalledWith('draft-session', {
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'use this context',
       attachments: [
         expect.objectContaining({
@@ -627,7 +627,15 @@ describe('EmptySession', () => {
       expect(screen.getByText('main')).toBeInTheDocument()
     })
 
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Run/i })).not.toBeDisabled()
+    })
+
     fireEvent.click(screen.getByRole('button', { name: /Run/i }))
+
+    await waitFor(() => {
+      expect(mocks.createSession).toHaveBeenCalled()
+    })
 
     await waitFor(() => {
       const toasts = useUIStore.getState().toasts

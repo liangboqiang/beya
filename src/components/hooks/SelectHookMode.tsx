@@ -7,7 +7,7 @@ import { c as _c } from "react/compiler-runtime";
  * confirmation.
  */
 import * as React from 'react';
-import type { HookEvent } from 'src/types/sdkProtocol.js';
+import type { HookEvent } from 'src/types/runtimeProtocol.js';
 import type { HookEventMetadata } from 'src/utils/hooks/hooksConfigManager.js';
 import { Box, Text } from '../../ink.js';
 import { getHookDisplayText, hookSourceHeaderDisplayString, type IndividualHookConfig } from '../../utils/hooks/hooksSettings.js';

@@ -11,12 +11,12 @@
  */
 
 import { randomUUID } from 'crypto'
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
 import type {
-  SDKControlRequest,
-  SDKControlResponse,
-} from '../entrypoints/sdk/controlTypes.js'
-import type { SDKResultSuccess } from '../entrypoints/sdk/coreTypes.js'
+  RuntimeControlRequest,
+  RuntimeControlResponse,
+} from '../entrypoints/runtime/controlTypes.js'
+import type { RuntimeResultSuccess } from '../entrypoints/runtime/coreTypes.js'
 import { logEvent } from '../services/analytics/index.js'
 import { EMPTY_USAGE } from '../services/api/emptyUsage.js'
 import type { Message } from '../types/message.js'
@@ -30,10 +30,10 @@ import type { ReplBridgeTransport } from './replBridgeTransport.js'
 
 // ─── Type guards ─────────────────────────────────────────────────────────────
 
-/** Type predicate for parsed WebSocket messages. SDKMessage is a
+/** Type predicate for parsed WebSocket messages. RuntimeMessage is a
  *  discriminated union on `type` —validating the discriminant is
  *  sufficient for the predicate; callers narrow further via the union. */
-export function isSDKMessage(value: unknown): value is SDKMessage {
+export function isRuntimeMessage(value: unknown): value is RuntimeMessage {
   return (
     value !== null &&
     typeof value === 'object' &&
@@ -43,9 +43,9 @@ export function isSDKMessage(value: unknown): value is SDKMessage {
 }
 
 /** Type predicate for control_response messages from the server. */
-export function isSDKControlResponse(
+export function isRuntimeControlResponse(
   value: unknown,
-): value is SDKControlResponse {
+): value is RuntimeControlResponse {
   return (
     value !== null &&
     typeof value === 'object' &&
@@ -56,9 +56,9 @@ export function isSDKControlResponse(
 }
 
 /** Type predicate for control_request messages from the server. */
-export function isSDKControlRequest(
+export function isRuntimeControlRequest(
   value: unknown,
-): value is SDKControlRequest {
+): value is RuntimeControlRequest {
   return (
     value !== null &&
     typeof value === 'object' &&
@@ -132,15 +132,15 @@ export function handleIngressMessage(
   data: string,
   recentPostedUUIDs: BoundedUUIDSet,
   recentInboundUUIDs: BoundedUUIDSet,
-  onInboundMessage: ((msg: SDKMessage) => void | Promise<void>) | undefined,
-  onPermissionResponse?: ((response: SDKControlResponse) => void) | undefined,
-  onControlRequest?: ((request: SDKControlRequest) => void) | undefined,
+  onInboundMessage: ((msg: RuntimeMessage) => void | Promise<void>) | undefined,
+  onPermissionResponse?: ((response: RuntimeControlResponse) => void) | undefined,
+  onControlRequest?: ((request: RuntimeControlRequest) => void) | undefined,
 ): void {
   try {
     const parsed: unknown = normalizeControlMessageKeys(jsonParse(data))
 
-    // control_response is not an SDKMessage —check before the type guard
-    if (isSDKControlResponse(parsed)) {
+    // control_response is not an RuntimeMessage —check before the type guard
+    if (isRuntimeControlResponse(parsed)) {
       logForDebugging('[bridge:repl] Ingress message type=control_response')
       onPermissionResponse?.(parsed)
       return
@@ -148,7 +148,7 @@ export function handleIngressMessage(
 
     // control_request from the server (initialize, set_model, can_use_tool).
     // Must respond promptly or the server kills the WS (~10-14s timeout).
-    if (isSDKControlRequest(parsed)) {
+    if (isRuntimeControlRequest(parsed)) {
       logForDebugging(
         `[bridge:repl] Inbound control_request subtype=${parsed.request.subtype}`,
       )
@@ -156,7 +156,7 @@ export function handleIngressMessage(
       return
     }
 
-    if (!isSDKMessage(parsed)) return
+    if (!isRuntimeMessage(parsed)) return
 
     // Check for UUID to detect echoes of our own messages
     const uuid =
@@ -240,7 +240,7 @@ const OUTBOUND_ONLY_ERROR =
  * collaborators as params so both cores can use it.
  */
 export function handleServerControlRequest(
-  request: SDKControlRequest,
+  request: RuntimeControlRequest,
   handlers: ServerControlRequestHandlers,
 ): void {
   const {
@@ -259,7 +259,7 @@ export function handleServerControlRequest(
     return
   }
 
-  let response: SDKControlResponse
+  let response: RuntimeControlResponse
 
   // Outbound-only: reply error for mutable requests so claude.ai doesn't show
   // false success. initialize must still succeed (server kills the connection
@@ -391,10 +391,10 @@ export function handleServerControlRequest(
 // ─── Result message (for session archival on teardown) ───────────────────────
 
 /**
- * Build a minimal `SDKResultSuccess` message for session archival.
+ * Build a minimal `RuntimeResultSuccess` message for session archival.
  * The server needs this event before a WS close to trigger archival.
  */
-export function makeResultMessage(sessionId: string): SDKResultSuccess {
+export function makeResultMessage(sessionId: string): RuntimeResultSuccess {
   return {
     type: 'result',
     subtype: 'success',

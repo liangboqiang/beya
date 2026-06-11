@@ -5,8 +5,8 @@ import { DEFAULT_OUTPUT_STYLE_NAME } from 'src/constants/outputStyles.js'
 import type {
   ApiKeySource,
   PermissionMode,
-  SDKMessage,
-} from 'src/types/sdkProtocol.js'
+  RuntimeMessage,
+} from 'src/types/runtimeProtocol.js'
 import {
   AGENT_TOOL_NAME,
   LEGACY_AGENT_TOOL_NAME,
@@ -39,7 +39,7 @@ export type SystemInitInputs = {
 }
 
 /**
- * Build the `system/init` SDKMessage —the first message on the SDK stream
+ * Build the `system/init` RuntimeMessage —the first message on the SDK stream
  * carrying session metadata (cwd, tools, model, commands, etc.) that remote
  * clients use to render pickers and gate UI.
  *
@@ -48,13 +48,13 @@ export type SystemInitInputs = {
  *     stream message per query turn
  *   - useReplBridge (REPL Remote Control) —sent via writeSdkMessages() on
  *     bridge connect, since REPL uses query() directly and never hits the
- *     QueryEngine SDKMessage layer
+ *     QueryEngine RuntimeMessage layer
  */
-export function buildSystemInitMessage(inputs: SystemInitInputs): SDKMessage {
+export function buildSystemInitMessage(inputs: SystemInitInputs): RuntimeMessage {
   const settings = getSettings_DEPRECATED()
   const outputStyle = settings?.outputStyle ?? DEFAULT_OUTPUT_STYLE_NAME
 
-  const initMessage: SDKMessage = {
+  const initMessage: RuntimeMessage = {
     type: 'system',
     subtype: 'init',
     cwd: getCwd(),

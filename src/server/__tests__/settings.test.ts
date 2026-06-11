@@ -805,10 +805,10 @@ describe('Status API', () => {
 // =============================================================================
 
 describe('Activity Stats API', () => {
-  let handleApiRequest: typeof import('../router.js').handleApiRequest
+  let handleResourceRequest: typeof import('../router.js').handleResourceRequest
 
   beforeAll(async () => {
-    ;({ handleApiRequest } = await import('../router.js'))
+    ;({ handleResourceRequest } = await import('../router.js'))
   })
 
   beforeEach(async () => {
@@ -817,9 +817,9 @@ describe('Activity Stats API', () => {
 
   afterEach(teardown)
 
-  it('GET /api/activity-stats should default to the all range', async () => {
-    const { req, url } = makeRequest('GET', '/api/activity-stats')
-    const res = await handleApiRequest(req, url)
+  it('GET /activity-stats should default to the all range', async () => {
+    const { req, url } = makeRequest('GET', '/activity-stats')
+    const res = await handleResourceRequest(req, url)
 
     expect(res.status).toBe(200)
 
@@ -829,10 +829,10 @@ describe('Activity Stats API', () => {
     expect(new Date(body.generatedAt).toString()).not.toBe('Invalid Date')
   })
 
-  it('GET /api/activity-stats/:range should return stats for supported ranges', async () => {
+  it('GET /activity-stats/:range should return stats for supported ranges', async () => {
     for (const range of ['7d', '30d', 'all'] as const) {
-      const { req, url } = makeRequest('GET', `/api/activity-stats/${range}`)
-      const res = await handleApiRequest(req, url)
+      const { req, url } = makeRequest('GET', `/activity-stats/${range}`)
+      const res = await handleResourceRequest(req, url)
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -842,15 +842,15 @@ describe('Activity Stats API', () => {
   })
 
   it('should reject non-GET methods', async () => {
-    const { req, url } = makeRequest('POST', '/api/activity-stats')
-    const res = await handleApiRequest(req, url)
+    const { req, url } = makeRequest('POST', '/activity-stats')
+    const res = await handleResourceRequest(req, url)
 
     expect(res.status).toBe(405)
   })
 
   it('should reject unknown activity stats ranges', async () => {
-    const { req, url } = makeRequest('GET', '/api/activity-stats/90d')
-    const res = await handleApiRequest(req, url)
+    const { req, url } = makeRequest('GET', '/activity-stats/90d')
+    const res = await handleResourceRequest(req, url)
 
     expect(res.status).toBe(400)
   })

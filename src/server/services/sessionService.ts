@@ -33,6 +33,7 @@ import {
   type PreparedSessionWorkspace,
 } from './repositoryLaunchService.js'
 import { registerFilesystemAccessRoot } from './filesystemAccessRoots.js'
+import { serverEventBus } from '../events/eventBus.js'
 import { normalizeDriveRootPathForPlatform } from './windowsDrivePath.js'
 import { cleanSessionTitleSource } from '../../utils/sessionTitleText.js'
 import { roughTokenCountEstimationForMessages } from '../../services/tokenEstimation.js'
@@ -1779,6 +1780,10 @@ export class SessionService {
 
     await fs.writeFile(filePath, JSON.stringify(initialEntry) + '\n' + JSON.stringify(metaEntry) + '\n', 'utf-8')
     this.invalidateSessionListCache()
+    serverEventBus.emit('session.created', {
+      sessionId,
+      workDir: absWorkDir,
+    })
 
     return { sessionId, workDir: absWorkDir }
   }
@@ -1794,6 +1799,10 @@ export class SessionService {
 
     await fs.unlink(found.filePath)
     this.invalidateSessionListCache()
+    serverEventBus.emit('session.deleted', {
+      sessionId,
+      workDir: found.projectDir,
+    })
   }
 
   async deleteSessions(sessionIds: string[]): Promise<DeleteSessionsResult> {

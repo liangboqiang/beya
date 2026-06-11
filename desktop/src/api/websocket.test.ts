@@ -76,16 +76,16 @@ describe('wsManager reconnect buffering', () => {
     wsManager.connect('session-reconnect')
 
     const firstSocket = FakeWebSocket.instances[0]
-    expect(firstSocket?.url).toContain('/ws/session-reconnect')
+    expect(firstSocket?.url).toContain('/sessions/session-reconnect/live')
 
     firstSocket!.open()
-    wsManager.send('session-reconnect', { type: 'user_message', content: 'first' })
+    wsManager.send('session-reconnect', { type: 'session.message.send', content: 'first' })
     expect(firstSocket!.sent).toEqual([
-      JSON.stringify({ type: 'user_message', content: 'first' }),
+      JSON.stringify({ type: 'session.message.send', content: 'first' }),
     ])
 
     firstSocket!.fail()
-    wsManager.send('session-reconnect', { type: 'user_message', content: 'queued while offline' })
+    wsManager.send('session-reconnect', { type: 'session.message.send', content: 'queued while offline' })
 
     await vi.advanceTimersByTimeAsync(1000)
 
@@ -94,7 +94,7 @@ describe('wsManager reconnect buffering', () => {
     secondSocket!.open()
 
     expect(secondSocket!.sent).toEqual([
-      JSON.stringify({ type: 'user_message', content: 'queued while offline' }),
+      JSON.stringify({ type: 'session.message.send', content: 'queued while offline' }),
     ])
   })
 
@@ -103,7 +103,7 @@ describe('wsManager reconnect buffering', () => {
     clientMocks.authToken = 'h5 token/with?chars'
 
     expect(buildSessionWebSocketUrl('session-reconnect')).toBe(
-      'ws://10.0.0.2:3456/ws/session-reconnect?token=h5+token%2Fwith%3Fchars',
+      'ws://10.0.0.2:3456/sessions/session-reconnect/live?token=h5+token%2Fwith%3Fchars',
     )
   })
 
@@ -111,7 +111,7 @@ describe('wsManager reconnect buffering', () => {
     clientMocks.baseUrl = 'https://remote.example.com'
 
     expect(buildSessionWebSocketUrl('secure-session')).toBe(
-      'wss://remote.example.com/ws/secure-session',
+      'wss://remote.example.com/sessions/secure-session/live',
     )
   })
 
@@ -119,7 +119,7 @@ describe('wsManager reconnect buffering', () => {
     clientMocks.baseUrl = 'https://public.example.com/app'
 
     expect(buildSessionWebSocketUrl('s1')).toBe(
-      'wss://public.example.com/app/ws/s1',
+      'wss://public.example.com/app/sessions/s1/live',
     )
   })
 })

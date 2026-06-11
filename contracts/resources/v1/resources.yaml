@@ -1,0 +1,2246 @@
+name: resources.registry
+version: v1
+domain: resources
+stability: stable
+description: Resource domains reachable through the /rpc gateway.
+methods:
+  - name: activitystats.read
+    resource:
+      httpMethod: GET
+      path: /activity-stats
+      handler:
+        module: src/server/api/activityStats.js
+        export: handleActivityStatsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: activitystatsRead
+  - name: adapters.configread
+    resource:
+      httpMethod: GET
+      path: /adapters
+      handler:
+        module: src/server/api/adapters.js
+        export: handleAdaptersApi
+    owner: access-surfaces
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: adaptersConfigread
+  - name: adapters.configupdate
+    resource:
+      httpMethod: PUT
+      path: /adapters
+      handler:
+        module: src/server/api/adapters.js
+        export: handleAdaptersApi
+    owner: access-surfaces
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: adaptersConfigupdate
+  - name: adapters.dingtalkregistrationbegin
+    resource:
+      httpMethod: POST
+      path: /adapters/dingtalk/registration/begin
+      handler:
+        module: src/server/api/adapters.js
+        export: handleAdaptersApi
+    owner: access-surfaces
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: adaptersDingtalkregistrationbegin
+  - name: adapters.dingtalkregistrationpoll
+    resource:
+      httpMethod: POST
+      path: /adapters/dingtalk/registration/poll
+      handler:
+        module: src/server/api/adapters.js
+        export: handleAdaptersApi
+    owner: access-surfaces
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: adaptersDingtalkregistrationpoll
+  - name: adapters.dingtalkunbind
+    resource:
+      httpMethod: POST
+      path: /adapters/dingtalk/unbind
+      handler:
+        module: src/server/api/adapters.js
+        export: handleAdaptersApi
+    owner: access-surfaces
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: adaptersDingtalkunbind
+  - name: adapters.wechatloginpoll
+    resource:
+      httpMethod: POST
+      path: /adapters/wechat/login/poll
+      handler:
+        module: src/server/api/adapters.js
+        export: handleAdaptersApi
+    owner: access-surfaces
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: adaptersWechatloginpoll
+  - name: adapters.wechatloginstart
+    resource:
+      httpMethod: POST
+      path: /adapters/wechat/login/start
+      handler:
+        module: src/server/api/adapters.js
+        export: handleAdaptersApi
+    owner: access-surfaces
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: adaptersWechatloginstart
+  - name: adapters.wechatunbind
+    resource:
+      httpMethod: POST
+      path: /adapters/wechat/unbind
+      handler:
+        module: src/server/api/adapters.js
+        export: handleAdaptersApi
+    owner: access-surfaces
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: adaptersWechatunbind
+  - name: agents.execute
+    resource:
+      httpMethod: POST
+      path: /agents/{agentId}
+      handler:
+        module: src/server/api/agents.js
+        export: handleAgentsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: agentsExecute
+  - name: agents.get
+    resource:
+      httpMethod: GET
+      path: /agents/{agentId}
+      handler:
+        module: src/server/api/agents.js
+        export: handleAgentsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: agentsGet
+  - name: agents.list
+    resource:
+      httpMethod: GET
+      path: /agents
+      handler:
+        module: src/server/api/agents.js
+        export: handleAgentsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: agentsList
+  - name: computeruse.apps
+    resource:
+      httpMethod: GET
+      path: /computer-use/apps
+      handler:
+        module: src/server/api/computer-use.js
+        export: handleComputerUseApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: computeruseApps
+  - name: computeruse.authorizedappsread
+    resource:
+      httpMethod: GET
+      path: /computer-use/authorized-apps
+      handler:
+        module: src/server/api/computer-use.js
+        export: handleComputerUseApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: computeruseAuthorizedappsread
+  - name: computeruse.authorizedappsupdate
+    resource:
+      httpMethod: PUT
+      path: /computer-use/authorized-apps
+      handler:
+        module: src/server/api/computer-use.js
+        export: handleComputerUseApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: computeruseAuthorizedappsupdate
+  - name: computeruse.opensettings
+    resource:
+      httpMethod: POST
+      path: /computer-use/open-settings
+      handler:
+        module: src/server/api/computer-use.js
+        export: handleComputerUseApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: computeruseOpensettings
+  - name: computeruse.setup
+    resource:
+      httpMethod: POST
+      path: /computer-use/setup
+      handler:
+        module: src/server/api/computer-use.js
+        export: handleComputerUseApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: computeruseSetup
+  - name: computeruse.status
+    resource:
+      httpMethod: GET
+      path: /computer-use/status
+      handler:
+        module: src/server/api/computer-use.js
+        export: handleComputerUseApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: computeruseStatus
+  - name: desktopui.avatardelete
+    resource:
+      httpMethod: DELETE
+      path: /desktop-ui/preferences/profile/avatar
+      handler:
+        module: src/server/api/desktop-ui.js
+        export: handleDesktopUiApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: desktopuiAvatardelete
+  - name: desktopui.avatarupdate
+    resource:
+      httpMethod: PUT
+      path: /desktop-ui/preferences/profile/avatar
+      handler:
+        module: src/server/api/desktop-ui.js
+        export: handleDesktopUiApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: desktopuiAvatarupdate
+  - name: desktopui.preferencesread
+    resource:
+      httpMethod: GET
+      path: /desktop-ui/preferences
+      handler:
+        module: src/server/api/desktop-ui.js
+        export: handleDesktopUiApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: desktopuiPreferencesread
+  - name: desktopui.profileupdate
+    resource:
+      httpMethod: PUT
+      path: /desktop-ui/preferences/profile
+      handler:
+        module: src/server/api/desktop-ui.js
+        export: handleDesktopUiApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: desktopuiProfileupdate
+  - name: diagnostics.clear
+    resource:
+      httpMethod: DELETE
+      path: /diagnostics
+      handler:
+        module: src/server/api/diagnostics.js
+        export: handleDiagnosticsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: diagnosticsClear
+  - name: diagnostics.eventslist
+    resource:
+      httpMethod: GET
+      path: /diagnostics/events
+      handler:
+        module: src/server/api/diagnostics.js
+        export: handleDiagnosticsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: diagnosticsEventslist
+  - name: diagnostics.eventsrecord
+    resource:
+      httpMethod: POST
+      path: /diagnostics/events
+      handler:
+        module: src/server/api/diagnostics.js
+        export: handleDiagnosticsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: diagnosticsEventsrecord
+  - name: diagnostics.export
+    resource:
+      httpMethod: POST
+      path: /diagnostics/export
+      handler:
+        module: src/server/api/diagnostics.js
+        export: handleDiagnosticsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: diagnosticsExport
+  - name: diagnostics.openlogdir
+    resource:
+      httpMethod: POST
+      path: /diagnostics/open-log-dir
+      handler:
+        module: src/server/api/diagnostics.js
+        export: handleDiagnosticsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: diagnosticsOpenlogdir
+  - name: diagnostics.status
+    resource:
+      httpMethod: GET
+      path: /diagnostics/status
+      handler:
+        module: src/server/api/diagnostics.js
+        export: handleDiagnosticsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: diagnosticsStatus
+  - name: doctor.repair
+    resource:
+      httpMethod: POST
+      path: /doctor/repair
+      handler:
+        module: src/server/api/doctor.js
+        export: handleDoctorApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: doctorRepair
+  - name: doctor.report
+    resource:
+      httpMethod: GET
+      path: /doctor/report
+      handler:
+        module: src/server/api/doctor.js
+        export: handleDoctorApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: doctorReport
+  - name: effort.get
+    resource:
+      httpMethod: GET
+      path: /effort
+      handler:
+        module: src/server/api/models.js
+        export: handleModelsApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: effortGet
+  - name: effort.set
+    resource:
+      httpMethod: PUT
+      path: /effort
+      handler:
+        module: src/server/api/models.js
+        export: handleModelsApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: effortSet
+  - name: filesystem.browse
+    resource:
+      httpMethod: GET
+      path: /filesystem/browse
+      handler:
+        module: src/server/api/filesystem.js
+        export: handleFilesystemRoute
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: filesystemBrowse
+  - name: filesystem.pickdirectory
+    resource:
+      httpMethod: POST
+      path: /filesystem/pick-directory
+      handler:
+        module: src/server/api/filesystem.js
+        export: handleFilesystemRoute
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: filesystemPickdirectory
+  - name: filesystem.registerdirectory
+    resource:
+      httpMethod: POST
+      path: /filesystem/register-directory
+      handler:
+        module: src/server/api/filesystem.js
+        export: handleFilesystemRoute
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: filesystemRegisterdirectory
+  - name: h5access.disable
+    resource:
+      httpMethod: POST
+      path: /h5-access/disable
+      handler:
+        module: src/server/api/h5-access.js
+        export: handleH5AccessApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: h5accessDisable
+  - name: h5access.enable
+    resource:
+      httpMethod: POST
+      path: /h5-access/enable
+      handler:
+        module: src/server/api/h5-access.js
+        export: handleH5AccessApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: h5accessEnable
+  - name: h5access.read
+    resource:
+      httpMethod: GET
+      path: /h5-access
+      handler:
+        module: src/server/api/h5-access.js
+        export: handleH5AccessApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: h5accessRead
+  - name: h5access.regenerate
+    resource:
+      httpMethod: POST
+      path: /h5-access/regenerate
+      handler:
+        module: src/server/api/h5-access.js
+        export: handleH5AccessApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: h5accessRegenerate
+  - name: h5access.update
+    resource:
+      httpMethod: PUT
+      path: /h5-access
+      handler:
+        module: src/server/api/h5-access.js
+        export: handleH5AccessApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: h5accessUpdate
+  - name: h5access.verify
+    resource:
+      httpMethod: POST
+      path: /h5-access/verify
+      handler:
+        module: src/server/api/h5-access.js
+        export: handleH5AccessApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: h5accessVerify
+  - name: health.check
+    resource:
+      httpMethod: GET
+      path: /health
+      handler:
+        module: src/modules/foundation/resources/health.js
+        export: handleHealthResource
+    owner: foundation
+    auth: none
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: healthCheck
+  - name: localcli.active
+    resource:
+      httpMethod: PUT
+      path: /local-cli/active
+      handler:
+        module: src/server/api/local-cli.js
+        export: handleLocalCliApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: localcliActive
+  - name: localcli.config
+    resource:
+      httpMethod: PUT
+      path: /local-cli/config
+      handler:
+        module: src/server/api/local-cli.js
+        export: handleLocalCliApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: localcliConfig
+  - name: localcli.list
+    resource:
+      httpMethod: GET
+      path: /local-cli
+      handler:
+        module: src/server/api/local-cli.js
+        export: handleLocalCliApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: localcliList
+  - name: localcli.rescan
+    resource:
+      httpMethod: POST
+      path: /local-cli/rescan
+      handler:
+        module: src/server/api/local-cli.js
+        export: handleLocalCliApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: localcliRescan
+  - name: localcli.test
+    resource:
+      httpMethod: POST
+      path: /local-cli/test
+      handler:
+        module: src/server/api/local-cli.js
+        export: handleLocalCliApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: localcliTest
+  - name: mcp.create
+    resource:
+      httpMethod: POST
+      path: /mcp
+      handler:
+        module: src/server/api/mcp.js
+        export: handleMcpApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: mcpCreate
+  - name: mcp.delete
+    resource:
+      httpMethod: DELETE
+      path: /mcp/{name}
+      handler:
+        module: src/server/api/mcp.js
+        export: handleMcpApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: mcpDelete
+  - name: mcp.list
+    resource:
+      httpMethod: GET
+      path: /mcp
+      handler:
+        module: src/server/api/mcp.js
+        export: handleMcpApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: mcpList
+  - name: mcp.projectpaths
+    resource:
+      httpMethod: GET
+      path: /mcp/project-paths
+      handler:
+        module: src/server/api/mcp.js
+        export: handleMcpApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: mcpProjectpaths
+  - name: mcp.reconnect
+    resource:
+      httpMethod: POST
+      path: /mcp/{name}/reconnect
+      handler:
+        module: src/server/api/mcp.js
+        export: handleMcpApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: mcpReconnect
+  - name: mcp.status
+    resource:
+      httpMethod: GET
+      path: /mcp/{name}/status
+      handler:
+        module: src/server/api/mcp.js
+        export: handleMcpApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: mcpStatus
+  - name: mcp.toggle
+    resource:
+      httpMethod: POST
+      path: /mcp/{name}/toggle
+      handler:
+        module: src/server/api/mcp.js
+        export: handleMcpApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: mcpToggle
+  - name: mcp.update
+    resource:
+      httpMethod: PUT
+      path: /mcp/{name}
+      handler:
+        module: src/server/api/mcp.js
+        export: handleMcpApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: mcpUpdate
+  - name: memory.fileread
+    resource:
+      httpMethod: GET
+      path: /memory/file
+      handler:
+        module: src/server/api/memory.js
+        export: handleMemoryApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: memoryFileread
+  - name: memory.files
+    resource:
+      httpMethod: GET
+      path: /memory/files
+      handler:
+        module: src/server/api/memory.js
+        export: handleMemoryApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: memoryFiles
+  - name: memory.fileupdate
+    resource:
+      httpMethod: PUT
+      path: /memory/file
+      handler:
+        module: src/server/api/memory.js
+        export: handleMemoryApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: memoryFileupdate
+  - name: memory.projects
+    resource:
+      httpMethod: GET
+      path: /memory/projects
+      handler:
+        module: src/server/api/memory.js
+        export: handleMemoryApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: memoryProjects
+  - name: models.current
+    resource:
+      httpMethod: GET
+      path: /models/current
+      handler:
+        module: src/server/api/models.js
+        export: handleModelsApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: modelsCurrent
+  - name: models.list
+    resource:
+      httpMethod: GET
+      path: /models
+      handler:
+        module: src/server/api/models.js
+        export: handleModelsApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: modelsList
+  - name: models.setcurrent
+    resource:
+      httpMethod: PUT
+      path: /models/current
+      handler:
+        module: src/server/api/models.js
+        export: handleModelsApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: modelsSetcurrent
+  - name: opentargets.list
+    resource:
+      httpMethod: GET
+      path: /open-targets
+      handler:
+        module: src/server/api/open-targets.js
+        export: handleOpenTargetsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: opentargetsList
+  - name: opentargets.open
+    resource:
+      httpMethod: POST
+      path: /open-targets/open
+      handler:
+        module: src/server/api/open-targets.js
+        export: handleOpenTargetsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: opentargetsOpen
+  - name: permissions.moderead
+    resource:
+      httpMethod: GET
+      path: /permissions/mode
+      handler:
+        module: src/server/api/settings.js
+        export: handleSettingsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: permissionsModeread
+  - name: permissions.modeupdate
+    resource:
+      httpMethod: PUT
+      path: /permissions/mode
+      handler:
+        module: src/server/api/settings.js
+        export: handleSettingsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: permissionsModeupdate
+  - name: plugins.disable
+    resource:
+      httpMethod: POST
+      path: /plugins/disable
+      handler:
+        module: src/server/api/plugins.js
+        export: handlePluginsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: pluginsDisable
+  - name: plugins.enable
+    resource:
+      httpMethod: POST
+      path: /plugins/enable
+      handler:
+        module: src/server/api/plugins.js
+        export: handlePluginsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: pluginsEnable
+  - name: plugins.get
+    resource:
+      httpMethod: GET
+      path: /plugins/{pluginId}
+      handler:
+        module: src/server/api/plugins.js
+        export: handlePluginsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: pluginsGet
+  - name: plugins.install
+    resource:
+      httpMethod: POST
+      path: /plugins
+      handler:
+        module: src/server/api/plugins.js
+        export: handlePluginsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: pluginsInstall
+  - name: plugins.list
+    resource:
+      httpMethod: GET
+      path: /plugins
+      handler:
+        module: src/server/api/plugins.js
+        export: handlePluginsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: pluginsList
+  - name: plugins.reload
+    resource:
+      httpMethod: POST
+      path: /plugins/reload
+      handler:
+        module: src/server/api/plugins.js
+        export: handlePluginsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: pluginsReload
+  - name: plugins.uninstall
+    resource:
+      httpMethod: POST
+      path: /plugins/uninstall
+      handler:
+        module: src/server/api/plugins.js
+        export: handlePluginsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: pluginsUninstall
+  - name: plugins.update
+    resource:
+      httpMethod: POST
+      path: /plugins/update
+      handler:
+        module: src/server/api/plugins.js
+        export: handlePluginsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: pluginsUpdate
+  - name: providers.activate
+    resource:
+      httpMethod: POST
+      path: /providers/{providerId}/activate
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersActivate
+  - name: providers.authstatus
+    resource:
+      httpMethod: GET
+      path: /providers/auth-status
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersAuthstatus
+  - name: providers.catalog
+    resource:
+      httpMethod: GET
+      path: /providers/catalog
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersCatalog
+  - name: providers.create
+    resource:
+      httpMethod: POST
+      path: /providers
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersCreate
+  - name: providers.delete
+    resource:
+      httpMethod: DELETE
+      path: /providers/{providerId}
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersDelete
+  - name: providers.list
+    resource:
+      httpMethod: GET
+      path: /providers
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersList
+  - name: providers.rescan
+    resource:
+      httpMethod: POST
+      path: /providers/rescan
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersRescan
+  - name: providers.settingsread
+    resource:
+      httpMethod: GET
+      path: /providers/settings
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersSettingsread
+  - name: providers.settingsupdate
+    resource:
+      httpMethod: PUT
+      path: /providers/settings
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersSettingsupdate
+  - name: providers.test
+    resource:
+      httpMethod: POST
+      path: /providers/{providerId}/test
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersTest
+  - name: providers.testadhoc
+    resource:
+      httpMethod: POST
+      path: /providers/test
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersTestadhoc
+  - name: providers.update
+    resource:
+      httpMethod: PATCH
+      path: /providers/{providerId}
+      handler:
+        module: src/server/api/providers.js
+        export: handleProvidersApi
+    owner: model-runtime
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: providersUpdate
+  - name: ready.check
+    resource:
+      httpMethod: GET
+      path: /ready
+      handler:
+        module: src/modules/foundation/resources/health.js
+        export: handleReadyResource
+    owner: foundation
+    auth: none
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: readyCheck
+  - name: scheduledtasks.create
+    resource:
+      httpMethod: POST
+      path: /scheduled-tasks
+      handler:
+        module: src/server/api/scheduled-tasks.js
+        export: handleScheduledTasksApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: scheduledtasksCreate
+  - name: scheduledtasks.delete
+    resource:
+      httpMethod: DELETE
+      path: /scheduled-tasks/{taskId}
+      handler:
+        module: src/server/api/scheduled-tasks.js
+        export: handleScheduledTasksApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: scheduledtasksDelete
+  - name: scheduledtasks.get
+    resource:
+      httpMethod: GET
+      path: /scheduled-tasks/{taskId}
+      handler:
+        module: src/server/api/scheduled-tasks.js
+        export: handleScheduledTasksApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: scheduledtasksGet
+  - name: scheduledtasks.list
+    resource:
+      httpMethod: GET
+      path: /scheduled-tasks
+      handler:
+        module: src/server/api/scheduled-tasks.js
+        export: handleScheduledTasksApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: scheduledtasksList
+  - name: scheduledtasks.run
+    resource:
+      httpMethod: POST
+      path: /scheduled-tasks/{taskId}/run
+      handler:
+        module: src/server/api/scheduled-tasks.js
+        export: handleScheduledTasksApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: scheduledtasksRun
+  - name: scheduledtasks.runs
+    resource:
+      httpMethod: GET
+      path: /scheduled-tasks/runs
+      handler:
+        module: src/server/api/scheduled-tasks.js
+        export: handleScheduledTasksApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: scheduledtasksRuns
+  - name: scheduledtasks.taskruns
+    resource:
+      httpMethod: GET
+      path: /scheduled-tasks/{taskId}/runs
+      handler:
+        module: src/server/api/scheduled-tasks.js
+        export: handleScheduledTasksApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: scheduledtasksTaskruns
+  - name: scheduledtasks.update
+    resource:
+      httpMethod: PUT
+      path: /scheduled-tasks/{taskId}
+      handler:
+        module: src/server/api/scheduled-tasks.js
+        export: handleScheduledTasksApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: scheduledtasksUpdate
+  - name: search.global
+    resource:
+      httpMethod: POST
+      path: /search
+      handler:
+        module: src/server/api/search.js
+        export: handleSearchApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: searchGlobal
+  - name: search.sessions
+    resource:
+      httpMethod: POST
+      path: /search/sessions
+      handler:
+        module: src/server/api/search.js
+        export: handleSearchApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: searchSessions
+  - name: sessionchat.send
+    resource:
+      httpMethod: POST
+      path: /sessions/{sessionId}/chat
+      handler:
+        module: src/server/api/conversations.js
+        export: handleConversationsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionchatSend
+  - name: sessionchat.status
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/chat/status
+      handler:
+        module: src/server/api/conversations.js
+        export: handleConversationsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionchatStatus
+  - name: sessionchat.stop
+    resource:
+      httpMethod: POST
+      path: /sessions/{sessionId}/chat/stop
+      handler:
+        module: src/server/api/conversations.js
+        export: handleConversationsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionchatStop
+  - name: sessions.batchdelete
+    resource:
+      httpMethod: POST
+      path: /sessions/batch-delete
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsBatchdelete
+  - name: sessions.branch
+    resource:
+      httpMethod: POST
+      path: /sessions/{sessionId}/branch
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsBranch
+  - name: sessions.create
+    resource:
+      httpMethod: POST
+      path: /sessions
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsCreate
+  - name: sessions.delete
+    resource:
+      httpMethod: DELETE
+      path: /sessions/{sessionId}
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsDelete
+  - name: sessions.events
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/events
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsEvents
+  - name: sessions.get
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsGet
+  - name: sessions.gitinfo
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/git-info
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsGitinfo
+  - name: sessions.history
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/history
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsHistory
+  - name: sessions.inspection
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/inspection
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsInspection
+  - name: sessions.list
+    resource:
+      httpMethod: GET
+      path: /sessions
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsList
+  - name: sessions.messages
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/messages
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsMessages
+  - name: sessions.recentprojects
+    resource:
+      httpMethod: GET
+      path: /sessions/recent-projects
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsRecentprojects
+  - name: sessions.repositorycontext
+    resource:
+      httpMethod: GET
+      path: /sessions/repository-context
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsRepositorycontext
+  - name: sessions.rewind
+    resource:
+      httpMethod: POST
+      path: /sessions/{sessionId}/rewind
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsRewind
+  - name: sessions.slashcommands
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/slash-commands
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsSlashcommands
+  - name: sessions.turncheckpointdiff
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/turn-checkpoints/{checkpointId}/diff
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsTurncheckpointdiff
+  - name: sessions.turncheckpoints
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/turn-checkpoints
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsTurncheckpoints
+  - name: sessions.update
+    resource:
+      httpMethod: PATCH
+      path: /sessions/{sessionId}
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsUpdate
+  - name: sessions.workspacediff
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/workspace/diff
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsWorkspacediff
+  - name: sessions.workspacefile
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/workspace/file
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsWorkspacefile
+  - name: sessions.workspacestatus
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/workspace/status
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsWorkspacestatus
+  - name: sessions.workspacetree
+    resource:
+      httpMethod: GET
+      path: /sessions/{sessionId}/workspace/tree
+      handler:
+        module: src/server/api/sessions.js
+        export: handleSessionsApi
+    owner: session-host
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: sessionsWorkspacetree
+  - name: settings.read
+    resource:
+      httpMethod: GET
+      path: /settings/user
+      handler:
+        module: src/server/api/settings.js
+        export: handleSettingsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: settingsRead
+  - name: settings.update
+    resource:
+      httpMethod: PUT
+      path: /settings/user
+      handler:
+        module: src/server/api/settings.js
+        export: handleSettingsApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: settingsUpdate
+  - name: skills.get
+    resource:
+      httpMethod: GET
+      path: /skills/{skillName}
+      handler:
+        module: src/server/api/skills.js
+        export: handleSkillsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: skillsGet
+  - name: skills.list
+    resource:
+      httpMethod: GET
+      path: /skills
+      handler:
+        module: src/server/api/skills.js
+        export: handleSkillsApi
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: skillsList
+  - name: status.read
+    resource:
+      httpMethod: GET
+      path: /status
+      handler:
+        module: src/server/api/status.js
+        export: handleStatusApi
+    owner: foundation
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: statusRead
+  - name: tasks.get
+    resource:
+      httpMethod: GET
+      path: /tasks/lists/{taskListId}/{taskId}
+      handler:
+        module: src/server/api/agents.js
+        export: handleAgentsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: tasksGet
+  - name: tasks.getlist
+    resource:
+      httpMethod: GET
+      path: /tasks/lists/{taskListId}
+      handler:
+        module: src/server/api/agents.js
+        export: handleAgentsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: tasksGetlist
+  - name: tasks.list
+    resource:
+      httpMethod: GET
+      path: /tasks
+      handler:
+        module: src/server/api/agents.js
+        export: handleAgentsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: tasksList
+  - name: tasks.lists
+    resource:
+      httpMethod: GET
+      path: /tasks/lists
+      handler:
+        module: src/server/api/agents.js
+        export: handleAgentsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: tasksLists
+  - name: tasks.reset
+    resource:
+      httpMethod: POST
+      path: /tasks/lists/{taskListId}/reset
+      handler:
+        module: src/server/api/agents.js
+        export: handleAgentsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: tasksReset
+  - name: teams.delete
+    resource:
+      httpMethod: DELETE
+      path: /teams/{teamId}
+      handler:
+        module: src/server/api/teams.js
+        export: handleTeamsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: teamsDelete
+  - name: teams.get
+    resource:
+      httpMethod: GET
+      path: /teams/{teamId}
+      handler:
+        module: src/server/api/teams.js
+        export: handleTeamsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: teamsGet
+  - name: teams.list
+    resource:
+      httpMethod: GET
+      path: /teams
+      handler:
+        module: src/server/api/teams.js
+        export: handleTeamsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: teamsList
+  - name: teams.message
+    resource:
+      httpMethod: POST
+      path: /teams/{teamId}/message
+      handler:
+        module: src/server/api/teams.js
+        export: handleTeamsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: teamsMessage
+  - name: teams.transcript
+    resource:
+      httpMethod: GET
+      path: /teams/{teamId}/transcript
+      handler:
+        module: src/server/api/teams.js
+        export: handleTeamsApi
+    owner: agent-core
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: teamsTranscript
+  - name: tools.execute
+    resource:
+      httpMethod: POST
+      path: /tools/{toolName}/execute
+      handler:
+        module: src/server/api/tools.js
+        export: handleServerTools
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: toolsExecute
+  - name: tools.get
+    resource:
+      httpMethod: GET
+      path: /tools/{toolName}
+      handler:
+        module: src/server/api/tools.js
+        export: handleServerTools
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: toolsGet
+  - name: tools.list
+    resource:
+      httpMethod: GET
+      path: /tools
+      handler:
+        module: src/server/api/tools.js
+        export: handleServerTools
+    owner: capability-registry
+    auth: local-trusted
+    request:
+      type: object
+    response:
+      type: object
+    client:
+      exposed: true
+      name: toolsList

@@ -1,11 +1,16 @@
 /**
  * WebSocket Bridge
  *
- * 封装与 Beya Desktop 服务端 /ws/:sessionId 的通信。
+ * 封装与 Beya Desktop 服务端 /sessions/{sessionId}/live 的通信。
  * 管理 chatId → sessionId 映射，自动重连，心跳。
  */
 
 import WebSocket from 'ws'
+import {
+  buildSessionLiveCommand,
+  buildSessionLivePath,
+  type JsonValue,
+} from '../../src/generated/contracts/index.js'
 
 /** Attachment reference — mirrors src/server/ws/events.ts AttachmentRef.
  *  The server will either (a) write base64 `data` to
@@ -75,11 +80,12 @@ export class WsBridge {
     content: string,
     attachments?: AttachmentRef[],
   ): boolean {
-    const payload: Record<string, unknown> = { type: 'user_message', content }
-    if (attachments && attachments.length > 0) {
-      payload.attachments = attachments
-    }
-    return this.send(chatId, payload)
+    return this.send(chatId, buildSessionLiveCommand('session.message.send', {
+      content,
+      attachments: attachments && attachments.length > 0
+        ? attachments as unknown as JsonValue
+        : undefined,
+    }))
   }
 
   /** Respond to a permission request.
@@ -94,18 +100,17 @@ export class WsBridge {
     allowed: boolean,
     rule?: string,
   ): boolean {
-    const message: Record<string, unknown> = {
-      type: 'permission_response',
+    const message = buildSessionLiveCommand('session.permission.respond', {
       requestId,
       allowed,
-    }
+    })
     if (rule) message.rule = rule
     return this.send(chatId, message)
   }
 
   /** Stop the current generation. */
   sendStopGeneration(chatId: string): boolean {
-    return this.send(chatId, { type: 'stop_generation' })
+    return this.send(chatId, buildSessionLiveCommand('session.generation.stop'))
   }
 
   /** Register (or replace) the handler for server messages on a specific chatId. */
@@ -160,7 +165,7 @@ export class WsBridge {
   // ------- internal -------
 
   private connect(chatId: string, sessionId: string): void {
-    const url = `${this.serverUrl}/ws/${sessionId}`
+    const url = `${this.serverUrl}${buildSessionLivePath(sessionId)}`
     const ws = new WebSocket(url)
 
     // Cancel any pending reconnect timer for this chatId
@@ -191,7 +196,7 @@ export class WsBridge {
         console.error('[WsBridge] Parse error:', err)
         return
       }
-      if (msg.type === 'pong') return
+      if (msg.type === 'session.pong') return
       const handler = this.handlers.get(chatId)
       if (!handler) return
 
@@ -292,7 +297,7 @@ export class WsBridge {
     this.heartbeatTimer = setInterval(() => {
       for (const [, session] of this.sessions) {
         if (session.ws.readyState === WebSocket.OPEN) {
-          session.ws.send(JSON.stringify({ type: 'ping' }))
+          session.ws.send(JSON.stringify(buildSessionLiveCommand('session.ping')))
         }
       }
     }, HEARTBEAT_INTERVAL_MS)

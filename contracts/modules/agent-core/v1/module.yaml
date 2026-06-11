@@ -1,0 +1,55 @@
+id: agent-core
+version: v1
+name: Agent Core
+layer: agent
+layerOrder: 4
+stability: stable
+description: Agent turn loop, prompt context, tool orchestration, permission decisions, and subagent execution.
+paths:
+  server:
+    - src/modules/agent-core
+    - src/QueryEngine.ts
+    - src/query.ts
+    - src/services/tools
+    - src/tools/AgentTool
+  contracts:
+    - contracts/modules/agent-core/v1/module.yaml
+owns:
+  - Agent turn execution.
+  - Tool orchestration order and result normalization.
+  - Subagent orchestration.
+  - Agent transcript events.
+resourceMethods:
+  - agents.list
+  - agents.get
+  - agents.execute
+  - teams.list
+  - teams.get
+  - teams.transcript
+  - teams.message
+  - teams.delete
+  - tasks.list
+  - tasks.lists
+  - tasks.getlist
+  - tasks.get
+  - tasks.reset
+  - scheduledtasks.list
+  - scheduledtasks.create
+  - scheduledtasks.get
+  - scheduledtasks.update
+  - scheduledtasks.delete
+  - scheduledtasks.run
+  - scheduledtasks.runs
+  - scheduledtasks.taskruns
+allowedDependencies:
+  - capability-registry
+  - model-runtime
+  - foundation
+forbiddenDependencies:
+  - access-surfaces
+  - gateway
+  - session-host
+implementationRoots:
+  - src/modules/agent-core
+  - src/services/tools
+  - src/tools/AgentTool

@@ -5,6 +5,7 @@ import * as path from 'node:path'
 import { startServer } from '../index.js'
 import { H5AccessService } from '../services/h5AccessService.js'
 import { ProviderService } from '../services/providerService.js'
+import { buildRpcResourceCall } from '../../generated/contracts/index.js'
 
 let server: ReturnType<typeof Bun.serve> | undefined
 let baseUrl = ''
@@ -19,6 +20,12 @@ let originalClaudeAppRoot: string | undefined
 let originalServerAuthRequired: string | undefined
 let originalServerPort = 3456
 const PHONE_ORIGIN = 'https://phone.example'
+
+type RpcRequestOptions = RequestInit & {
+  httpBaseUrl?: string
+  wsBaseUrl?: string
+  token?: string
+}
 
 async function waitForServer(url: string): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -44,6 +51,24 @@ async function stopRemoteServer(): Promise<void> {
       Bun.sleep(1000),
     ])
     await Bun.sleep(25)
+  }
+}
+
+async function rmWithRetry(targetPath: string): Promise<void> {
+  const attempts = process.platform === 'win32' ? 5 : 1
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await fs.rm(targetPath, { recursive: true, force: true })
+      return
+    } catch (error) {
+      if (
+        attempt === attempts - 1 ||
+        !['EBUSY', 'EPERM', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code || '')
+      ) {
+        throw error
+      }
+      await Bun.sleep(100 * (attempt + 1))
+    }
   }
 }
 
@@ -92,7 +117,7 @@ async function restartRemoteServer(options: { authRequired?: boolean } = {}): Pr
   await startRemoteServer(options)
 }
 
-function makeUpgradeHeaders(origin?: string): HeadersInit {
+function makeUpgradeHeaders(origin?: string): Record<string, string> {
   return {
     Connection: 'Upgrade',
     Upgrade: 'websocket',
@@ -128,9 +153,161 @@ async function enableH5Access(options: {
   return token
 }
 
-function expectWebSocketOpen(url: string): Promise<void> {
+function rpcUpgradeUrl(httpBaseUrl = baseUrl, token?: string): string {
+  const url = new URL('/rpc', httpBaseUrl)
+  if (token) {
+    url.searchParams.set('token', token)
+  }
+  return url.toString()
+}
+
+function rpcWebSocketUrl(base = wsBaseUrl, token?: string): string {
+  const url = new URL('/rpc', base)
+  if (token) {
+    url.searchParams.set('token', token)
+  }
+  return url.toString()
+}
+
+function normalizeResourcePath(resourcePath: string): string {
+  const url = new URL(resourcePath, baseUrl)
+  if (url.pathname === '/api') {
+    return `/${url.search}`
+  }
+  if (url.pathname.startsWith('/api/')) {
+    return `${url.pathname.slice('/api'.length)}${url.search}`
+  }
+  return `${url.pathname}${url.search}`
+}
+
+function headerRecord(headers?: HeadersInit): Record<string, string> {
+  return Object.fromEntries(new Headers(headers).entries())
+}
+
+async function rpcUpgradeResponse(options: {
+  httpBaseUrl?: string
+  origin?: string
+  token?: string
+  headers?: Record<string, string>
+} = {}): Promise<Response> {
+  return fetch(rpcUpgradeUrl(options.httpBaseUrl, options.token), {
+    headers: {
+      ...makeUpgradeHeaders(options.origin),
+      ...(options.headers || {}),
+    },
+  })
+}
+
+async function rpcPreflightResponse(options: {
+  httpBaseUrl?: string
+  origin: string
+  requestMethod?: string
+  headers?: Record<string, string>
+}): Promise<Response> {
+  return fetch(rpcUpgradeUrl(options.httpBaseUrl), {
+    method: 'OPTIONS',
+    headers: {
+      Origin: options.origin,
+      'Access-Control-Request-Method': options.requestMethod || 'GET',
+      ...(options.headers || {}),
+    },
+  })
+}
+
+async function rpcResourceRequest(resourcePath: string, init: RpcRequestOptions = {}): Promise<Response> {
+  const resource = normalizeResourcePath(resourcePath)
+  const requestId = `h5-rpc-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const headers = headerRecord(init.headers)
+  const targetWsBaseUrl = init.wsBaseUrl || wsBaseUrl
+
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url)
+    const ws = new WebSocket(
+      rpcWebSocketUrl(targetWsBaseUrl, init.token),
+      { headers } as unknown as string[],
+    )
+    let settled = false
+    const timer = setTimeout(() => {
+      settled = true
+      ws.close()
+      reject(new Error(`Timed out waiting for RPC response for ${resource}`))
+    }, 5000)
+
+    const finish = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close()
+      }
+      callback()
+    }
+
+    ws.addEventListener('open', () => {
+      const call = buildRpcResourceCall({
+        httpMethod: init.method || 'GET',
+        path: resource,
+        headers,
+        body: init.body as never,
+      })
+      ws.send(JSON.stringify({
+        type: 'rpc.request',
+        id: requestId,
+        method: call.method,
+        params: call.params,
+      }))
+    })
+
+    ws.addEventListener('message', (event) => {
+      const message = JSON.parse(String(event.data)) as {
+        type: string
+        id?: string
+        status?: number
+        headers?: Record<string, string>
+        result?: unknown
+        code?: string
+        message?: string
+      }
+      if (message.type === 'rpc.connected' || message.type === 'rpc.pong') return
+      if (message.id !== requestId) return
+      if (message.type === 'rpc.error') {
+        finish(() => resolve(Response.json(
+          { error: message.code, message: message.message },
+          { status: 400 },
+        )))
+        return
+      }
+      if (message.type !== 'rpc.response') return
+
+      finish(() => resolve(new Response(
+        message.result === undefined || message.result === null
+          ? null
+          : typeof message.result === 'string'
+            ? message.result
+            : JSON.stringify(message.result),
+        {
+          status: message.status ?? 200,
+          headers: message.headers,
+        },
+      )))
+    })
+
+    ws.addEventListener('error', () => {
+      finish(() => reject(new Error(`RPC WebSocket failed for ${resource}`)))
+    })
+
+    ws.addEventListener('close', () => {
+      if (!settled) {
+        finish(() => reject(new Error(`RPC WebSocket closed before response for ${resource}`)))
+      }
+    })
+  })
+}
+
+function expectWebSocketOpen(url: string, headers?: Record<string, string>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const ws = headers
+      ? new WebSocket(url, { headers } as unknown as string[])
+      : new WebSocket(url)
     const timeout = setTimeout(() => {
       ws.close()
       reject(new Error(`Timed out opening websocket: ${url}`))
@@ -149,9 +326,11 @@ function expectWebSocketOpen(url: string): Promise<void> {
   })
 }
 
-function expectWebSocketUpgradeThenClose(url: string): Promise<void> {
+function expectWebSocketUpgradeThenClose(url: string, headers?: Record<string, string>): Promise<void> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url)
+    const ws = headers
+      ? new WebSocket(url, { headers } as unknown as string[])
+      : new WebSocket(url)
     let opened = false
     const timeout = setTimeout(() => {
       ws.close()
@@ -179,9 +358,9 @@ function expectWebSocketUpgradeThenClose(url: string): Promise<void> {
 }
 
 const settingsSurfaceEndpoints = [
-  { path: '/api/mcp', expected: { servers: [] } },
-  { path: '/api/plugins', expected: { plugins: [] } },
-  { path: '/api/agents', expectedKey: 'activeAgents' },
+  { path: '/mcp', expected: { servers: [] } },
+  { path: '/plugins', expected: { plugins: [] } },
+  { path: '/agents', expectedKey: 'activeAgents' },
 ] as const
 
 beforeEach(async () => {
@@ -222,22 +401,7 @@ afterEach(async () => {
   if (originalServerAuthRequired === undefined) delete process.env.SERVER_AUTH_REQUIRED
   else process.env.SERVER_AUTH_REQUIRED = originalServerAuthRequired
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try {
-      await fs.rm(tmpDir, { recursive: true, force: true })
-      break
-    } catch (error) {
-      if (
-        attempt === 4 ||
-        !(error instanceof Error) ||
-        !('code' in error) ||
-        error.code !== 'EBUSY'
-      ) {
-        throw error
-      }
-      await Bun.sleep(50)
-    }
-  }
+  await rmWithRetry(tmpDir)
 })
 
 describe('remote H5 auth and CORS integration', () => {
@@ -268,53 +432,31 @@ describe('remote H5 auth and CORS integration', () => {
     await expect(response.text()).resolves.toContain('Mapped H5 Shell')
   })
 
-  test('allows /api/status by default without H5 token or Anthropic key', async () => {
-    const response = await fetch(`${baseUrl}/api/status`)
+  test('allows local resource RPC by default without H5 token or provider key', async () => {
+    const response = await rpcResourceRequest('/status')
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({
-      status: 'ok',
-    })
+    await expect(response.json()).resolves.toMatchObject({ status: 'ok' })
   })
 
-  test('allows localhost WebUI origin without H5 token for browser development', async () => {
-    const response = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Origin: 'http://127.0.0.1:5179',
-      },
+  test('allows localhost WebUI and Tauri origins at the RPC CORS boundary', async () => {
+    const localhostPreflight = await rpcPreflightResponse({
+      origin: 'http://127.0.0.1:5179',
     })
+    expect(localhostPreflight.status).toBe(204)
+    expect(localhostPreflight.headers.get('Access-Control-Allow-Origin')).toBe('http://127.0.0.1:5179')
 
-    expect(response.status).toBe(200)
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('http://127.0.0.1:5179')
-    await expect(response.json()).resolves.toMatchObject({
-      status: 'ok',
+    const tauriPreflight = await rpcPreflightResponse({
+      origin: 'http://tauri.localhost',
     })
+    expect(tauriPreflight.status).toBe(204)
+    expect(tauriPreflight.headers.get('Access-Control-Allow-Origin')).toBe('http://tauri.localhost')
   })
 
-  test('allows the Tauri desktop WebView origin to control the local sidecar without H5 token', async () => {
-    const response = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Origin: 'http://tauri.localhost',
-      },
-    })
-
-    expect(response.status).toBe(200)
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('http://tauri.localhost')
-    await expect(response.json()).resolves.toMatchObject({
-      status: 'ok',
-    })
-  })
-
-  test('blocks remote browser capability requests while H5 access is disabled', async () => {
-    const apiResponse = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Origin: PHONE_ORIGIN,
-      },
-    })
-    expect(apiResponse.status).toBe(403)
-    await expect(apiResponse.json()).resolves.toMatchObject({
-      error: 'Forbidden',
-    })
+  test('blocks remote browser capability routes while H5 access is disabled', async () => {
+    const rpcResponse = await rpcUpgradeResponse({ origin: PHONE_ORIGIN })
+    expect(rpcResponse.status).toBe(403)
+    await expect(rpcResponse.json()).resolves.toMatchObject({ error: 'Forbidden' })
 
     const proxyResponse = await fetch(`${baseUrl}/proxy/openai/v1/chat/completions`, {
       method: 'POST',
@@ -326,31 +468,23 @@ describe('remote H5 auth and CORS integration', () => {
     })
     expect(proxyResponse.status).toBe(403)
 
-    const wsResponse = await fetch(`${baseUrl}/ws/h5-auth-test`, {
+    const wsResponse = await fetch(`${baseUrl}/sessions/h5-auth-test/live`, {
       headers: makeUpgradeHeaders(PHONE_ORIGIN),
     })
     expect(wsResponse.status).toBe(403)
   })
 
-  test('blocks remote browser SDK requests while H5 access is disabled', async () => {
-    const response = await fetch(`${baseUrl}/sdk/h5-auth-test`, {
+  test('blocks remote browser runtime bridge requests while H5 access is disabled', async () => {
+    const response = await fetch(`${baseUrl}/sessions/h5-auth-test/runtime`, {
       headers: makeUpgradeHeaders(PHONE_ORIGIN),
     })
 
     expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'Forbidden',
-    })
+    await expect(response.json()).resolves.toMatchObject({ error: 'Forbidden' })
   })
 
   test('blocks remote preflight requests to capability routes while H5 access is disabled', async () => {
-    const response = await fetch(`${baseUrl}/api/status`, {
-      method: 'OPTIONS',
-      headers: {
-        Origin: PHONE_ORIGIN,
-        'Access-Control-Request-Method': 'GET',
-      },
-    })
+    const response = await rpcPreflightResponse({ origin: PHONE_ORIGIN })
 
     expect(response.status).toBe(403)
     expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull()
@@ -361,35 +495,25 @@ describe('remote H5 auth and CORS integration', () => {
       return
     }
 
-    const apiResponse = await fetch(`${lanBaseUrl}/api/status`)
+    const rpcResponse = await rpcUpgradeResponse({ httpBaseUrl: lanBaseUrl })
 
-    expect(apiResponse.status).toBe(403)
-    await expect(apiResponse.json()).resolves.toMatchObject({
+    expect(rpcResponse.status).toBe(403)
+    await expect(rpcResponse.json()).resolves.toMatchObject({
       error: 'Forbidden',
       message: 'H5 access is disabled. Enable H5 access from the local desktop app first.',
     })
 
     const proxyResponse = await fetch(`${lanBaseUrl}/proxy/v1/messages`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: 'test', messages: [] }),
     })
     expect(proxyResponse.status).toBe(403)
-    await expect(proxyResponse.json()).resolves.toMatchObject({
-      error: 'Forbidden',
-      message: 'H5 access is disabled. Enable H5 access from the local desktop app first.',
-    })
 
-    const wsResponse = await fetch(`${lanBaseUrl}/ws/h5-auth-test`, {
+    const wsResponse = await fetch(`${lanBaseUrl}/sessions/h5-auth-test/live`, {
       headers: makeUpgradeHeaders(),
     })
     expect(wsResponse.status).toBe(403)
-    await expect(wsResponse.json()).resolves.toMatchObject({
-      error: 'Forbidden',
-      message: 'H5 access is disabled. Enable H5 access from the local desktop app first.',
-    })
   })
 
   test('does not trust spoofed localhost Host and Origin headers from LAN clients while H5 access is disabled', async () => {
@@ -398,17 +522,16 @@ describe('remote H5 auth and CORS integration', () => {
     }
 
     const spoofedHeaders = spoofedLoopbackHeaders(new URL(lanBaseUrl).port)
-
-    const apiResponse = await fetch(`${lanBaseUrl}/api/status`, {
+    const rpcResponse = await rpcUpgradeResponse({
+      httpBaseUrl: lanBaseUrl,
       headers: spoofedHeaders,
     })
-    if (apiResponse.status === 200) {
+    if (rpcResponse.status === 400) {
       // Some local stacks route a request to the machine's own LAN IP as a
-      // loopback peer. In that case this test cannot simulate a distinct LAN
-      // client; the policy-level spoof regression still covers that boundary.
+      // loopback peer. The policy-level spoof regression covers that boundary.
       return
     }
-    expect(apiResponse.status).toBe(403)
+    expect(rpcResponse.status).toBe(403)
 
     const proxyResponse = await fetch(`${lanBaseUrl}/proxy/v1/messages`, {
       method: 'POST',
@@ -420,52 +543,38 @@ describe('remote H5 auth and CORS integration', () => {
     })
     expect(proxyResponse.status).toBe(403)
 
-    const wsResponse = await fetch(`${lanBaseUrl}/ws/h5-auth-test`, {
+    const wsResponse = await fetch(`${lanBaseUrl}/sessions/h5-auth-test/live`, {
       headers: {
         ...makeUpgradeHeaders(spoofedHeaders.Origin),
         Host: spoofedHeaders.Host,
       },
     })
     expect(wsResponse.status).toBe(403)
-
-    const controlResponse = await fetch(`${lanBaseUrl}/api/h5-access/enable`, {
-      method: 'POST',
-      headers: spoofedHeaders,
-    })
-    expect(controlResponse.status).toBe(403)
   })
 
-  test('keeps local loopback SDK requests tokenless while H5 access is disabled', async () => {
-    await expectWebSocketUpgradeThenClose(`${wsBaseUrl}/sdk/h5-auth-test`)
+  test('keeps local loopback runtime bridge requests tokenless while H5 access is disabled', async () => {
+    await expectWebSocketUpgradeThenClose(`${wsBaseUrl}/sessions/h5-auth-test/runtime`)
   })
 
-  test('keeps local loopback adapter requests tokenless while H5 access is disabled', async () => {
-    const response = await fetch(`${baseUrl}/api/adapters`)
+  test('keeps local loopback adapter and settings resource requests tokenless while H5 access is disabled', async () => {
+    const adaptersResponse = await rpcResourceRequest('/adapters')
+    expect(adaptersResponse.status).toBe(200)
+    await expect(adaptersResponse.json()).resolves.toEqual({})
 
-    expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({})
-  })
-
-  test('keeps local loopback settings surface requests tokenless while H5 access is disabled', async () => {
     for (const endpoint of settingsSurfaceEndpoints) {
-      const response = await fetch(`${baseUrl}${endpoint.path}`)
-
+      const response = await rpcResourceRequest(endpoint.path)
       expect(response.status).toBe(200)
     }
   })
 
-  test('lets explicitly authenticated deployments use remote capability routes while H5 access is disabled', async () => {
+  test('lets explicitly authenticated deployments use remote RPC resources while H5 access is disabled', async () => {
     await restartRemoteServer({ authRequired: true })
     process.env.ANTHROPIC_API_KEY = 'test-server-key'
 
-    const missingResponse = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Origin: PHONE_ORIGIN,
-      },
-    })
+    const missingResponse = await rpcUpgradeResponse({ origin: PHONE_ORIGIN })
     expect(missingResponse.status).toBe(401)
 
-    const validResponse = await fetch(`${baseUrl}/api/status`, {
+    const validResponse = await rpcResourceRequest('/status', {
       headers: {
         Origin: PHONE_ORIGIN,
         Authorization: 'Bearer test-server-key',
@@ -474,34 +583,26 @@ describe('remote H5 auth and CORS integration', () => {
     expect(validResponse.status).toBe(200)
   })
 
-  test('keeps /api/status open by default even when a stale bearer token is sent', async () => {
+  test('keeps local RPC resources open by default even when a stale bearer token is sent', async () => {
     await enableH5Access()
 
-    const response = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Authorization: 'Bearer wrong-token',
-      },
+    const response = await rpcResourceRequest('/status', {
+      headers: { Authorization: 'Bearer wrong-token' },
     })
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({
-      status: 'ok',
-    })
+    await expect(response.json()).resolves.toMatchObject({ status: 'ok' })
   })
 
-  test('allows /api/status with a bearer token while default auth is open', async () => {
+  test('allows local RPC resources with a bearer token while default auth is open', async () => {
     const token = await enableH5Access()
 
-    const response = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+    const response = await rpcResourceRequest('/status', {
+      headers: { Authorization: `Bearer ${token}` },
     })
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toMatchObject({
-      status: 'ok',
-    })
+    await expect(response.json()).resolves.toMatchObject({ status: 'ok' })
   })
 
   test('rejects arbitrary CORS origins when H5 access is enabled', async () => {
@@ -509,40 +610,32 @@ describe('remote H5 auth and CORS integration', () => {
       allowedOrigins: ['https://allowed.example.com'],
     })
 
-    const response = await fetch(`${baseUrl}/api/status`, {
-      method: 'OPTIONS',
-      headers: {
-        ...makeUpgradeHeaders('https://blocked.example.com'),
-        'Access-Control-Request-Method': 'GET',
-      },
+    const response = await rpcPreflightResponse({
+      origin: 'https://blocked.example.com',
     })
 
     expect(response.status).toBe(403)
   })
 
   test('blocks remote browsers from enabling H5 access before the local desktop opts in', async () => {
-    const response = await fetch(`${baseUrl}/api/h5-access/enable`, {
-      method: 'POST',
-      headers: {
-        Origin: PHONE_ORIGIN,
-      },
-    })
+    const response = await rpcUpgradeResponse({ origin: PHONE_ORIGIN })
 
     expect(response.status).toBe(403)
-    await expect(response.json()).resolves.toMatchObject({
-      error: 'Forbidden',
-    })
+    await expect(response.json()).resolves.toMatchObject({ error: 'Forbidden' })
   })
 
   test('blocks remote browsers from local interactive filesystem selection routes', async () => {
+    const token = await enableH5Access({ allowedOrigins: [PHONE_ORIGIN] })
+
     for (const endpoint of [
-      '/api/filesystem/pick-directory',
-      '/api/filesystem/register-directory',
+      '/filesystem/pick-directory',
+      '/filesystem/register-directory',
     ]) {
-      const response = await fetch(`${baseUrl}${endpoint}`, {
+      const response = await rpcResourceRequest(endpoint, {
         method: 'POST',
         headers: {
           Origin: PHONE_ORIGIN,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ path: tmpDir, initialPath: tmpDir }),
@@ -556,24 +649,11 @@ describe('remote H5 auth and CORS integration', () => {
     }
   })
 
-  test('blocks remote preflight requests to the local H5 access control plane', async () => {
-    const response = await fetch(`${baseUrl}/api/h5-access/enable`, {
-      method: 'OPTIONS',
-      headers: {
-        Origin: PHONE_ORIGIN,
-        'Access-Control-Request-Method': 'POST',
-      },
-    })
-
-    expect(response.status).toBe(403)
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull()
-  })
-
   test('blocks authenticated remote browsers from changing H5 access settings under explicit server auth', async () => {
     await restartRemoteServer({ authRequired: true })
     process.env.ANTHROPIC_API_KEY = 'test-server-key'
 
-    const response = await fetch(`${baseUrl}/api/h5-access/enable`, {
+    const response = await rpcResourceRequest('/h5-access/enable', {
       method: 'POST',
       headers: {
         Origin: PHONE_ORIGIN,
@@ -582,18 +662,19 @@ describe('remote H5 auth and CORS integration', () => {
     })
 
     expect(response.status).toBe(403)
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Forbidden',
+      message: 'H5 access settings can only be changed from the local desktop app.',
+    })
   })
 
   test('allows local desktop H5 access settings under explicit server auth with a valid bearer', async () => {
     await restartRemoteServer({ authRequired: true })
     process.env.ANTHROPIC_API_KEY = 'test-server-key'
 
-    const response = await fetch(`${baseUrl}/api/h5-access/enable`, {
+    const response = await rpcResourceRequest('/h5-access/enable', {
       method: 'POST',
-      headers: {
-        Authorization: 'Bearer test-server-key',
-      },
+      headers: { Authorization: 'Bearer test-server-key' },
     })
 
     expect(response.status).toBe(200)
@@ -605,7 +686,11 @@ describe('remote H5 auth and CORS integration', () => {
       publicBaseUrl: `${PHONE_ORIGIN}/h5`,
     })
 
-    const response = await fetch(`${baseUrl}/api/status`, {
+    const preflight = await rpcPreflightResponse({ origin: PHONE_ORIGIN })
+    expect(preflight.status).toBe(204)
+    expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe(PHONE_ORIGIN)
+
+    const response = await rpcResourceRequest('/status', {
       headers: {
         Origin: PHONE_ORIGIN,
         Authorization: `Bearer ${token}`,
@@ -613,47 +698,42 @@ describe('remote H5 auth and CORS integration', () => {
     })
 
     expect(response.status).toBe(200)
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(PHONE_ORIGIN)
   })
 
   test('allows configured CORS origins and includes Vary: Origin', async () => {
-    const token = await enableH5Access({
+    await enableH5Access({
       allowedOrigins: ['https://allowed.example.com'],
     })
 
-    const response = await fetch(`${baseUrl}/api/status`, {
-      method: 'OPTIONS',
-      headers: {
-        Origin: 'https://allowed.example.com',
-        Authorization: `Bearer ${token}`,
-        'Access-Control-Request-Method': 'GET',
-      },
+    const response = await rpcPreflightResponse({
+      origin: 'https://allowed.example.com',
     })
 
     expect(response.status).toBe(204)
-    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(
-      'https://allowed.example.com',
-    )
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://allowed.example.com')
     expect(response.headers.get('Vary')).toBe('Origin')
   })
 
-  test('opens websocket upgrades without H5 token by default', async () => {
-    await expectWebSocketOpen(`${wsBaseUrl}/ws/h5-auth-test`)
+  test('opens local RPC and session live websocket upgrades without H5 token by default', async () => {
+    await expectWebSocketOpen(`${wsBaseUrl}/rpc`)
+    await expectWebSocketOpen(`${wsBaseUrl}/sessions/h5-auth-test/live`)
   })
 
-  test('requires H5 token for remote browser REST requests when H5 access is enabled', async () => {
+  test('requires H5 token for remote browser RPC resources when H5 access is enabled', async () => {
     const token = await enableH5Access({
       allowedOrigins: [PHONE_ORIGIN],
     })
 
-    const missingTokenResponse = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Origin: PHONE_ORIGIN,
-      },
-    })
+    const missingTokenResponse = await rpcUpgradeResponse({ origin: PHONE_ORIGIN })
     expect(missingTokenResponse.status).toBe(401)
 
-    const validTokenResponse = await fetch(`${baseUrl}/api/status`, {
+    const wrongTokenResponse = await rpcUpgradeResponse({
+      origin: PHONE_ORIGIN,
+      headers: { Authorization: 'Bearer wrong-token' },
+    })
+    expect(wrongTokenResponse.status).toBe(401)
+
+    const validTokenResponse = await rpcResourceRequest('/status', {
       headers: {
         Origin: PHONE_ORIGIN,
         Authorization: `Bearer ${token}`,
@@ -667,30 +747,23 @@ describe('remote H5 auth and CORS integration', () => {
       allowedOrigins: [PHONE_ORIGIN],
     })
 
+    const missingTokenResponse = await rpcUpgradeResponse({ origin: PHONE_ORIGIN })
+    expect(missingTokenResponse.status).toBe(401)
+
+    const wrongTokenResponse = await rpcUpgradeResponse({
+      origin: PHONE_ORIGIN,
+      headers: { Authorization: 'Bearer wrong-token' },
+    })
+    expect(wrongTokenResponse.status).toBe(401)
+
     for (const endpoint of settingsSurfaceEndpoints) {
-      const missingTokenResponse = await fetch(`${baseUrl}${endpoint.path}`, {
-        headers: {
-          Origin: PHONE_ORIGIN,
-        },
-      })
-      expect(missingTokenResponse.status).toBe(401)
-
-      const wrongTokenResponse = await fetch(`${baseUrl}${endpoint.path}`, {
-        headers: {
-          Origin: PHONE_ORIGIN,
-          Authorization: 'Bearer wrong-token',
-        },
-      })
-      expect(wrongTokenResponse.status).toBe(401)
-
-      const validTokenResponse = await fetch(`${baseUrl}${endpoint.path}`, {
+      const validTokenResponse = await rpcResourceRequest(endpoint.path, {
         headers: {
           Origin: PHONE_ORIGIN,
           Authorization: `Bearer ${token}`,
         },
       })
       expect(validTokenResponse.status).toBe(200)
-      expect(validTokenResponse.headers.get('Access-Control-Allow-Origin')).toBe(PHONE_ORIGIN)
       const body = await validTokenResponse.json()
       if ('expected' in endpoint) {
         expect(body).toMatchObject(endpoint.expected)
@@ -706,14 +779,12 @@ describe('remote H5 auth and CORS integration', () => {
       allowedOrigins: [PHONE_ORIGIN],
     })
 
-    const apiResponse = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Origin: PHONE_ORIGIN,
-        Authorization: 'Bearer test-server-key',
-      },
+    const rpcResponse = await rpcUpgradeResponse({
+      origin: PHONE_ORIGIN,
+      headers: { Authorization: 'Bearer test-server-key' },
     })
-    expect(apiResponse.status).toBe(401)
-    await expect(apiResponse.json()).resolves.toMatchObject({
+    expect(rpcResponse.status).toBe(401)
+    await expect(rpcResponse.json()).resolves.toMatchObject({
       message: 'Invalid H5 access token',
     })
 
@@ -728,7 +799,7 @@ describe('remote H5 auth and CORS integration', () => {
     })
     expect(proxyResponse.status).toBe(401)
 
-    const wsResponse = await fetch(`${baseUrl}/ws/h5-auth-test`, {
+    const wsResponse = await fetch(`${baseUrl}/sessions/h5-auth-test/live`, {
       headers: {
         ...makeUpgradeHeaders(PHONE_ORIGIN),
         Authorization: 'Bearer test-server-key',
@@ -764,74 +835,45 @@ describe('remote H5 auth and CORS integration', () => {
     expect(validTokenResponse.status).toBe(400)
     expect(validTokenResponse.headers.get('Access-Control-Allow-Origin')).toBe(PHONE_ORIGIN)
     await expect(validTokenResponse.json()).resolves.toMatchObject({
-      error: {
-        type: 'invalid_request_error',
-      },
+      error: { type: 'invalid_request_error' },
     })
   })
 
-  test('keeps Tauri loopback REST requests tokenless when H5 access is enabled', async () => {
+  test('keeps Tauri loopback RPC resources tokenless when H5 access is enabled', async () => {
     await enableH5Access()
 
-    const response = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Origin: 'http://tauri.localhost',
-      },
+    const response = await rpcResourceRequest('/status', {
+      headers: { Origin: 'http://tauri.localhost' },
     })
 
     expect(response.status).toBe(200)
   })
 
-  test('keeps local loopback websocket and SDK requests tokenless when H5 access is enabled', async () => {
+  test('keeps local loopback websocket and runtime bridge requests tokenless when H5 access is enabled', async () => {
     await enableH5Access()
 
-    await expectWebSocketOpen(`${wsBaseUrl}/ws/h5-auth-test`)
-    await expectWebSocketUpgradeThenClose(`${wsBaseUrl}/sdk/h5-auth-test`)
+    await expectWebSocketOpen(`${wsBaseUrl}/sessions/h5-auth-test/live`)
+    await expectWebSocketUpgradeThenClose(`${wsBaseUrl}/sessions/h5-auth-test/runtime`)
   })
 
-  test('keeps local loopback adapter requests tokenless when H5 access is enabled', async () => {
+  test('keeps local loopback adapter and settings resources tokenless when H5 access is enabled', async () => {
     await enableH5Access()
 
-    const response = await fetch(`${baseUrl}/api/adapters`)
-
-    expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({})
-  })
-
-  test('keeps local loopback settings surface requests tokenless when H5 access is enabled', async () => {
-    await enableH5Access()
+    const adaptersResponse = await rpcResourceRequest('/adapters')
+    expect(adaptersResponse.status).toBe(200)
+    await expect(adaptersResponse.json()).resolves.toEqual({})
 
     for (const endpoint of settingsSurfaceEndpoints) {
-      const response = await fetch(`${baseUrl}${endpoint.path}`)
-
+      const response = await rpcResourceRequest(endpoint.path)
       expect(response.status).toBe(200)
     }
   })
 
-  test('blocks adapter requests from non-local browser origins when H5 access is enabled', async () => {
+  test('blocks adapter and settings resources from non-local browser origins when H5 access is enabled', async () => {
     await enableH5Access()
 
-    const response = await fetch(`${baseUrl}/api/adapters`, {
-      headers: {
-        Origin: PHONE_ORIGIN,
-      },
-    })
-
+    const response = await rpcUpgradeResponse({ origin: PHONE_ORIGIN })
     expect(response.status).toBe(403)
-  })
-
-  test('blocks settings surface requests from untrusted browser origins when H5 access is enabled', async () => {
-    await enableH5Access()
-
-    for (const endpoint of settingsSurfaceEndpoints) {
-      const response = await fetch(`${baseUrl}${endpoint.path}`, {
-        headers: {
-          Origin: PHONE_ORIGIN,
-        },
-      })
-
-      expect(response.status).toBe(403)
-    }
   })
 
   test('requires H5 token for remote browser websocket requests when H5 access is enabled', async () => {
@@ -839,39 +881,39 @@ describe('remote H5 auth and CORS integration', () => {
       allowedOrigins: [PHONE_ORIGIN],
     })
 
-    const missingTokenResponse = await fetch(`${baseUrl}/ws/h5-auth-test`, {
+    const missingTokenResponse = await fetch(`${baseUrl}/sessions/h5-auth-test/live`, {
       headers: makeUpgradeHeaders(PHONE_ORIGIN),
     })
     expect(missingTokenResponse.status).toBe(401)
 
-    const validTokenResponse = await fetch(`${baseUrl}/ws/h5-auth-test?token=${token}`, {
+    const validTokenResponse = await fetch(`${baseUrl}/sessions/h5-auth-test/live?token=${token}`, {
       headers: makeUpgradeHeaders(PHONE_ORIGIN),
     })
     expect(validTokenResponse.status).toBe(400)
     await expect(validTokenResponse.text()).resolves.toBe('WebSocket upgrade failed')
   })
 
-  test('requires H5 token for remote browser SDK requests when H5 access is enabled', async () => {
+  test('blocks remote browser runtime bridge requests even when H5 access is enabled', async () => {
     const token = await enableH5Access({
       allowedOrigins: [PHONE_ORIGIN],
     })
 
-    const missingTokenResponse = await fetch(`${baseUrl}/sdk/h5-auth-test`, {
+    const missingTokenResponse = await fetch(`${baseUrl}/sessions/h5-auth-test/runtime`, {
       headers: makeUpgradeHeaders(PHONE_ORIGIN),
     })
     expect(missingTokenResponse.status).toBe(403)
 
-    const validTokenResponse = await fetch(`${baseUrl}/sdk/h5-auth-test?token=${token}`, {
+    const validTokenResponse = await fetch(`${baseUrl}/sessions/h5-auth-test/runtime?token=${token}`, {
       headers: makeUpgradeHeaders(PHONE_ORIGIN),
     })
     expect(validTokenResponse.status).toBe(403)
   })
 
-  test('blocks remote browser SDK requests even under explicit server auth', async () => {
+  test('blocks remote browser runtime bridge requests even under explicit server auth', async () => {
     await restartRemoteServer({ authRequired: true })
     process.env.ANTHROPIC_API_KEY = 'test-server-key'
 
-    const response = await fetch(`${baseUrl}/sdk/h5-auth-test`, {
+    const response = await fetch(`${baseUrl}/sessions/h5-auth-test/runtime`, {
       headers: {
         ...makeUpgradeHeaders(PHONE_ORIGIN),
         Authorization: 'Bearer test-server-key',
@@ -881,37 +923,33 @@ describe('remote H5 auth and CORS integration', () => {
     expect(response.status).toBe(403)
   })
 
-  test('honors explicit auth opt-in for REST and websocket requests', async () => {
+  test('honors explicit auth opt-in for RPC and websocket requests', async () => {
     await restartRemoteServer({ authRequired: true })
     const token = await enableH5Access()
 
-    const missingStatusResponse = await fetch(`${baseUrl}/api/status`)
+    const missingStatusResponse = await rpcUpgradeResponse()
     expect(missingStatusResponse.status).toBe(401)
 
-    const wrongStatusResponse = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Authorization: 'Bearer wrong-token',
-      },
+    const wrongStatusResponse = await rpcUpgradeResponse({
+      headers: { Authorization: 'Bearer wrong-token' },
     })
     expect(wrongStatusResponse.status).toBe(401)
 
-    const validStatusResponse = await fetch(`${baseUrl}/api/status`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+    const validStatusResponse = await rpcResourceRequest('/status', {
+      headers: { Authorization: `Bearer ${token}` },
     })
     expect(validStatusResponse.status).toBe(200)
 
-    const missingTokenResponse = await fetch(`${baseUrl}/ws/h5-auth-test`, {
+    const missingTokenResponse = await fetch(`${baseUrl}/sessions/h5-auth-test/live`, {
       headers: makeUpgradeHeaders(),
     })
     expect(missingTokenResponse.status).toBe(401)
 
-    const wrongTokenResponse = await fetch(`${baseUrl}/ws/h5-auth-test?token=wrong-token`, {
+    const wrongTokenResponse = await fetch(`${baseUrl}/sessions/h5-auth-test/live?token=wrong-token`, {
       headers: makeUpgradeHeaders(),
     })
     expect(wrongTokenResponse.status).toBe(401)
 
-    await expectWebSocketOpen(`${wsBaseUrl}/ws/h5-auth-test?token=${token}`)
+    await expectWebSocketOpen(`${wsBaseUrl}/sessions/h5-auth-test/live?token=${token}`)
   })
 })

@@ -135,7 +135,7 @@ import {
 import { markClaudeAiMcpConnected } from './claudeai.js'
 import { getAllMcpConfigs, isMcpServerDisabled } from './config.js'
 import { getMcpServerHeaders } from './headersHelper.js'
-import { SdkControlClientTransport } from './SdkControlTransport.js'
+import { RuntimeControlClientTransport } from './RuntimeControlTransport.js'
 import type {
   ConnectedMCPServer,
   MCPServerConnection,
@@ -3283,7 +3283,7 @@ export async function setupSdkMcpClients(
   // Connect to all servers in parallel
   const results = await Promise.allSettled(
     Object.entries(sdkMcpConfigs).map(async ([name, config]) => {
-      const transport = new SdkControlClientTransport(name, sendMcpMessage)
+      const transport = new RuntimeControlClientTransport(name, sendMcpMessage)
 
       const client = new Client(
         {

@@ -27,7 +27,7 @@ import {
   setCostStateForRestore,
   setHasUnknownModelCost,
 } from './bootstrap/state.js'
-import type { ModelUsage } from 'src/types/sdkProtocol.js'
+import type { ModelUsage } from 'src/types/runtimeProtocol.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,

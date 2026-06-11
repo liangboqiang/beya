@@ -16,10 +16,10 @@
 
 ```text
 Desktop Webapp Settings
-  -> /api/adapters
+  -> /rpc adapters resources
   -> ~/.beya/adapters.json
   -> adapters/<platform>/index.ts
-  -> /api/sessions + /ws/:sessionId
+  -> /rpc sessions resources + /sessions/:sessionId/live
   -> Beya session
 ```
 

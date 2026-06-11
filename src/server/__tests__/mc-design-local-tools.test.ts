@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { CallToolResult } from '@modelcontextprotocol/sessions/types/runtime.js'
 import type { ToolCallExtra } from '../types/serverRuntime.js'
 import {
   classifyRequirement,

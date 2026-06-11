@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import type { HookEvent } from 'src/types/sdkProtocol.js'
+import type { HookEvent } from 'src/types/runtimeProtocol.js'
 import { query } from '../../query.js'
 import { logEvent } from '../../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/metadata.js'

@@ -22,7 +22,7 @@ function extractUserText(message: any): string {
     .join(' ')
 }
 
-const sdkUrl = getArg('--sdk-url')
+const runtimeUrl = getArg('--runtime-url')
 const sessionId = getArg('--session-id') || crypto.randomUUID()
 const initMode = process.env.MOCK_SDK_INIT_MODE || 'on_open'
 const initDelayMs = Number(process.env.MOCK_SDK_INIT_DELAY_MS || '0')
@@ -35,8 +35,8 @@ const exitBeforeSdkMs = Number(process.env.MOCK_SDK_EXIT_BEFORE_SDK_MS || '0')
 let initSent = false
 let firstUserExitScheduled = false
 
-if (!sdkUrl) {
-  console.error('Missing --sdk-url')
+if (!runtimeUrl) {
+  console.error('Missing --runtime-url')
   process.exit(1)
 }
 
@@ -48,7 +48,7 @@ if (exitBeforeSdkMs > 0) {
   setTimeout(() => process.exit(1), exitBeforeSdkMs)
 }
 
-const ws = new WebSocket(sdkUrl)
+const ws = new WebSocket(runtimeUrl)
 
 function sendInit() {
   if (initSent) return

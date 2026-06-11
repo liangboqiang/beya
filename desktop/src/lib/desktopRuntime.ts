@@ -343,7 +343,7 @@ function shouldDiscoverLoopbackServer(configuredUrl: string, fallbackUrl: string
 }
 
 async function verifyH5Access() {
-  await api.post<{ ok: true }>('/api/h5-access/verify')
+  await api.post<{ ok: true }>('/h5-access/verify')
 }
 
 function normalizeServerUrl(value: string | null | undefined) {

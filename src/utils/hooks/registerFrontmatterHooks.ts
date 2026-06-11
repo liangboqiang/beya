@@ -1,4 +1,4 @@
-import { HOOK_EVENTS, type HookEvent } from 'src/types/sdkProtocol.js'
+import { HOOK_EVENTS, type HookEvent } from 'src/types/runtimeProtocol.js'
 import type { AppState } from 'src/state/AppState.js'
 import { logForDebugging } from '../debug.js'
 import type { HooksSettings } from '../settings/types.js'

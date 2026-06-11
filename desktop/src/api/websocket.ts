@@ -1,5 +1,6 @@
 import type { ClientMessage, ServerMessage } from '../types/chat'
 import { getAuthToken, getBaseUrl } from './clientState'
+import { buildSessionLiveCommand, buildSessionLivePath } from '../../../src/generated/contracts'
 
 type MessageHandler = (msg: ServerMessage) => void
 
@@ -148,7 +149,7 @@ class WebSocketManager {
     const conn = this.connections.get(sessionId)
     if (!conn) return
     conn.pingInterval = setInterval(() => {
-      this.send(sessionId, { type: 'ping' })
+      this.send(sessionId, buildSessionLiveCommand('session.ping') as ClientMessage)
     }, 30_000)
   }
 
@@ -181,7 +182,7 @@ export function buildSessionWebSocketUrl(sessionId: string) {
   const url = new URL(getBaseUrl())
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   const basePath = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '')
-  url.pathname = `${basePath}/ws/${encodeURIComponent(sessionId)}`
+  url.pathname = `${basePath}${buildSessionLivePath(sessionId)}`
 
   const token = getAuthToken()
   if (token) {

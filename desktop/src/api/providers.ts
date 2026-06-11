@@ -1,4 +1,4 @@
-// desktop/src/api/providers.ts
+// desktop/src/providers.ts
 
 import { api } from './client'
 import type {
@@ -22,50 +22,50 @@ type AuthStatusResponse = {
 
 export const providersApi = {
   list() {
-    return api.get<ProvidersResponse>('/api/providers')
+    return api.get<ProvidersResponse>('/providers')
   },
 
   catalog() {
-    return api.get<CatalogResponse>('/api/providers/catalog')
+    return api.get<CatalogResponse>('/providers/catalog')
   },
 
   authStatus() {
-    return api.get<AuthStatusResponse>('/api/providers/auth-status')
+    return api.get<AuthStatusResponse>('/providers/auth-status')
   },
 
   getSettings() {
-    return api.get<Record<string, unknown>>('/api/providers/settings')
+    return api.get<Record<string, unknown>>('/providers/settings')
   },
 
   updateSettings(settings: Record<string, unknown>) {
-    return api.put<{ ok: true }>('/api/providers/settings', settings)
+    return api.put<{ ok: true }>('/providers/settings', settings)
   },
 
   create(input: CreateProviderInput) {
-    return api.post<ProviderResponse>('/api/providers', input)
+    return api.post<ProviderResponse>('/providers', input)
   },
 
   rescan() {
-    return api.post<ProvidersResponse>('/api/providers/rescan')
+    return api.post<ProvidersResponse>('/providers/rescan')
   },
 
   update(id: string, input: UpdateProviderInput) {
-    return api.patch<ProviderResponse>(`/api/providers/${id}`, input)
+    return api.patch<ProviderResponse>(`/providers/${id}`, input)
   },
 
   delete(id: string) {
-    return api.delete<{ ok: true }>(`/api/providers/${id}`)
+    return api.delete<{ ok: true }>(`/providers/${id}`)
   },
 
   activate(id: string) {
-    return api.post<{ ok: true }>(`/api/providers/${id}/activate`)
+    return api.post<{ ok: true }>(`/providers/${id}/activate`)
   },
 
   test(id: string, overrides?: { baseUrl?: string; modelId?: string; apiFormat?: string; authStrategy?: string }) {
-    return api.post<TestResultResponse>(`/api/providers/${id}/test`, overrides)
+    return api.post<TestResultResponse>(`/providers/${id}/test`, overrides)
   },
 
   testConfig(input: TestProviderConfigInput) {
-    return api.post<TestResultResponse>('/api/providers/test', input)
+    return api.post<TestResultResponse>('/providers/test', input)
   },
 }

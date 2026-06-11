@@ -6,9 +6,9 @@ import {
   createToolStub,
 } from '../remote/remotePermissionBridge.js'
 import {
-  convertSDKMessage,
+  convertRuntimeMessage,
   isSessionEndMessage,
-} from '../remote/sdkMessageAdapter.js'
+} from '../remote/runtimeMessageAdapter.js'
 import {
   type DirectConnectConfig,
   DirectConnectSessionManager,
@@ -77,7 +77,7 @@ export function useDirectConnect({
           hasReceivedInitRef.current = true
         }
 
-        const converted = convertSDKMessage(sdkMessage, {
+        const converted = convertRuntimeMessage(sdkMessage, {
           convertToolResults: true,
         })
         if (converted.type === 'message') {

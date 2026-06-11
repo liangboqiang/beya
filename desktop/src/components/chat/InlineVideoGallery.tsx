@@ -11,7 +11,7 @@ type GalleryVideo = {
 type Props = {
   text: string
   /**
-   * Required to build a `/preview-fs/<sessionId>/...` URL. When absent (e.g.
+   * Required to build a `/files/preview/<sessionId>/...` URL. When absent (e.g.
    * tool-log usage) nothing renders — relative workspace videos can't be served
    * without a session, and we deliberately keep media out of tool logs.
    */
@@ -22,7 +22,7 @@ type Props = {
 /**
  * Renders AI-output video paths (mp4/webm/mov/m4v) inline, mirroring
  * {@link InlineImageGallery}. Only relative workspace paths are surfaced (via the
- * sandboxed target extractor + `/preview-fs`); videos are large so we use a
+ * sandboxed target extractor + `/files/preview`); videos are large so we use a
  * vertical stack, `preload="metadata"`, and never autoplay.
  */
 export function InlineVideoGallery({ text, sessionId, workDir }: Props) {

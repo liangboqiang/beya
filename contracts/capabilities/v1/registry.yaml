@@ -1,0 +1,18 @@
+id: capability.registry
+version: v1
+kind: tool
+owner: capability-registry
+stability: stable
+description: Contract-owned registry entry for product tools, skills, plugins, agents, and workflows.
+input:
+  type: object
+output:
+  type: object
+events:
+  - session.tool.started
+  - session.tool.completed
+permissions:
+  - tool.execute
+implementation:
+  module: src/generated/executors/index.js
+  export: dispatchCapabilityExecutor

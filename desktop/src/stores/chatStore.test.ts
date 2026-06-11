@@ -683,7 +683,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 2 },
     })
 
@@ -728,7 +728,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 2 },
     })
 
@@ -906,7 +906,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 2 },
     })
 
@@ -1215,7 +1215,7 @@ describe('chatStore history mapping', () => {
     expect(sendMock).toHaveBeenCalledWith(
       TEST_SESSION_ID,
       {
-        type: 'user_message',
+        type: 'session.message.send',
         content: 'Referenced workspace context:\n@"src/App.tsx:L4":\nComment: tighten this\n```tsx\nconst value = 1\n```',
         attachments: [{
           type: 'file',
@@ -1293,7 +1293,7 @@ describe('chatStore history mapping', () => {
     expect(sendMock).toHaveBeenCalledWith(
       TEST_SESSION_ID,
       {
-        type: 'user_message',
+        type: 'session.message.send',
         content: '请根据截图中编号 1 的 <h1> 修改：这个标题更轻一点',
         attachments: [{
           type: 'image',
@@ -1498,7 +1498,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'tool_use_complete',
+      type: 'session.tool.completed',
       toolName: 'Read',
       toolUseId: 'tool-1',
       input: { file_path: 'src/App.tsx' },
@@ -1506,7 +1506,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'tool_result',
+      type: 'session.tool.result',
       toolUseId: 'tool-1',
       content: 'ok',
       isError: false,
@@ -1535,7 +1535,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'tool_use',
       toolName: 'Read',
       toolUseId: 'tool-1',
@@ -1543,14 +1543,14 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'tool_use_complete',
+      type: 'session.tool.completed',
       toolName: 'Read',
       toolUseId: 'tool-1',
       input: { file_path: 'src/App.tsx' },
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'tool_result',
+      type: 'session.tool.result',
       toolUseId: 'tool-1',
       content: 'ok',
       isError: false,
@@ -1580,7 +1580,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'tool_use',
       toolName: 'Write',
       toolUseId: 'write-1',
@@ -1597,7 +1597,7 @@ describe('chatStore history mapping', () => {
     ])
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       toolInput: '{"file_path":"/private/tmp/ai-code-novel.md","content":"第一章',
     })
     vi.advanceTimersByTime(60)
@@ -1614,7 +1614,7 @@ describe('chatStore history mapping', () => {
     ])
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'tool_use_complete',
+      type: 'session.tool.completed',
       toolName: 'Write',
       toolUseId: 'write-1',
       input: {
@@ -1652,18 +1652,18 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'tool_use',
       toolName: 'Write',
       toolUseId: 'write-1',
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       toolInput: '{"file_path":"/private/tmp/story.md","content":"第一',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       toolInput: '章\\n第二段',
     })
 
@@ -1705,7 +1705,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'slash_commands',
       data: [cliCommand],
     })
@@ -1729,7 +1729,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'tool_use_complete',
+      type: 'session.tool.completed',
       toolName: 'TodoWrite',
       toolUseId: 'todo-live',
       input: { todos },
@@ -1748,12 +1748,12 @@ describe('chatStore history mapping', () => {
     useChatStore.getState().connectToSession(TEST_SESSION_ID)
 
     expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, {
-      type: 'set_runtime_config',
+      type: 'session.runtime.select',
       providerId: 'provider-1',
       modelId: 'kimi-k2.6',
       effortLevel: 'high',
     })
-    expect(sendMock).not.toHaveBeenCalledWith(TEST_SESSION_ID, { type: 'prewarm_session' })
+    expect(sendMock).not.toHaveBeenCalledWith(TEST_SESSION_ID, { type: 'session.prewarm' })
 
     const profile: RuntimeProfile = {
       id: 'provider:provider-1',
@@ -1774,7 +1774,7 @@ describe('chatStore history mapping', () => {
       },
     }
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'runtime_config',
       data: {
         prewarm: true,
@@ -1783,14 +1783,14 @@ describe('chatStore history mapping', () => {
       },
     })
 
-    expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, { type: 'prewarm_session' })
+    expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, { type: 'session.prewarm' })
   })
 
   it('prewarms regular desktop sessions when connecting', () => {
     useChatStore.getState().connectToSession(TEST_SESSION_ID)
 
     expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, {
-      type: 'prewarm_session',
+      type: 'session.prewarm',
     })
   })
 
@@ -1804,7 +1804,7 @@ describe('chatStore history mapping', () => {
     useChatStore.getState().connectToSession(TEST_SESSION_ID)
 
     expect(sendMock).not.toHaveBeenCalledWith(TEST_SESSION_ID, {
-      type: 'prewarm_session',
+      type: 'session.prewarm',
     })
   })
 
@@ -1812,7 +1812,7 @@ describe('chatStore history mapping', () => {
     useChatStore.getState().connectToSession('__settings__')
 
     expect(sendMock).not.toHaveBeenCalledWith('__settings__', {
-      type: 'prewarm_session',
+      type: 'session.prewarm',
     })
   })
 
@@ -1831,7 +1831,7 @@ describe('chatStore history mapping', () => {
     await Promise.resolve()
 
     expect(sessionsApi.getMessages).toHaveBeenCalledWith(TEST_SESSION_ID)
-    expect(sendMock).not.toHaveBeenCalledWith(TEST_SESSION_ID, { type: 'prewarm_session' })
+    expect(sendMock).not.toHaveBeenCalledWith(TEST_SESSION_ID, { type: 'session.prewarm' })
   })
 
   it('sends explicit runtime overrides over websocket', () => {
@@ -1842,7 +1842,7 @@ describe('chatStore history mapping', () => {
     })
 
     expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, {
-      type: 'set_runtime_config',
+      type: 'session.runtime.select',
       providerId: null,
       modelId: 'claude-opus-4-7',
       effortLevel: 'max',
@@ -1890,7 +1890,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'permission_request',
+      type: 'session.permission.requested',
       requestId: 'perm-ask-1',
       toolName: 'AskUserQuestion',
       toolUseId: 'tool-ask-1',
@@ -1954,7 +1954,7 @@ describe('chatStore history mapping', () => {
     useChatStore.getState().setSessionPermissionMode('session-1', 'acceptEdits')
 
     expect(sendMock).toHaveBeenCalledWith('session-1', {
-      type: 'set_permission_mode',
+      type: 'session.permission.mode.set',
       mode: 'acceptEdits',
     })
     expect(updateSessionPermissionModeMock).toHaveBeenCalledWith('session-1', 'acceptEdits')
@@ -1985,7 +1985,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'task_notification',
       data: {
         task_id: 'agent-task-1',
@@ -2026,7 +2026,7 @@ describe('chatStore history mapping', () => {
     vi.setSystemTime(new Date('2026-04-06T00:00:02.000Z'))
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'task_started',
       data: {
         task_id: 'agent-task-1',
@@ -2050,7 +2050,7 @@ describe('chatStore history mapping', () => {
     vi.setSystemTime(new Date('2026-04-06T00:00:03.000Z'))
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'task_progress',
       data: {
         task_id: 'agent-task-1',
@@ -2081,7 +2081,7 @@ describe('chatStore history mapping', () => {
     vi.setSystemTime(new Date('2026-04-06T00:00:04.000Z'))
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'task_notification',
       data: {
         task_id: 'agent-task-1',
@@ -2129,7 +2129,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'task_started',
       data: {
         task_id: 'shell-task-1',
@@ -2156,7 +2156,7 @@ describe('chatStore history mapping', () => {
     vi.setSystemTime(new Date('2026-04-06T00:00:02.000Z'))
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'task_progress',
       data: {
         task_id: 'shell-task-1',
@@ -2194,7 +2194,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'task_started',
       data: {
         task_id: 'shell-task-1',
@@ -2205,13 +2205,13 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'tool_use_complete',
+      type: 'session.tool.completed',
       toolName: 'TaskStop',
       toolUseId: 'task-stop-1',
       input: { task_id: 'shell-task-1' },
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'tool_result',
+      type: 'session.tool.result',
       toolUseId: 'task-stop-1',
       isError: false,
       content: JSON.stringify({
@@ -2263,7 +2263,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'task_started',
       data: {
         task_id: 'new-agent-task',
@@ -2306,11 +2306,11 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'stale throttled delta',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'session_cleared',
       message: 'Conversation cleared',
     })
@@ -2379,7 +2379,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'compact_boundary',
       message: 'Context compacted',
       data: { trigger: 'auto', pre_tokens: 120000 },
@@ -2424,13 +2424,13 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'compact_boundary',
       message: 'Context compacted',
       data: { trigger: 'manual' },
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'compact_summary',
       message: [
         'This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.',
@@ -2478,7 +2478,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'compacting',
       verb: 'Compacting conversation',
     })
@@ -2526,12 +2526,12 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'compacting',
       verb: 'Compacting conversation',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'error',
+      type: 'session.failed',
       message: 'Compaction canceled.',
       code: 'aborted',
     })
@@ -2564,7 +2564,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'error',
+      type: 'session.failed',
       message: 'This model does not support images.',
       code: 'invalid_request',
       businessErrorCode: 'image_unsupported',
@@ -2606,12 +2606,12 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'compacting',
       verb: 'Compacting conversation',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'thinking',
       verb: 'Thinking',
     })
@@ -2641,7 +2641,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'api_retry',
+      type: 'session.api.retry',
       attempt: 1,
       maxRetries: 10,
       retryDelayMs: 2500,
@@ -2662,7 +2662,7 @@ describe('chatStore history mapping', () => {
     expect(updateTabStatusMock).toHaveBeenLastCalledWith(TEST_SESSION_ID, 'running')
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 0 },
     })
 
@@ -2680,7 +2680,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'memory_saved',
       message: 'Saved 2 memories',
       data: {
@@ -2717,7 +2717,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'goal_event',
       message: 'Goal set: ship the smoke test',
       data: {
@@ -2748,7 +2748,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'goal_event',
       message: 'Goal set: ship the replacement target',
       data: {
@@ -2787,7 +2787,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'goal_event',
       data: {
         action: 'paused',
@@ -2801,7 +2801,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'goal_event',
       data: {
         action: 'completed',
@@ -2815,7 +2815,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'system_notification',
+      type: 'session.system.notification',
       subtype: 'goal_event',
       data: {
         action: 'cleared',
@@ -2952,7 +2952,7 @@ describe('chatStore history mapping', () => {
 
     for (const sessionId of ['session-a', 'session-b']) {
       useChatStore.getState().handleServerMessage(sessionId, {
-        type: 'tool_use_complete',
+        type: 'session.tool.completed',
         toolName: 'TaskCreate',
         toolUseId: 'tool-same',
         input: { subject: sessionId },
@@ -2960,13 +2960,13 @@ describe('chatStore history mapping', () => {
     }
 
     useChatStore.getState().handleServerMessage('session-a', {
-      type: 'tool_result',
+      type: 'session.tool.result',
       toolUseId: 'tool-same',
       content: 'created A',
       isError: false,
     })
     useChatStore.getState().handleServerMessage('session-b', {
-      type: 'tool_result',
+      type: 'session.tool.result',
       toolUseId: 'tool-same',
       content: 'created B',
       isError: false,
@@ -3002,7 +3002,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'computer_use_permission_request',
+      type: 'session.computeruse.permission.requested',
       requestId: 'cu-1',
       request: {
         requestId: 'cu-1',
@@ -3072,27 +3072,27 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'text',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: '第一段：先到达。',
     })
     vi.advanceTimersByTime(60)
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'text',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: '\r\n第二段：稍后到达，但仍属于同一轮回复。',
     })
     vi.advanceTimersByTime(60)
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 2 },
     })
 
@@ -3118,28 +3118,28 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage('session-a', {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'text',
     })
     useChatStore.getState().handleServerMessage('session-a', {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'A-only response',
     })
     useChatStore.getState().handleServerMessage('session-b', {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'text',
     })
     useChatStore.getState().handleServerMessage('session-b', {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'B-only response',
     })
 
     useChatStore.getState().handleServerMessage('session-a', {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 1 },
     })
     useChatStore.getState().handleServerMessage('session-b', {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 1 },
     })
 
@@ -3162,7 +3162,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 2 },
     })
 
@@ -3180,11 +3180,11 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'visible answer before thinking',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'thinking',
+      type: 'session.thinking.delta',
       text: 'internal note',
     })
 
@@ -3207,11 +3207,11 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'partial answer before error',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'error',
+      type: 'session.failed',
       message: 'provider failed',
       code: 'provider_error',
     })
@@ -3236,11 +3236,11 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage('session-a', {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'A-only response',
     })
     useChatStore.getState().handleServerMessage('session-b', {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'B-only response',
     })
 
@@ -3250,7 +3250,7 @@ describe('chatStore history mapping', () => {
     expect(useChatStore.getState().sessions['session-b']?.streamingText).toBe('')
 
     useChatStore.getState().handleServerMessage('session-b', {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 1 },
     })
 
@@ -3273,11 +3273,11 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage('session-a', {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'A-only response',
     })
     useChatStore.getState().handleServerMessage('session-b', {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'B-only response',
     })
 
@@ -3287,7 +3287,7 @@ describe('chatStore history mapping', () => {
     expect(useChatStore.getState().sessions['session-b']?.streamingText).toBe('')
 
     useChatStore.getState().handleServerMessage('session-b', {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 1 },
     })
 
@@ -3309,13 +3309,13 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage('session-a', {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'before disconnect',
     })
     useChatStore.getState().disconnectSession('session-a')
 
     useChatStore.getState().handleServerMessage('session-a', {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: 'late stale delta',
     })
     useChatStore.setState({
@@ -3362,29 +3362,29 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'text',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: '1. **`core/audio/waveform.py:19-31`** — 同步阻塞 I/O。',
     })
     vi.advanceTimersByTime(60)
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'tool_executing',
       verb: 'Task in progress',
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: ' 建议直接用 `subprocess.PIPE` 流式处理。',
     })
     vi.advanceTimersByTime(60)
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 2 },
     })
 
@@ -3410,26 +3410,26 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'thinking',
       verb: 'Creating worktree',
     })
     expect(useChatStore.getState().sessions[TEST_SESSION_ID]?.statusVerb).toBe('Creating worktree')
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'thinking',
       verb: 'Thinking',
     })
     expect(useChatStore.getState().sessions[TEST_SESSION_ID]?.statusVerb).toBe('')
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'thinking',
       verb: 'Creating worktree',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'status',
+      type: 'session.status.changed',
       state: 'thinking',
     })
     expect(useChatStore.getState().sessions[TEST_SESSION_ID]?.statusVerb).toBe('')
@@ -3464,16 +3464,16 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_start',
+      type: 'session.message.started',
       blockType: 'text',
     })
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'content_delta',
+      type: 'session.message.delta',
       text: '## 结果\n\n- **修复完成**\n- `bun test` 已通过',
     })
     vi.advanceTimersByTime(60)
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 2 },
     })
 
@@ -3516,7 +3516,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 0 },
     })
 
@@ -3548,7 +3548,7 @@ describe('chatStore history mapping', () => {
     })
 
     useChatStore.getState().handleServerMessage(TEST_SESSION_ID, {
-      type: 'message_complete',
+      type: 'session.completed',
       usage: { input_tokens: 1, output_tokens: 1 },
     })
 
@@ -3600,7 +3600,7 @@ describe('chatStore history mapping', () => {
     })
 
     expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, {
-      type: 'computer_use_permission_response',
+      type: 'session.computeruse.permission.respond',
       requestId: 'cu-1',
       response: {
         granted: [],
@@ -3715,7 +3715,7 @@ describe('chatStore history mapping', () => {
     expect(updateSessionTitleMock).toHaveBeenCalledWith(TEST_SESSION_ID, '开始优化UI')
     expect(updateTabTitleMock).toHaveBeenCalledWith(TEST_SESSION_ID, '开始优化UI')
     expect(sendMock).toHaveBeenCalledWith(TEST_SESSION_ID, {
-      type: 'user_message',
+      type: 'session.message.send',
       content: '开始优化UI',
       attachments: undefined,
     })

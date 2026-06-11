@@ -65,6 +65,7 @@ if (hasFlag(args, '--list-providers')) {
 const mode = readMode(firstArg(args, '--mode'))
 const dryRun = hasFlag(args, '--dry-run')
 const allowLive = hasFlag(args, '--allow-live')
+const fast = hasFlag(args, '--fast')
 const artifactsDir = typeof firstArg(args, '--artifacts-dir') === 'string'
   ? String(firstArg(args, '--artifacts-dir'))
   : undefined
@@ -74,6 +75,7 @@ const { report, outputDir } = await runQualityGate({
   mode,
   dryRun,
   allowLive,
+  fast,
   baselineTargets,
   rootDir: process.cwd(),
   artifactsDir,

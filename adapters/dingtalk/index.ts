@@ -370,34 +370,34 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
   const runtime = getRuntimeState(chatId)
 
   switch (msg.type) {
-    case 'connected':
+    case 'session.connected':
       break
-    case 'status':
+    case 'session.status.changed':
       runtime.state = msg.state
       runtime.verb = typeof msg.verb === 'string' ? msg.verb : undefined
       break
-    case 'content_start':
+    case 'session.message.started':
       if (msg.blockType === 'text') {
         runtime.state = 'streaming'
       }
       if (msg.blockType === 'tool_use') runtime.state = 'tool_executing'
       break
-    case 'content_delta':
+    case 'session.message.delta':
       if (typeof msg.text === 'string' && msg.text) getAiCardBuffer(chatId).append(msg.text)
       break
-    case 'tool_use_complete':
+    case 'session.tool.completed':
       runtime.state = 'streaming'
       break
-    case 'permission_request': {
+    case 'session.permission.requested': {
       await sendPermissionRequest(chatId, msg)
       break
     }
-    case 'message_complete':
+    case 'session.completed':
       runtime.state = 'idle'
       runtime.verb = undefined
       await finishAndResetDingTalkStreamingState({ aiCardBuffers, streamingCards, streamingCardText, finalize: () => flushToAiCard(chatId, '', true) }, chatId)
       break
-    case 'error':
+    case 'session.failed':
       runtime.state = 'idle'
       runtime.verb = undefined
       aiCardBuffers.get(chatId)?.reset()
@@ -405,7 +405,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       streamingCardText.delete(chatId)
       await sendText(chatId, `❌ ${msg.message}`)
       break
-    case 'system_notification':
+    case 'session.system.notification':
       if (msg.subtype === 'init' && msg.data && typeof msg.data === 'object') {
         const model = (msg.data as Record<string, unknown>).model
         if (typeof model === 'string' && model.trim()) runtime.model = model

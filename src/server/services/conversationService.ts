@@ -2,7 +2,7 @@
  * ConversationService — agent runtime process manager
  *
  * Each desktop session owns one agent runtime process. The process talks back to
- * the desktop server over the SDK WebSocket bridge, while the desktop UI talks
+ * the desktop server over the runtime WebSocket bridge, while the desktop UI talks
  * to the server over its own client WebSocket.
  */
 
@@ -37,10 +37,11 @@ import {
   createImageMetadataText,
   maybeResizeAndDownsampleImageBuffer,
 } from '../../utils/imageResizer.js'
+import { serverEventBus } from '../events/eventBus.js'
 
 const MAX_CAPTURED_PROCESS_LINES = 80
-const MAX_CAPTURED_SDK_MESSAGES = 40
-const MAX_CAPTURED_SDK_SUMMARY = 20
+const MAX_CAPTURED_RUNTIME_MESSAGES = 40
+const MAX_CAPTURED_RUNTIME_SUMMARY = 20
 const CONTROL_READY_POLL_MS = 50
 const AUTO_MEMORY_DIRNAME = 'memory'
 const OPENAI_OAUTH_PROVIDER_ENV_KEY = 'BEYA_OPENAI_OAUTH_PROVIDER'
@@ -81,7 +82,7 @@ export class ConversationService {
 
   private buildSessionCliArgs(
     sessionId: string,
-    sdkUrl: string,
+    runtimeUrl: string,
     shouldResume: boolean,
     options?: SessionStartOptions,
     repository?: PreparedSessionWorkspace['repository'],
@@ -100,8 +101,8 @@ export class ConversationService {
     return this.resolveCliArgs([
       '--print',
       '--verbose',
-      '--sdk-url',
-      sdkUrl,
+      '--runtime-url',
+      runtimeUrl,
       '--enable-auth-status',
       '--input-format',
       'stream-json',
@@ -121,11 +122,11 @@ export class ConversationService {
   async startSession(
     sessionId: string,
     workDir: string,
-    sdkUrl: string,
+    runtimeUrl: string,
     options?: SessionStartOptions,
   ): Promise<void> {
     await executionSessionFacade.startSession(
-      { sessionId, workDir, sdkUrl, options },
+      { sessionId, workDir, runtimeUrl, options },
       this.getExecutionBackendHost(),
     )
   }
@@ -141,20 +142,20 @@ export class ConversationService {
       },
       buildProviderCliArgs: (
         sessionId,
-        sdkUrl,
+        runtimeUrl,
         shouldResume,
         options,
         repository,
       ) => this.buildSessionCliArgs(
         sessionId,
-        sdkUrl,
+        runtimeUrl,
         shouldResume,
         options,
         repository,
       ),
-      buildChildEnv: (workDir, sdkUrl, options) =>
-        this.buildChildEnv(workDir, sdkUrl, options),
-      getSdkTokenFromUrl: (sdkUrl) => this.getSdkTokenFromUrl(sdkUrl),
+      buildChildEnv: (workDir, runtimeUrl, options) =>
+        this.buildChildEnv(workDir, runtimeUrl, options),
+      getRuntimeTokenFromUrl: (runtimeUrl) => this.getRuntimeTokenFromUrl(runtimeUrl),
       readProcessOutputStream: (sessionId, stream, streamName) =>
         this.readProcessOutputStream(sessionId, stream, streamName),
       handleProcessExit: (sessionId, proc, code) =>
@@ -164,11 +165,11 @@ export class ConversationService {
       buildStartupError: (sessionId, exitCode) =>
         this.buildStartupError(sessionId, exitCode),
       clearStaleLock: (sessionId) => this.clearStaleLock(sessionId),
-      restartSession: (sessionId, workDir, sdkUrl, options) =>
-        this.startSession(sessionId, workDir, sdkUrl, options),
+      restartSession: (sessionId, workDir, runtimeUrl, options) =>
+        this.startSession(sessionId, workDir, runtimeUrl, options),
       buildCapturedProcessOutputDetail: (session) =>
         this.buildCapturedProcessOutputDetail(session),
-      summarizeSdkMessages: (messages) => this.summarizeSdkMessages(messages),
+      summarizeRuntimeMessages: (messages) => this.summarizeRuntimeMessages(messages),
     }
   }
 
@@ -192,8 +193,8 @@ export class ConversationService {
     session.outputCallbacks = session.outputCallbacks.filter((entry) => entry !== callback)
   }
 
-  getRecentSdkMessages(sessionId: string): any[] {
-    return [...(this.sessions.get(sessionId)?.sdkMessages ?? [])]
+  getRecentRuntimeMessages(sessionId: string): any[] {
+    return [...(this.sessions.get(sessionId)?.runtimeMessages ?? [])]
   }
 
   getSessionInitMessage(sessionId: string): any | null {
@@ -226,7 +227,7 @@ export class ConversationService {
     }
 
     const userContent = await this.buildUserContent(content, sessionId, attachments)
-    return this.sendSdkMessage(sessionId, {
+    return this.sendRuntimeMessage(sessionId, {
       type: 'user',
       message: {
         role: 'user',
@@ -312,7 +313,7 @@ export class ConversationService {
     }
     session.pendingPermissionRequests.delete(requestId)
 
-    return this.sendSdkMessage(sessionId, {
+    return this.sendRuntimeMessage(sessionId, {
       type: 'control_response',
       response: {
         subtype: 'success',
@@ -338,7 +339,7 @@ export class ConversationService {
   }
 
   setPermissionMode(sessionId: string, mode: string): boolean {
-    const sent = this.sendSdkMessage(sessionId, {
+    const sent = this.sendRuntimeMessage(sessionId, {
       type: 'control_request',
       request_id: crypto.randomUUID(),
       request: {
@@ -354,7 +355,7 @@ export class ConversationService {
   }
 
   setMaxThinkingTokens(sessionId: string, maxThinkingTokens: number | null): boolean {
-    return this.sendSdkMessage(sessionId, {
+    return this.sendRuntimeMessage(sessionId, {
       type: 'control_request',
       request_id: crypto.randomUUID(),
       request: {
@@ -382,7 +383,7 @@ export class ConversationService {
       return true
     }
 
-    return this.sendSdkMessage(sessionId, {
+    return this.sendRuntimeMessage(sessionId, {
       type: 'control_request',
       request_id: crypto.randomUUID(),
       request: { subtype: 'interrupt' },
@@ -390,7 +391,7 @@ export class ConversationService {
   }
 
   private isControlChannelReady(session: SessionProcess): boolean {
-    return Boolean(session.sdkSocket)
+    return Boolean(session.runtimeSocket)
   }
 
   private async waitForControlChannelReady(
@@ -459,7 +460,7 @@ export class ConversationService {
       }
 
       this.onOutput(sessionId, handleOutput)
-      const sent = this.sendSdkMessage(sessionId, {
+      const sent = this.sendRuntimeMessage(sessionId, {
         type: 'control_request',
         request_id: requestId,
         request,
@@ -503,15 +504,15 @@ export class ConversationService {
     }))
   }
 
-  authorizeSdkConnection(
+  authorizeRuntimeConnection(
     sessionId: string,
     token: string | null | undefined,
   ): boolean {
     const session = this.sessions.get(sessionId)
-    return Boolean(session && token && token === session.sdkToken)
+    return Boolean(session && token && token === session.runtimeToken)
   }
 
-  attachSdkConnection(
+  attachRuntimeConnection(
     sessionId: string,
     socket: { send(data: string): void },
   ): boolean {
@@ -519,7 +520,8 @@ export class ConversationService {
     if (!session) return false
     if (session.runtimeKind === 'local_cli') return false
 
-    session.sdkSocket = socket
+    session.runtimeSocket = socket
+    serverEventBus.emit('session.runtime.started', { sessionId })
     while (session.pendingOutbound.length > 0) {
       const line = session.pendingOutbound.shift()
       if (line) {
@@ -529,14 +531,15 @@ export class ConversationService {
     return true
   }
 
-  detachSdkConnection(sessionId: string): void {
+  detachRuntimeConnection(sessionId: string): void {
     const session = this.sessions.get(sessionId)
     if (session) {
-      session.sdkSocket = null
+      session.runtimeSocket = null
+      serverEventBus.emit('session.runtime.stopped', { sessionId })
     }
   }
 
-  handleSdkPayload(sessionId: string, rawPayload: string): void {
+  handleRuntimePayload(sessionId: string, rawPayload: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
 
@@ -548,18 +551,18 @@ export class ConversationService {
     for (const line of lines) {
       try {
         const msg = JSON.parse(line)
-        session.sdkMessages.push(msg)
-        if (session.sdkMessages.length > MAX_CAPTURED_SDK_MESSAGES) {
-          session.sdkMessages.splice(0, session.sdkMessages.length - MAX_CAPTURED_SDK_MESSAGES)
+        session.runtimeMessages.push(msg)
+        if (session.runtimeMessages.length > MAX_CAPTURED_RUNTIME_MESSAGES) {
+          session.runtimeMessages.splice(0, session.runtimeMessages.length - MAX_CAPTURED_RUNTIME_MESSAGES)
         }
-        const sdkError = this.extractSdkErrorEvent(msg)
-        if (sdkError) {
+        const runtimeError = this.extractRuntimeErrorEvent(msg)
+        if (runtimeError) {
           void diagnosticsService.recordEvent({
-            type: sdkError.type,
+            type: runtimeError.type,
             severity: 'error',
             sessionId,
-            summary: sdkError.summary,
-            details: sdkError.details,
+            summary: runtimeError.summary,
+            details: runtimeError.details,
           })
         }
         if (msg?.type === 'system' && msg.subtype === 'init') {
@@ -609,7 +612,7 @@ export class ConversationService {
         }
       } catch {
         console.warn(
-          `[ConversationService] Ignoring malformed SDK payload for ${sessionId}`,
+          `[ConversationService] Ignoring malformed runtime payload for ${sessionId}`,
         )
       }
     }
@@ -777,7 +780,7 @@ export class ConversationService {
     ])
   }
 
-  private sendSdkMessage(
+  private sendRuntimeMessage(
     sessionId: string,
     payload: Record<string, unknown>,
   ): boolean {
@@ -786,8 +789,8 @@ export class ConversationService {
     if (session.runtimeKind === 'local_cli') return false
 
     const line = JSON.stringify(payload) + '\n'
-    if (session.sdkSocket) {
-      session.sdkSocket.send(line)
+    if (session.runtimeSocket) {
+      session.runtimeSocket.send(line)
     } else {
       session.pendingOutbound.push(line)
     }
@@ -821,7 +824,7 @@ export class ConversationService {
           workDir: activeSession.workDir,
           permissionMode: activeSession.permissionMode,
           capturedOutput: this.buildCapturedProcessOutputDetail(activeSession),
-          sdkMessages: this.summarizeSdkMessages(activeSession.sdkMessages),
+          runtimeMessages: this.summarizeRuntimeMessages(activeSession.runtimeMessages),
         },
       })
       for (const cb of activeSession.outputCallbacks) {
@@ -838,6 +841,7 @@ export class ConversationService {
         })
       }
       this.sessions.delete(sessionId)
+      serverEventBus.emit('session.runtime.stopped', { sessionId })
     }
   }
 
@@ -879,7 +883,7 @@ export class ConversationService {
 
   private async buildChildEnv(
     workDir: string,
-    sdkUrl?: string,
+    runtimeUrl?: string,
     options?: SessionStartOptions,
   ): Promise<Record<string, string>> {
     // Provider isolation: when Desktop has its own provider config/index,
@@ -923,9 +927,9 @@ export class ConversationService {
     }
 
     let desktopServerUrl: string | undefined
-    if (sdkUrl) {
+    if (runtimeUrl) {
       try {
-        const parsed = new URL(sdkUrl)
+        const parsed = new URL(runtimeUrl)
         desktopServerUrl = `http://${parsed.host}`
       } catch {
         desktopServerUrl = undefined
@@ -966,13 +970,13 @@ export class ConversationService {
       CLAUDE_COWORK_MEMORY_PATH_OVERRIDE: this.resolveDesktopAutoMemoryPath(workDir),
       CALLER_DIR: workDir,
       PWD: workDir,
-      ...(sdkUrl
+      ...(runtimeUrl
         ? { BEYA_COMPUTER_USE_HOST_BUNDLE_ID: 'cn.edu.tju.apvic.beya' }
         : {}),
       ...(desktopServerUrl
         ? { BEYA_DESKTOP_SERVER_URL: desktopServerUrl }
         : {}),
-      ...(sdkUrl
+      ...(runtimeUrl
         ? {
             BEYA_DESKTOP_AWAIT_MCP: '1',
             BEYA_DESKTOP_AWAIT_MCP_TIMEOUT_MS: '5000',
@@ -1090,7 +1094,7 @@ export class ConversationService {
   ): ConversationStartupError {
     const session = this.sessions.get(sessionId)
     const capturedOutput = this.buildCapturedProcessOutputDetail(session)
-    const recentMessages = session?.sdkMessages ?? []
+    const recentMessages = session?.runtimeMessages ?? []
     const resultMessage = [...recentMessages]
       .reverse()
       .find((msg) => msg?.type === 'result' && msg.is_error)
@@ -1129,7 +1133,7 @@ export class ConversationService {
     return new ConversationStartupError(
       normalizedDetail
         ? `Agent runtime exited during startup (code ${exitCode}): ${normalizedDetail}`
-        : `Agent runtime exited during startup with code ${exitCode}; no runtime stderr/stdout or SDK error payload was captured before exit.`,
+        : `Agent runtime exited during startup with code ${exitCode}; no runtime stderr/stdout or runtime error payload was captured before exit.`,
       'CLI_START_FAILED',
       true,
     )
@@ -1138,7 +1142,7 @@ export class ConversationService {
   private buildRuntimeExitMessage(sessionId: string, exitCode: number): string {
     const session = this.sessions.get(sessionId)
     const capturedOutput = this.buildCapturedProcessOutputDetail(session)
-    const recentMessages = session?.sdkMessages ?? []
+    const recentMessages = session?.runtimeMessages ?? []
     const resultMessage = [...recentMessages]
       .reverse()
       .find((msg) => msg?.type === 'result' && msg.is_error)
@@ -1156,7 +1160,7 @@ export class ConversationService {
 
     return detail
       ? `Agent runtime exited unexpectedly (code ${exitCode}): ${detail}`
-      : `Agent runtime exited unexpectedly with code ${exitCode}; no runtime stderr/stdout or SDK error payload was captured before exit.`
+      : `Agent runtime exited unexpectedly with code ${exitCode}; no runtime stderr/stdout or runtime error payload was captured before exit.`
   }
 
   private buildCapturedProcessOutputDetail(
@@ -1226,7 +1230,7 @@ export class ConversationService {
     return textBlock?.text || ''
   }
 
-  private extractSdkErrorEvent(message: any): {
+  private extractRuntimeErrorEvent(message: any): {
     type: string
     summary: string
     details: Record<string, unknown>
@@ -1239,7 +1243,7 @@ export class ConversationService {
         type: 'sdk_api_error',
         summary,
         details: {
-          sdkType: message.type,
+          runtimeType: message.type,
           error: typeof message.error === 'string' ? message.error : undefined,
           isApiErrorMessage: message.isApiErrorMessage === true,
           messageText: this.extractAssistantText(message)
@@ -1255,13 +1259,13 @@ export class ConversationService {
 
     if (message?.type === 'result' && message.is_error) {
       const summary = this.redactProcessOutput(
-        this.extractStartupDetail(message) || 'SDK result error',
+        this.extractStartupDetail(message) || 'Runtime result error',
       )
       return {
         type: 'sdk_result_error',
         summary,
         details: {
-          sdkType: message.type,
+          runtimeType: message.type,
           subtype: message.subtype,
           isError: true,
           result:
@@ -1280,8 +1284,8 @@ export class ConversationService {
     return null
   }
 
-  private summarizeSdkMessages(messages: any[]): unknown[] {
-    return messages.slice(-MAX_CAPTURED_SDK_SUMMARY).map((message) => {
+  private summarizeRuntimeMessages(messages: any[]): unknown[] {
+    return messages.slice(-MAX_CAPTURED_RUNTIME_SUMMARY).map((message) => {
       if (!message || typeof message !== 'object') {
         return message
       }
@@ -1546,8 +1550,8 @@ export class ConversationService {
     return normalized || fallback
   }
 
-  private getSdkTokenFromUrl(sdkUrl: string): string {
-    const url = new URL(sdkUrl)
+  private getRuntimeTokenFromUrl(runtimeUrl: string): string {
+    const url = new URL(runtimeUrl)
     return url.searchParams.get('token') || ''
   }
 }

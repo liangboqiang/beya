@@ -28,19 +28,19 @@ export type DesktopUiPreferencesResponse = {
 
 export const desktopUiPreferencesApi = {
   getPreferences() {
-    return api.get<DesktopUiPreferencesResponse>('/api/desktop-ui/preferences')
+    return api.get<DesktopUiPreferencesResponse>('/desktop-ui/preferences')
   },
 
   updateSidebarPreferences(sidebar: SidebarProjectPreferences) {
     return api.put<{ ok: true; preferences: DesktopUiPreferences }>(
-      '/api/desktop-ui/preferences/sidebar',
+      '/desktop-ui/preferences/sidebar',
       sidebar,
     )
   },
 
   updateProfilePreferences(profile: Pick<DesktopProfilePreferences, 'displayName' | 'subtitle'>) {
     return api.put<{ ok: true; preferences: DesktopUiPreferences }>(
-      '/api/desktop-ui/preferences/profile',
+      '/desktop-ui/preferences/profile',
       profile,
     )
   },
@@ -51,14 +51,14 @@ export const desktopUiPreferencesApi = {
 
   deleteProfileAvatar() {
     return api.delete<{ ok: true; preferences: DesktopUiPreferences }>(
-      '/api/desktop-ui/preferences/profile/avatar',
+      '/desktop-ui/preferences/profile/avatar',
     )
   },
 }
 
 export function getProfileAvatarUrl(updatedAt: string | null | undefined) {
   const suffix = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : ''
-  return getApiUrl(`/api/desktop-ui/preferences/profile/avatar${suffix}`)
+  return getApiUrl(`/desktop-ui/preferences/profile/avatar${suffix}`)
 }
 
 async function uploadProfileAvatar(file: File): Promise<{ ok: true; preferences: DesktopUiPreferences }> {
@@ -70,7 +70,7 @@ async function uploadProfileAvatar(file: File): Promise<{ ok: true; preferences:
     headers.Authorization = `Bearer ${token}`
   }
 
-  const res = await fetch(getApiUrl('/api/desktop-ui/preferences/profile/avatar'), {
+  const res = await fetch(getApiUrl('/desktop-ui/preferences/profile/avatar'), {
     method: 'PUT',
     headers,
     body: file,

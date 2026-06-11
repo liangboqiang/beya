@@ -41,10 +41,10 @@ export type DiagnosticsBundle = {
 }
 
 export const diagnosticsApi = {
-  getStatus: () => api.get<DiagnosticsStatus>('/api/diagnostics/status'),
-  getEvents: (limit = 100) => api.get<{ events: DiagnosticEvent[] }>(`/api/diagnostics/events?limit=${limit}`),
-  recordEvent: (event: DiagnosticEventInput) => api.post<{ ok: true }>('/api/diagnostics/events', event, { timeout: 5_000 }),
-  exportBundle: () => api.post<{ bundle: DiagnosticsBundle }>('/api/diagnostics/export', undefined, { timeout: 60_000 }),
-  openLogDir: () => api.post<{ ok: true }>('/api/diagnostics/open-log-dir'),
-  clear: () => api.delete<{ ok: true }>('/api/diagnostics'),
+  getStatus: () => api.get<DiagnosticsStatus>('/diagnostics/status'),
+  getEvents: (limit = 100) => api.get<{ events: DiagnosticEvent[] }>(`/diagnostics/events?limit=${limit}`),
+  recordEvent: (event: DiagnosticEventInput) => api.post<{ ok: true }>('/diagnostics/events', event, { timeout: 5_000 }),
+  exportBundle: () => api.post<{ bundle: DiagnosticsBundle }>('/diagnostics/export', undefined, { timeout: 60_000 }),
+  openLogDir: () => api.post<{ ok: true }>('/diagnostics/open-log-dir'),
+  clear: () => api.delete<{ ok: true }>('/diagnostics'),
 }

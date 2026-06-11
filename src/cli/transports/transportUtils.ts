@@ -21,7 +21,7 @@ export function getTransportForUrl(
 ): Transport {
   if (isEnvTruthy(process.env.CLAUDE_CODE_USE_CCR_V2)) {
     // v2: SSE for reads, HTTP POST for writes
-    // --sdk-url is the session URL (.../sessions/{id});
+    // --runtime-url is the session URL (.../sessions/{id});
     // derive the SSE stream URL by appending /worker/events/stream
     const sseUrl = new URL(url.href)
     if (sseUrl.protocol === 'wss:') {

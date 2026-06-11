@@ -37,9 +37,9 @@ class RecordingClient(BeyaClient):
         super().__init__(base_url="http://beya.test")
         self.calls = []
         self.fake_ws = FakeWebSocket(frames or [
-            {"type": "connected", "sessionId": "session-1"},
-            {"type": "content_delta", "text": "hello"},
-            {"type": "message_complete", "usage": {"input_tokens": 1, "output_tokens": 1}},
+            {"type": "session.connected", "sessionId": "session-1"},
+            {"type": "session.message.delta", "text": "hello"},
+            {"type": "session.completed", "usage": {"input_tokens": 1, "output_tokens": 1}},
         ])
 
     def _request(self, method, path, payload=None, timeout=None):
@@ -49,8 +49,8 @@ class RecordingClient(BeyaClient):
             return {"session_id": "session-1"}
         return {"ok": True, "path": path}
 
-    def _open_session_websocket(self, session_id, timeout=None, purpose=None):
-        self.calls.append(("WS", self._session_websocket_url(session_id, purpose=purpose), None))
+    def _open_session_websocket(self, session_id, timeout=None):
+        self.calls.append(("WS", self._session_websocket_url(session_id), None))
         return self.fake_ws
 
 
@@ -67,14 +67,14 @@ class ProductClientTest(unittest.TestCase):
             metadata={"user_id": "u1", "conversation_id": "conv-1"},
         )
         self.assertEqual(result.result, "hello")
-        self.assertEqual(client.fake_ws.sent[0], {"type": "set_permission_mode", "mode": "bypassPermissions"})
-        self.assertEqual(client.fake_ws.sent[1]["type"], "set_runtime_config")
+        self.assertEqual(client.fake_ws.sent[0], {"type": "session.permission.mode.set", "mode": "bypassPermissions"})
+        self.assertEqual(client.fake_ws.sent[1]["type"], "session.runtime.select")
         self.assertEqual(client.fake_ws.sent[2], {
-            "type": "user_message",
+            "type": "session.message.send",
             "content": "hello",
             "metadata": {"user_id": "u1", "conversation_id": "conv-1"},
         })
-        self.assertIn(("WS", "ws://beya.test/ws/session-1?purpose=sdk_chat", None), client.calls)
+        self.assertIn(("WS", "ws://beya.test/sessions/session-1/live", None), client.calls)
 
         client.tasks.list()
         client.tasks.lists()
@@ -109,9 +109,9 @@ class ProductClientTest(unittest.TestCase):
         self.assertIn("/plugins/enable", paths)
         self.assertIn("/scheduled-tasks", paths)
         self.assertIn("/health", paths)
-        self.assertIn("/readiness", paths)
+        self.assertIn("/ready", paths)
         self.assertTrue(any(path.startswith("/tools?") and "session_id=session-1" in path and "cwd=F%3A%2FDocuments%2Fbeya" in path for path in paths))
-        self.assertTrue(any(path == "ws://beya.test/ws/session-1?purpose=sdk_chat" for path in paths))
+        self.assertTrue(any(path == "ws://beya.test/sessions/session-1/live" for path in paths))
         self.assertFalse(any(path.startswith("/api/") for path in paths))
         self.assertFalse(any(path.startswith("/v1/") for path in paths))
         self.assertFalse(any("/api/stream" in path for path in paths))
@@ -123,13 +123,13 @@ class ProductClientTest(unittest.TestCase):
 
     def test_chat_stream_maps_desktop_websocket_frames(self):
         client = RecordingClient(frames=[
-            {"type": "connected", "sessionId": "session-1"},
-            {"type": "thinking", "text": "思考中"},
-            {"type": "content_delta", "toolInput": '{"project": "A"}'},
-            {"type": "content_delta", "text": "你好"},
-            {"type": "tool_use_complete", "toolName": "query_ipm_list", "toolUseId": "call-1", "input": {"project": "A"}},
-            {"type": "tool_result", "toolUseId": "call-1", "content": "ok", "isError": False},
-            {"type": "message_complete", "usage": {"input_tokens": 1, "output_tokens": 2}},
+            {"type": "session.connected", "sessionId": "session-1"},
+            {"type": "session.thinking.delta", "text": "思考中"},
+            {"type": "session.message.delta", "toolInput": '{"project": "A"}'},
+            {"type": "session.message.delta", "text": "你好"},
+            {"type": "session.tool.completed", "toolName": "query_ipm_list", "toolUseId": "call-1", "input": {"project": "A"}},
+            {"type": "session.tool.result", "toolUseId": "call-1", "content": "ok", "isError": False},
+            {"type": "session.completed", "usage": {"input_tokens": 1, "output_tokens": 2}},
         ])
 
         events = list(client.chat.stream("查一下 IPM", session_id="session-1"))
@@ -150,7 +150,7 @@ class ProductClientTest(unittest.TestCase):
     def test_chat_stream_maps_interactive_desktop_tools_to_structured_events(self):
         client = RecordingClient(frames=[
             {
-                "type": "permission_request",
+                "type": "session.permission.requested",
                 "requestId": "ask-1",
                 "toolName": "AskUserQuestion",
                 "toolUseId": "tool-ask-1",
@@ -169,7 +169,7 @@ class ProductClientTest(unittest.TestCase):
                 },
             },
             {
-                "type": "permission_request",
+                "type": "session.permission.requested",
                 "requestId": "plan-1",
                 "toolName": "EnterPlanMode",
                 "toolUseId": "tool-plan-1",
@@ -196,7 +196,7 @@ class ProductClientTest(unittest.TestCase):
     def test_chat_stream_auto_responds_to_interaction_and_continues(self):
         client = RecordingClient(frames=[
             {
-                "type": "permission_request",
+                "type": "session.permission.requested",
                 "requestId": "ask-1",
                 "toolName": "AskUserQuestion",
                 "toolUseId": "tool-ask-1",
@@ -213,8 +213,8 @@ class ProductClientTest(unittest.TestCase):
                     ]
                 },
             },
-            {"type": "content_delta", "text": "continued"},
-            {"type": "message_complete", "usage": {"input_tokens": 1, "output_tokens": 1}},
+            {"type": "session.message.delta", "text": "continued"},
+            {"type": "session.completed", "usage": {"input_tokens": 1, "output_tokens": 1}},
         ])
 
         events = list(client.chat.stream(
@@ -229,11 +229,11 @@ class ProductClientTest(unittest.TestCase):
             "WORKFLOW_COMPLETED",
         ])
         self.assertEqual(client.fake_ws.sent[0], {
-            "type": "user_message",
+            "type": "session.message.send",
             "content": "start",
         })
         self.assertEqual(client.fake_ws.sent[1], {
-            "type": "permission_response",
+            "type": "session.permission.respond",
             "requestId": "ask-1",
             "allowed": True,
             "updatedInput": {
@@ -252,9 +252,9 @@ class ProductClientTest(unittest.TestCase):
 
     def test_chat_respond_sends_permission_response_and_streams_result(self):
         client = RecordingClient(frames=[
-            {"type": "connected", "sessionId": "session-1"},
-            {"type": "content_delta", "text": "done"},
-            {"type": "message_complete", "usage": {"input_tokens": 1, "output_tokens": 1}},
+            {"type": "session.connected", "sessionId": "session-1"},
+            {"type": "session.message.delta", "text": "done"},
+            {"type": "session.completed", "usage": {"input_tokens": 1, "output_tokens": 1}},
         ])
 
         events = list(client.chat.respond(
@@ -264,7 +264,7 @@ class ProductClientTest(unittest.TestCase):
         ))
 
         self.assertEqual(client.fake_ws.sent[0], {
-            "type": "permission_response",
+            "type": "session.permission.respond",
             "requestId": "ask-1",
             "allowed": True,
             "updatedInput": {"answers": {"Which task?": "Conrod"}},
@@ -274,7 +274,7 @@ class ProductClientTest(unittest.TestCase):
         self.assertEqual(events[-1].result, "done")
         self.assertEqual(
             client.calls[0],
-            ("WS", "ws://beya.test/ws/session-1?purpose=interaction_response", None),
+            ("WS", "ws://beya.test/sessions/session-1/live", None),
         )
 
     def test_plugin_helpers_generate_installable_plugin_payload(self):
@@ -360,8 +360,8 @@ class ProductClientTest(unittest.TestCase):
 
     def test_client_sends_resource_request_over_app_websocket(self):
         frames = [
-            {"type": "connected", "scope": "app"},
-            {"type": "api_response", "id": "app-rpc-1", "status": 200, "headers": {}, "body": {"models": []}},
+            {"type": "rpc.connected", "schemaHash": "test-hash"},
+            {"type": "rpc.response", "id": "app-rpc-1", "status": 200, "headers": {}, "result": {"models": []}},
         ]
         client = BeyaClient(base_url="http://beya.test")
         fake_ws = FakeWebSocket(frames)
@@ -374,8 +374,9 @@ class ProductClientTest(unittest.TestCase):
         finally:
             time.time = original_time
 
-        self.assertEqual(fake_ws.sent[0]["type"], "api_request")
-        self.assertEqual(fake_ws.sent[0]["request"]["path"], "/models")
+        self.assertEqual(fake_ws.sent[0]["type"], "rpc.request")
+        self.assertEqual(fake_ws.sent[0]["method"], "models.list")
+        self.assertEqual(fake_ws.sent[0]["params"], {"headers": {"Content-Type": "application/json"}})
 
     def test_async_client_exposes_product_resources(self):
         async def run():

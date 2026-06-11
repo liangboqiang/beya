@@ -34,11 +34,11 @@ export type BashProgress = any
 export type MCPProgress = any
 export type PowerShellProgress = any
 export type REPLToolProgress = any
-export type SdkWorkflowProgress = any
+export type RuntimeWorkflowProgress = any
 export type ShellProgress = any
 export type SkillToolProgress = any
 export type TaskOutputProgress = any
 export type ToolProgressData = any
 export type WebSearchProgress = any
 
-export { stub as AgentToolProgress, stub as BashProgress, stub as MCPProgress, stub as PowerShellProgress, stub as REPLToolProgress, stub as SdkWorkflowProgress, stub as ShellProgress, stub as SkillToolProgress, stub as TaskOutputProgress, stub as ToolProgressData, stub as WebSearchProgress }
+export { stub as AgentToolProgress, stub as BashProgress, stub as MCPProgress, stub as PowerShellProgress, stub as REPLToolProgress, stub as RuntimeWorkflowProgress, stub as ShellProgress, stub as SkillToolProgress, stub as TaskOutputProgress, stub as ToolProgressData, stub as WebSearchProgress }

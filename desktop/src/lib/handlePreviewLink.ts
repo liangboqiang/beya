@@ -10,7 +10,7 @@ export type PreviewLinkDeps = {
 }
 
 /**
- * Build a `/preview-fs/<sessionId>/<path>` URL for the local server.
+ * Build a `/files/preview/<sessionId>/<path>` URL for the local server.
  *
  * Absolute file paths (leading slash) are preserved as-is, so the resulting URL
  * carries a `//` between `<sessionId>` and the path. That double slash is
@@ -19,7 +19,7 @@ export type PreviewLinkDeps = {
  * absolute-within-workspace path and sandbox-checked against the work dir root.
  */
 export function previewFsUrl(base: string, sessionId: string, filePath: string): string {
-  return `${base.replace(/\/$/, '')}/preview-fs/${encodeURIComponent(sessionId)}/${filePath.replace(/^\/+/, '/')}`
+  return `${base.replace(/\/$/, '')}/files/preview/${encodeURIComponent(sessionId)}/${filePath.replace(/^\/+/, '/')}`
 }
 
 /** True for POSIX absolute (`/...`) or Windows drive (`X:\` / `X:/`) paths. */
@@ -28,7 +28,7 @@ export function isAbsoluteLocalPath(p: string): boolean {
 }
 
 /**
- * Build a `/local-file/<absolute-path>` URL for the local server so an absolute
+ * Build a `/files/local/<absolute-path>` URL for the local server so an absolute
  * file outside the session workspace can open in the in-app browser.
  *
  * The path is appended PATH-style (not as a query param) so relative asset URLs
@@ -47,7 +47,7 @@ export function localFileUrl(base: string, absPath: string): string {
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/')
-  return `${base.replace(/\/$/, '')}/local-file${encoded}`
+  return `${base.replace(/\/$/, '')}/files/local${encoded}`
 }
 
 /** Returns true if handled (caller should preventDefault). */
@@ -60,8 +60,8 @@ export function handlePreviewLink(href: string, deps: PreviewLinkDeps): boolean 
     case 'browser-file': {
       const filePath = cls.path!
       // Absolute paths (incl. file:// → absolute) may live OUTSIDE the session
-      // workspace, so serve them via the $HOME-sandboxed /local-file route.
-      // Relative paths stay workspace-scoped via /preview-fs.
+      // workspace, so serve them via the $HOME-sandboxed /files/local route.
+      // Relative paths stay workspace-scoped via /files/preview.
       if (!isAbsoluteLocalPath(filePath) && !shouldOfferStaticHtmlPreview(filePath)) {
         deps.openFilePreview(deps.sessionId, filePath)
         return true

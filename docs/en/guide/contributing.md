@@ -97,7 +97,7 @@ Git hooks are local, so each clone needs to install the hook once:
 bun run hooks:install
 ```
 
-After installation, every `git push` runs the fast local gate internally (`bun run quality:push`). It reuses the PR gate impact, policy, and path-aware checks, but skips the expensive coverage lane by default; full coverage remains in `bun run verify`, `bun run quality:pr`, and CI. If unit tests, docs/native/adapter checks, or any other selected fast path-aware lane fails, the local hook blocks the push.
+After installation, every `git push` runs the fast local gate internally (`bun run quality:push`). It reuses the PR gate impact, policy, and path-aware checks, but skips the expensive coverage lane by default and uses the fast server test profile; full coverage and the slow server integration profile remain in `bun run verify`, `bun run quality:pr`, and CI. If unit tests, docs/native/adapter checks, or any other selected fast path-aware lane fails, the local hook blocks the push.
 
 Maintainers or contributors with model quota can also add real provider smoke and desktop agent-browser smoke to the pre-push hook:
 

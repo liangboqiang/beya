@@ -27,7 +27,7 @@ function setupFiles() {
   return root
 }
 
-/** Build a /local-file/<abs> URL exactly the way the desktop helper does. */
+/** Build a /files/local/<abs> URL exactly the way the desktop helper does. */
 function localFileRequestUrl(absPath: string): URL {
   const withForwardSlashes = absPath.replace(/\\/g, '/')
   const withLeading = withForwardSlashes.startsWith('/')
@@ -37,7 +37,7 @@ function localFileRequestUrl(absPath: string): URL {
     .split('/')
     .map((s) => encodeURIComponent(s))
     .join('/')
-  return new URL(`http://127.0.0.1/local-file${encoded}`)
+  return new URL(`http://127.0.0.1/files/local${encoded}`)
 }
 
 describe('reconstructAbsolutePath', () => {
@@ -120,13 +120,13 @@ describe('handleLocalFile', () => {
   })
 
   it('403s when the prefix was stripped by URL normalization (traversal)', async () => {
-    // `..` collapsing removes the /local-file/ prefix → treated as escape.
-    const res = await handleLocalFile(new URL('http://127.0.0.1/local-file/../../etc/passwd'))
+    // `..` collapsing removes the /files/local/ prefix → treated as escape.
+    const res = await handleLocalFile(new URL('http://127.0.0.1/files/local/../../etc/passwd'))
     expect(res.status).toBe(403)
   })
 
   it('400s when no path follows the prefix', async () => {
-    const res = await handleLocalFile(new URL('http://127.0.0.1/local-file/'))
+    const res = await handleLocalFile(new URL('http://127.0.0.1/files/local/'))
     expect(res.status).toBe(400)
   })
 })

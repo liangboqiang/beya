@@ -514,7 +514,7 @@ async function getSessionInspection(sessionId: string, url: URL): Promise<Respon
     ? conversationService.getSessionPermissionMode(sessionId)
     : launchInfo?.permissionMode ?? 'default'
   const initMessage = conversationService.getSessionInitMessage(sessionId) ??
-    [...conversationService.getRecentSdkMessages(sessionId)]
+    [...conversationService.getRecentRuntimeMessages(sessionId)]
     .reverse()
     .find((message) => message?.type === 'system' && message.subtype === 'init')
   const transcriptMetadata = await sessionService.getTranscriptMetadata(sessionId)

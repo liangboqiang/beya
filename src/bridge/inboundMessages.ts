@@ -4,7 +4,7 @@ import type {
   ImageBlockParam,
 } from '@anthropic-ai/sdk/resources/messages.mjs'
 import type { UUID } from 'crypto'
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
 import { detectImageFormatFromBase64 } from '../utils/imageResizer.js'
 
 /**
@@ -19,7 +19,7 @@ import { detectImageFormatFromBase64 } from '../utils/imageResizer.js'
  * skipped (non-user type, missing/empty content).
  */
 export function extractInboundMessageFields(
-  msg: SDKMessage,
+  msg: RuntimeMessage,
 ):
   | { content: string | Array<ContentBlockParam>; uuid: UUID | undefined }
   | undefined {

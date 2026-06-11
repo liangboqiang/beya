@@ -102,10 +102,10 @@ describe('AssistantMessage output-target cards', () => {
       />,
     )
     // Image renders inline through InlineImageGallery (workDir is undefined in this
-    // test's mock, so the relative path resolves as-is and is served via /preview-fs).
+    // test's mock, so the relative path resolves as-is and is served via /files/preview).
     const img = screen.getByRole('img') as HTMLImageElement
     expect(img.getAttribute('src')).toBe(
-      'http://127.0.0.1:4321/preview-fs/s1/outputs/foo/preview_frame.png',
+      'http://127.0.0.1:4321/files/preview/s1/outputs/foo/preview_frame.png',
     )
     // ...and is NOT duplicated as an output-target card.
     expect(screen.queryByText('assistantOutputs.kind.image')).toBeNull()
@@ -120,10 +120,10 @@ describe('AssistantMessage output-target cards', () => {
       />,
     )
     // Video renders inline through InlineVideoGallery (workDir is undefined in this
-    // test's mock, so the relative path resolves as-is and is served via /preview-fs).
+    // test's mock, so the relative path resolves as-is and is served via /files/preview).
     const video = container.querySelector('video') as HTMLVideoElement
     expect(video).not.toBeNull()
-    expect(video.getAttribute('src')).toBe('http://127.0.0.1:4321/preview-fs/s1/outputs/demo.mp4')
+    expect(video.getAttribute('src')).toBe('http://127.0.0.1:4321/files/preview/s1/outputs/demo.mp4')
     // ...and is NOT duplicated as an output-target card (no extra open/copy controls).
     expect(screen.queryByText('assistantOutputs.kind.image')).toBeNull()
   })

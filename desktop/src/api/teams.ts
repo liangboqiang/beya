@@ -18,27 +18,27 @@ export type { TranscriptMessage }
 
 export const teamsApi = {
   list() {
-    return api.get<TeamsResponse>('/api/teams')
+    return api.get<TeamsResponse>('/teams')
   },
 
   get(name: string) {
-    return api.get<TeamDetail>(`/api/teams/${encodeURIComponent(name)}`)
+    return api.get<TeamDetail>(`/teams/${encodeURIComponent(name)}`)
   },
 
   getMemberTranscript(teamName: string, agentId: string) {
     return api.get<TranscriptResponse>(
-      `/api/teams/${encodeURIComponent(teamName)}/members/${encodeURIComponent(agentId)}/transcript`,
+      `/teams/${encodeURIComponent(teamName)}/members/${encodeURIComponent(agentId)}/transcript`,
     )
   },
 
   sendMemberMessage(teamName: string, agentId: string, content: string) {
     return api.post<{ ok: true }>(
-      `/api/teams/${encodeURIComponent(teamName)}/members/${encodeURIComponent(agentId)}/messages`,
+      `/teams/${encodeURIComponent(teamName)}/members/${encodeURIComponent(agentId)}/messages`,
       { content },
     )
   },
 
   delete(name: string) {
-    return api.delete<{ ok: true }>(`/api/teams/${encodeURIComponent(name)}`)
+    return api.delete<{ ok: true }>(`/teams/${encodeURIComponent(name)}`)
   },
 }

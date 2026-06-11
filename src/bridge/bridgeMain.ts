@@ -113,8 +113,8 @@ function pollSleepDetectionThresholdMs(backoff: BackoffConfig): number {
  * process. In compiled binaries, process.execPath is the claude binary itself
  * and args go directly to it. In npm installs (node running cli.js),
  * process.execPath is the node runtime — the child spawn must pass the script
- * path as the first arg, otherwise node interprets --sdk-url as a node option
- * and exits with "bad option: --sdk-url". See tju-apvic/beya#28334.
+ * path as the first arg, otherwise node interprets --runtime-url as a node option
+ * and exits with "bad option: --runtime-url". See tju-apvic/beya#28334.
  */
 function spawnScriptArgs(): string[] {
   if (isInBundledMode() || !process.argv[1]) {
@@ -906,7 +906,7 @@ export async function runBridgeLoop(
           // v1 path: Session-Ingress WebSocket. Uses config.sessionIngressUrl
           // (not secret.api_base_url, which may point to a remote proxy tunnel
           // that doesn't know about locally-created sessions).
-          let sdkUrl: string
+          let runtimeUrl: string
           let useCcrV2 = false
           let workerEpoch: number | undefined
           // Server decides per-session via the work secret; env var is the
@@ -915,13 +915,13 @@ export async function runBridgeLoop(
             secret.use_code_sessions === true ||
             isEnvTruthy(process.env.CLAUDE_BRIDGE_USE_CCR_V2)
           ) {
-            sdkUrl = buildCCRv2SdkUrl(config.apiBaseUrl, sessionId)
+            runtimeUrl = buildCCRv2SdkUrl(config.apiBaseUrl, sessionId)
             // Retry once on transient failure (network blip, 500) before
             // permanently giving up and killing the session.
             for (let attempt = 1; attempt <= 2; attempt++) {
               try {
                 workerEpoch = await registerWorker(
-                  sdkUrl,
+                  runtimeUrl,
                   secret.session_ingress_token,
                 )
                 useCcrV2 = true
@@ -957,7 +957,7 @@ export async function runBridgeLoop(
             }
             if (!useCcrV2) break
           } else {
-            sdkUrl = buildSdkUrl(config.sessionIngressUrl, sessionId)
+            runtimeUrl = buildSdkUrl(config.sessionIngressUrl, sessionId)
           }
 
           // In worktree mode, on-demand sessions get an isolated git worktree
@@ -1015,7 +1015,7 @@ export async function runBridgeLoop(
           }
 
           logForDebugging(
-            `[bridge:session] Spawning sessionId=${sessionId} sdkUrl=${sdkUrl}`,
+            `[bridge:session] Spawning sessionId=${sessionId} runtimeUrl=${runtimeUrl}`,
           )
 
           // compat-surface session_* form for logger/Sessions-API calls.
@@ -1027,7 +1027,7 @@ export async function runBridgeLoop(
             spawner,
             {
               sessionId,
-              sdkUrl,
+              runtimeUrl,
               accessToken: secret.session_ingress_token,
               useCcrV2,
               workerEpoch,

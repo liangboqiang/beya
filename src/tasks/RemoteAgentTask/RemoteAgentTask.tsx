@@ -1,7 +1,7 @@
 import type { ToolUseBlock } from '@anthropic-ai/sdk/resources';
 import { getRemoteSessionUrl } from '../../constants/product.js';
 import { OUTPUT_FILE_TAG, REMOTE_REVIEW_PROGRESS_TAG, REMOTE_REVIEW_TAG, STATUS_TAG, SUMMARY_TAG, TASK_ID_TAG, TASK_NOTIFICATION_TAG, TASK_TYPE_TAG, TOOL_USE_ID_TAG, ULTRAPLAN_TAG } from '../../constants/xml.js';
-import type { SDKAssistantMessage, SDKMessage } from 'src/types/sdkProtocol.js';
+import type { RuntimeAssistantMessage, RuntimeMessage } from 'src/types/runtimeProtocol.js';
 import type { SetAppState, Task, TaskContext, TaskStateBase } from '../../Task.js';
 import { createTaskStateBase, generateTaskId } from '../../Task.js';
 import { TodoWriteTool } from '../../tools/TodoWriteTool/TodoWriteTool.js';
@@ -10,7 +10,7 @@ import { logForDebugging } from '../../utils/debug.js';
 import { logError } from '../../utils/log.js';
 import { enqueuePendingNotification } from '../../utils/messageQueueManager.js';
 import { extractTag, extractTextContent } from '../../utils/messages.js';
-import { emitTaskTerminatedSdk } from '../../utils/sdkEventQueue.js';
+import { emitTaskTerminatedSdk } from '../../utils/runtimeEventQueue.js';
 import { deleteRemoteAgentMetadata, listRemoteAgentMetadata, type RemoteAgentMetadata, writeRemoteAgentMetadata } from '../../utils/sessionStorage.js';
 import { jsonStringify } from '../../utils/slowOperations.js';
 import { appendTaskOutput, evictTaskOutput, getTaskOutputPath, initTaskOutput } from '../../utils/task/diskOutput.js';
@@ -28,7 +28,7 @@ export type RemoteAgentTaskState = TaskStateBase & {
   command: string;
   title: string;
   todoList: TodoList;
-  log: SDKMessage[];
+  log: RuntimeMessage[];
   /**
    * Long-running agent that will not be marked as complete after the first `result`.
    */
@@ -205,7 +205,7 @@ function markTaskNotified(taskId: string, setAppState: SetAppState): boolean {
  * Extract the plan content from the remote session log.
  * Searches all assistant messages for <ultraplan>...</ultraplan> tags.
  */
-export function extractPlanFromLog(log: SDKMessage[]): string | null {
+export function extractPlanFromLog(log: RuntimeMessage[]): string | null {
   // Walk backwards through assistant messages to find <ultraplan> content
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i];
@@ -251,7 +251,7 @@ The remote Ultraplan session did not produce a plan (${reason}). Inspect the ses
  * and prompt mode is the dev/fallback. Newest-first in both cases —the tag
  * appears once at the end of the run so reverse iteration short-circuits.
  */
-function extractReviewFromLog(log: SDKMessage[]): string | null {
+function extractReviewFromLog(log: RuntimeMessage[]): string | null {
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i];
     // The final echo before hook exit may land in either the last
@@ -278,7 +278,7 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
   if (hookTagged?.trim()) return hookTagged.trim();
 
   // Fallback: concatenate all assistant text in chronological order.
-  const allText = log.filter((msg): msg is SDKAssistantMessage => msg.type === 'assistant').map(msg => extractTextContent(msg.message.content, '\n')).join('\n').trim();
+  const allText = log.filter((msg): msg is RuntimeAssistantMessage => msg.type === 'assistant').map(msg => extractTextContent(msg.message.content, '\n')).join('\n').trim();
   return allText || null;
 }
 
@@ -292,7 +292,7 @@ function extractReviewFromLog(log: SDKMessage[]): string | null {
  * would trigger the fallback and prematurely set cachedReviewContent,
  * completing the review before the actual tagged output arrives.
  */
-function extractReviewTagFromLog(log: SDKMessage[]): string | null {
+function extractReviewTagFromLog(log: RuntimeMessage[]): string | null {
   // hook_progress / hook_response per-message scan (bughunter path)
   for (let i = log.length - 1; i >= 0; i--) {
     const msg = log[i];
@@ -362,8 +362,8 @@ Remote review did not produce output (${reason}). Tell the user to retry /ultrar
 /**
  * Extract todo list from SDK messages (finds last TodoWrite tool use).
  */
-function extractTodoListFromLog(log: SDKMessage[]): TodoList {
-  const todoListMessage = log.findLast((msg): msg is SDKAssistantMessage => msg.type === 'assistant' && msg.message.content.some(block => block.type === 'tool_use' && block.name === TodoWriteTool.name));
+function extractTodoListFromLog(log: RuntimeMessage[]): TodoList {
+  const todoListMessage = log.findLast((msg): msg is RuntimeAssistantMessage => msg.type === 'assistant' && msg.message.content.some(block => block.type === 'tool_use' && block.name === TodoWriteTool.name));
   if (!todoListMessage) {
     return [];
   }
@@ -545,7 +545,7 @@ function startRemoteSessionPolling(taskId: string, context: TaskContext): () => 
   const STABLE_IDLE_POLLS = 5;
   let consecutiveIdlePolls = 0;
   let lastEventId: string | null = null;
-  let accumulatedLog: SDKMessage[] = [];
+  let accumulatedLog: RuntimeMessage[] = [];
   // Cached across ticks so we don't re-scan the full log. Tag appears once
   // at end of run; scanning only the delta (response.newEvents) is O(new).
   let cachedReviewContent: string | null = null;

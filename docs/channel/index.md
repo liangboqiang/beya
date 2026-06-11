@@ -5,7 +5,7 @@
 
 ## 这组文档是干什么的
 
-这个仓库当前实际可用的 IM 接入方案，是 `Desktop Webapp + adapters/* + /api/adapters + /ws/:sessionId`。
+这个仓库当前实际可用的 IM 接入方案，是 `Desktop Webapp + adapters/* + /rpc + /sessions/{sessionId}/live`。
 
 `docs/channel/` 保留的价值主要是：
 
@@ -26,7 +26,7 @@
 
 ### [02-im-gateway-proposal.md](./02-im-gateway-proposal.md)
 
-这是历史方案设计文档，记录了从 `IM Gateway` 设想演进到“独立 Adapter 直连 `/ws/:sessionId`”的过程。
+这是历史方案设计文档，记录了从 `IM Gateway` 设想演进到“独立 Adapter 直连 `/sessions/{sessionId}/live`”的过程。
 
 它适合回答：
 

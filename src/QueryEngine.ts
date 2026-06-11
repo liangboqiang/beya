@@ -9,12 +9,12 @@ import {
 import { isGoalLocalCommandOutputContent } from './goals/goalState.js'
 import type {
   PermissionMode,
-  SDKCompactBoundaryMessage,
-  SDKMessage,
-  SDKPermissionDenial,
-  SDKStatus,
-  SDKUserMessageReplay,
-} from 'src/types/sdkProtocol.js'
+  RuntimeCompactBoundaryMessage,
+  RuntimeMessage,
+  RuntimePermissionDenial,
+  RuntimeStatus,
+  RuntimeUserMessageReplay,
+} from 'src/types/runtimeProtocol.js'
 import { accumulateUsage, updateUsage } from 'src/services/api/claude.js'
 import type { NonNullableUsage } from 'src/services/api/logging.js'
 import { EMPTY_USAGE } from 'src/services/api/logging.js'
@@ -95,8 +95,8 @@ const messageSelector =
     require('src/components/MessageSelector.js')
 
 import {
-  localCommandOutputToSDKAssistantMessage,
-  toSDKCompactMetadata,
+  localCommandOutputToRuntimeAssistantMessage,
+  toRuntimeCompactMetadata,
 } from './utils/messages/mappers.js'
 import {
   buildSystemInitMessage,
@@ -158,7 +158,7 @@ export type QueryEngineConfig = {
   /** Handler for URL elicitations triggered by MCP tool -32042 errors. */
   handleElicitation?: ToolUseContext['handleElicitation']
   includePartialMessages?: boolean
-  setSDKStatus?: (status: SDKStatus) => void
+  setRuntimeStatus?: (status: RuntimeStatus) => void
   abortController?: AbortController
   orphanedPermission?: OrphanedPermission
   /**
@@ -191,7 +191,7 @@ export class QueryEngine {
   private config: QueryEngineConfig
   private mutableMessages: Message[]
   private abortController: AbortController
-  private permissionDenials: SDKPermissionDenial[]
+  private permissionDenials: RuntimePermissionDenial[]
   private totalUsage: NonNullableUsage
   private hasHandledOrphanedPermission = false
   private readFileState: FileStateCache
@@ -215,7 +215,7 @@ export class QueryEngine {
   async *submitMessage(
     prompt: string | ContentBlockParam[],
     options?: { uuid?: string; isMeta?: boolean },
-  ): AsyncGenerator<SDKMessage, void, unknown> {
+  ): AsyncGenerator<RuntimeMessage, void, unknown> {
     const {
       cwd,
       commands,
@@ -237,7 +237,7 @@ export class QueryEngine {
       replayUserMessages = false,
       includePartialMessages = false,
       agents = [],
-      setSDKStatus,
+      setRuntimeStatus,
       orphanedPermission,
     } = this.config
 
@@ -397,7 +397,7 @@ export class QueryEngine {
           return { ...prev, attribution: updated }
         })
       },
-      setSDKStatus,
+      setRuntimeStatus,
     }
 
     // Handle orphaned permission (only once per engine lifetime)
@@ -529,7 +529,7 @@ export class QueryEngine {
       setResponseLength: () => {},
       updateFileHistoryState: processUserInputContext.updateFileHistoryState,
       updateAttributionState: processUserInputContext.updateAttributionState,
-      setSDKStatus,
+      setRuntimeStatus,
     }
 
     headlessProfilerCheckpoint('before_skills_plugins')
@@ -597,12 +597,12 @@ export class QueryEngine {
             timestamp: msg.timestamp,
             isReplay: !msg.isCompactSummary,
             isSynthetic: msg.isMeta || msg.isVisibleInTranscriptOnly,
-          } as SDKUserMessageReplay
+          } as RuntimeUserMessageReplay
         }
 
         // Local command output —yield as a synthetic assistant message so
         // RC renders it as assistant-style text rather than a user bubble.
-        // Emitted as assistant (not the dedicated SDKLocalCommandOutputMessage
+        // Emitted as assistant (not the dedicated RuntimeLocalCommandOutputMessage
         // system subtype) so mobile clients + session-ingress can parse it.
         if (
           msg.type === 'system' &&
@@ -612,9 +612,9 @@ export class QueryEngine {
             msg.content.includes(`<${LOCAL_COMMAND_STDERR_TAG}>`))
         ) {
           if (latestLocalCommandName === 'goal') {
-            yield toSDKLocalCommandOutputMessage(msg)
+            yield toRuntimeLocalCommandOutputMessage(msg)
           } else {
-            yield localCommandOutputToSDKAssistantMessage(msg.content, msg.uuid)
+            yield localCommandOutputToRuntimeAssistantMessage(msg.content, msg.uuid)
           }
           latestLocalCommandName = null
         }
@@ -625,8 +625,8 @@ export class QueryEngine {
             subtype: 'compact_boundary' as const,
             session_id: getSessionId(),
             uuid: msg.uuid,
-            compact_metadata: toSDKCompactMetadata(msg.compactMetadata),
-          } as SDKCompactBoundaryMessage
+            compact_metadata: toRuntimeCompactMetadata(msg.compactMetadata),
+          } as RuntimeCompactBoundaryMessage
         }
       }
 
@@ -768,7 +768,7 @@ export class QueryEngine {
                 uuid: msgToAck.uuid,
                 timestamp: msgToAck.timestamp,
                 isReplay: true,
-              } as SDKUserMessageReplay
+              } as RuntimeUserMessageReplay
             }
           }
         }
@@ -911,7 +911,7 @@ export class QueryEngine {
               uuid: message.attachment.source_uuid || message.uuid,
               timestamp: message.timestamp,
               isReplay: true,
-            } as SDKUserMessageReplay
+            } as RuntimeUserMessageReplay
           }
           break
         case 'stream_request_start':
@@ -944,7 +944,7 @@ export class QueryEngine {
               messages.push(message)
               await recordTranscript(messages)
             }
-            yield toSDKLocalCommandOutputMessage(message)
+            yield toRuntimeLocalCommandOutputMessage(message)
           }
           // Yield compact boundary messages to SDK
           if (
@@ -969,7 +969,7 @@ export class QueryEngine {
               subtype: 'compact_boundary' as const,
               session_id: getSessionId(),
               uuid: message.uuid,
-              compact_metadata: toSDKCompactMetadata(message.compactMetadata),
+              compact_metadata: toRuntimeCompactMetadata(message.compactMetadata),
             }
           }
           if (message.subtype === 'api_error') {
@@ -1210,7 +1210,7 @@ export class QueryEngine {
 
 function* localGoalCommandOutputMessages(
   messages: Message[],
-): Generator<SDKMessage, void, unknown> {
+): Generator<RuntimeMessage, void, unknown> {
   let latestLocalCommandName: string | null = null
   for (const msg of messages) {
     if (msg.type !== 'system' || msg.subtype !== 'local_command') continue
@@ -1226,20 +1226,20 @@ function* localGoalCommandOutputMessages(
       (msg.content.includes(`<${LOCAL_COMMAND_STDOUT_TAG}>`) ||
         msg.content.includes(`<${LOCAL_COMMAND_STDERR_TAG}>`))
     ) {
-      yield toSDKLocalCommandOutputMessage(msg)
+      yield toRuntimeLocalCommandOutputMessage(msg)
       latestLocalCommandName = null
     }
   }
 }
 
-function toSDKLocalCommandOutputMessage(message: Message): SDKMessage {
+function toRuntimeLocalCommandOutputMessage(message: Message): RuntimeMessage {
   return {
     type: 'system',
     subtype: 'local_command_output',
     content: message.type === 'system' ? stripAnsi(message.content) : '',
     uuid: message.uuid,
     session_id: getSessionId(),
-  } as SDKMessage
+  } as RuntimeMessage
 }
 
 function readXmlTag(text: string, tag: string): string | null {
@@ -1284,7 +1284,7 @@ export async function* ask({
   includePartialMessages = false,
   handleElicitation,
   agents = [],
-  setSDKStatus,
+  setRuntimeStatus,
   orphanedPermission,
 }: {
   commands: Command[]
@@ -1315,9 +1315,9 @@ export async function* ask({
   includePartialMessages?: boolean
   handleElicitation?: ToolUseContext['handleElicitation']
   agents?: AgentDefinition[]
-  setSDKStatus?: (status: SDKStatus) => void
+  setRuntimeStatus?: (status: RuntimeStatus) => void
   orphanedPermission?: OrphanedPermission
-}): AsyncGenerator<SDKMessage, void, unknown> {
+}): AsyncGenerator<RuntimeMessage, void, unknown> {
   const engine = new QueryEngine({
     cwd,
     tools,
@@ -1342,7 +1342,7 @@ export async function* ask({
     handleElicitation,
     replayUserMessages,
     includePartialMessages,
-    setSDKStatus,
+    setRuntimeStatus,
     abortController,
     orphanedPermission,
     ...(feature('HISTORY_SNIP')

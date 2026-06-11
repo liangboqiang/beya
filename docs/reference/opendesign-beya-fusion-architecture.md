@@ -29,11 +29,11 @@ Current Beya sources:
 - `src/tools/*`
 - `src/services/runtimePluginTools.ts`
 - `src/server/services/sessionRuntimeSurface.ts`
-- `src/server/api/providers.ts`
-- `src/server/api/models.ts`
-- `src/server/api/skills.ts`
-- `src/server/api/plugins.ts`
-- `src/server/api/tools.ts`
+- `src/server/providers.ts`
+- `src/server/models.ts`
+- `src/server/skills.ts`
+- `src/server/plugins.ts`
+- `src/server/tools.ts`
 - `packages/sdk-python/*`
 - `bin/beya`
 
@@ -66,7 +66,7 @@ The provider source of truth is Beya's provider runtime:
 - official OpenAI OAuth path
 - managed provider settings
 
-Open Design `runtime-data/models.json` becomes a display/seed layer that maps to `/api/models`, `/api/providers`, and `/api/providers/catalog`.
+Open Design `runtime-data/models.json` becomes a display/seed layer that maps to the `models.*` and `providers.*` RPC methods.
 
 ### Skill / Plugin / Resource
 
@@ -121,23 +121,23 @@ bin/beya / release scripts
   └─ build and ship desktop + CLI + SDK + server bundle
 ```
 
-## Compatibility API Layer
+## Compatibility RPC Layer
 
-Add an explicit Open Design adapter API under the current server, not a second server.
+Add an explicit Open Design adapter through the current `/rpc` resource gateway, not a second server or new HTTP `/api/*` surface.
 
-Suggested routes:
+Suggested RPC methods:
 
 ```text
-GET  /api/platform/runtime-prototypes
-GET  /api/platform/runtime-prototypes/:id
-GET  /api/platform/agents/:agentId/runtime-profile
-PATCH /api/platform/agents/:agentId/runtime-profile
-POST /api/platform/agents/:agentId/runtime-profile/compile
-GET  /api/platform/agents/:agentId/runtime-contract
-GET  /api/platform/agents/:agentId/capability-registry
-POST /api/platform/agents/:agentId/context/compose
-GET  /api/platform/debug/sessions/:sessionId/trace
-POST /api/platform/publishing/build
+platform.runtimePrototypes.list
+platform.runtimePrototypes.get
+platform.agentRuntimeProfile.get
+platform.agentRuntimeProfile.update
+platform.agentRuntimeProfile.compile
+platform.agentRuntimeContract.get
+platform.agentCapabilityRegistry.get
+platform.context.compose
+platform.debugSessionTrace.get
+platform.publishing.build
 ```
 
 The adapter maps Open Design concepts to current Beya surfaces:
@@ -149,7 +149,7 @@ The adapter maps Open Design concepts to current Beya surfaces:
 | RuntimeContract | compiled schema summary from tools, skills, plugins, provider, permissions |
 | RuntimeInputEnvelope | conversation/session request plus cwd, model, tools, skills, workspace |
 | PlatformOutputStream | Beya conversation events, tool events, diagnostics, patch/worktree cards |
-| Capability Registry | `sessionRuntimeSurface`, `/api/tools`, `/api/skills`, `/api/plugins`, `/api/models` |
+| Capability Registry | `sessionRuntimeSurface`, `tools.*`, `skills.*`, `plugins.*`, `models.*` |
 | Context Composer | Beya prompt assembly and provider/runtime metadata |
 | Problem | diagnostics, tasks, quality reports, future issue/problem store |
 | Patch | current diff/worktree/edit surfaces |
@@ -240,13 +240,13 @@ First publishing targets:
 - Python SDK package
 - release notes and manifest
 
-Server API should expose a publishing plan first, then build on confirmation.
+Resource RPC should expose a publishing plan first, then build on confirmation.
 
-Suggested first route:
+Suggested first RPC methods:
 
 ```text
-POST /api/platform/publishing/plan
-POST /api/platform/publishing/build
+platform.publishing.plan
+platform.publishing.build
 ```
 
 This should wrap current scripts such as:
@@ -308,10 +308,10 @@ Verification:
 
 Deliverables:
 
-- `/api/platform/runtime-prototypes`
-- `/api/platform/agents/:agentId/runtime-profile`
-- `/api/platform/agents/:agentId/runtime-contract`
-- `/api/platform/agents/:agentId/capability-registry`
+- `/platform/runtime-prototypes`
+- `/platform/agents/:agentId/runtime-profile`
+- `/platform/agents/:agentId/runtime-contract`
+- `/platform/agents/:agentId/capability-registry`
 - focused server tests
 
 Verification:
@@ -428,10 +428,10 @@ The first safe implementation slice should be Phase 1, not a UI rewrite.
 Concrete files likely touched:
 
 - `src/server/router.ts`
-- `src/server/api/platform.ts`
+- `src/server/platform.ts`
 - `src/server/services/platformRuntimeService.ts`
 - `src/server/__tests__/platform-runtime.test.ts`
-- `desktop/src/api/platform.ts` only if Phase 2 starts
+- `desktop/src/platform.ts` only if Phase 2 starts
 
 First API behavior:
 

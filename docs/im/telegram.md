@@ -54,7 +54,7 @@ Telegram 方案适合个人私聊远程使用。当前实现只处理 `private c
 - `/clear` — 清空当前会话上下文，保留项目绑定
 - `/new` — 清空当前 chat 绑定的 session，并重新选择项目
 - `/help` — 显示当前可用命令
-- `/stop` — 向当前 session 发送 `stop_generation`
+- `/stop` — 向当前 session 发送 `session.generation.stop`
 
 ## 权限审批
 
@@ -64,7 +64,7 @@ Telegram 方案适合个人私聊远程使用。当前实现只处理 `private c
 - `♾️ 永久允许`
 - `❌ 拒绝`
 
-点击后 adapter 会把结果通过 `permission_response` 回传给 Desktop server。
+点击后 adapter 会把结果通过 `session.permission.respond` 回传给 Desktop server。
 
 ## 返回消息的表现
 

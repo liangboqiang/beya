@@ -1,13 +1,13 @@
 import type { ServerWebSocket } from 'bun'
-import { handleAppWebSocket, type AppWebSocketData } from './appWs.js'
+import { handleRpcWebSocket, type RpcWebSocketData } from './rpcGateway.js'
 import { handleWebSocket, type WebSocketData } from './handler.js'
 
-export type GatewayWebSocketData = WebSocketData | AppWebSocketData
+export type GatewayWebSocketData = WebSocketData | RpcWebSocketData
 
 export const handleGatewayWebSocket = {
   open(ws: ServerWebSocket<GatewayWebSocketData>) {
-    if (ws.data.channel === 'app') {
-      handleAppWebSocket.open(ws as ServerWebSocket<AppWebSocketData>)
+    if (ws.data.channel === 'rpc') {
+      handleRpcWebSocket.open(ws as ServerWebSocket<RpcWebSocketData>)
       return
     }
 
@@ -15,8 +15,8 @@ export const handleGatewayWebSocket = {
   },
 
   message(ws: ServerWebSocket<GatewayWebSocketData>, rawMessage: string | Buffer) {
-    if (ws.data.channel === 'app') {
-      handleAppWebSocket.message(ws as ServerWebSocket<AppWebSocketData>, rawMessage)
+    if (ws.data.channel === 'rpc') {
+      handleRpcWebSocket.message(ws as ServerWebSocket<RpcWebSocketData>, rawMessage)
       return
     }
 
@@ -24,8 +24,8 @@ export const handleGatewayWebSocket = {
   },
 
   close(ws: ServerWebSocket<GatewayWebSocketData>, code: number, reason: string) {
-    if (ws.data.channel === 'app') {
-      handleAppWebSocket.close()
+    if (ws.data.channel === 'rpc') {
+      handleRpcWebSocket.close()
       return
     }
 
@@ -33,8 +33,8 @@ export const handleGatewayWebSocket = {
   },
 
   drain(ws: ServerWebSocket<GatewayWebSocketData>) {
-    if (ws.data.channel === 'app') {
-      handleAppWebSocket.drain()
+    if (ws.data.channel === 'rpc') {
+      handleRpcWebSocket.drain()
       return
     }
 

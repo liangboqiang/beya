@@ -79,6 +79,22 @@ async function setup() {
   service = new BeyaOpenAIOAuthService({ callbackPort })
 }
 
+async function rmWithRetry(target: string): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await fs.rm(target, { recursive: true, force: true })
+      return
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code !== 'EBUSY' && code !== 'ENOTEMPTY' && code !== 'EPERM') {
+        throw err
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)))
+    }
+  }
+  await fs.rm(target, { recursive: true, force: true })
+}
+
 async function teardown() {
   service.dispose()
   if (originalConfigDir === undefined) {
@@ -86,7 +102,7 @@ async function teardown() {
   } else {
     process.env.BEYA_CONFIG_DIR = originalConfigDir
   }
-  await fs.rm(tmpDir, { recursive: true, force: true })
+  await rmWithRetry(tmpDir)
 }
 
 describe('BeyaOpenAIOAuthService — file storage', () => {
@@ -178,10 +194,10 @@ describe('BeyaOpenAIOAuthService — session management', () => {
       'codex_cli_simplified_flow=true',
     )
     expect(session.authorizeUrl).toContain(
-      encodeURIComponent(`http://localhost:${callbackPort}/auth/callback`),
+      encodeURIComponent(`http://localhost:${callbackPort}/oauth/openai/callback`),
     )
     expect(session.authorizeUrl).not.toContain(
-      encodeURIComponent('http://localhost:54321/auth/callback'),
+      encodeURIComponent('http://localhost:54321/oauth/openai/callback'),
     )
     expect(session.authorizeUrl).not.toContain('originator=')
   })
@@ -227,14 +243,14 @@ describe('BeyaOpenAIOAuthService — session management', () => {
 
     try {
       const res = await getLocalCallback(
-        `/auth/callback?code=auth-code&state=${session.state}`,
+        `/oauth/openai/callback?code=auth-code&state=${session.state}`,
       )
 
       expect(res.status).toBe(200)
       expect(res.body).toContain('OpenAI Login Successful')
       expect(tokenRequestBody).toContain('code=auth-code')
       expect(tokenRequestBody).toContain(
-        `redirect_uri=${encodeURIComponent(`http://localhost:${callbackPort}/auth/callback`)}`,
+        `redirect_uri=${encodeURIComponent(`http://localhost:${callbackPort}/oauth/openai/callback`)}`,
       )
       expect(tokenRequestBody).toContain(
         `code_verifier=${session.codeVerifier}`,
@@ -260,7 +276,7 @@ describe('BeyaOpenAIOAuthService — session management', () => {
 
     try {
       const res = await getLocalCallback(
-        `/auth/callback?code=bad-code&state=${session.state}`,
+        `/oauth/openai/callback?code=bad-code&state=${session.state}`,
       )
 
       expect(res.status).toBe(200)
@@ -277,7 +293,7 @@ describe('BeyaOpenAIOAuthService — session management', () => {
     const session = await service.startSession({ serverPort: 54321 })
 
     try {
-      const res = await getLocalCallback(`/auth/callback?state=${session.state}`)
+      const res = await getLocalCallback(`/oauth/openai/callback?state=${session.state}`)
 
       expect(res.status).toBe(400)
       expect(res.body).toContain('Authorization code not found')

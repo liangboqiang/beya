@@ -48,8 +48,8 @@ type SessionSpawnerDeps = {
    * Arguments that must precede the CLI flags when spawning. Empty for
    * compiled binaries (where execPath is the claude binary itself); contains
    * the script path (process.argv[1]) for npm installs where execPath is the
-   * node runtime. Without this, node sees --sdk-url as a node option and
-   * exits with "bad option: --sdk-url" (see tju-apvic/beya#28334).
+   * node runtime. Without this, node sees --runtime-url as a node option and
+   * exits with "bad option: --runtime-url" (see tju-apvic/beya#28334).
    */
   scriptArgs: string[]
   env: NodeJS.ProcessEnv
@@ -200,7 +200,7 @@ function extractActivities(
 }
 
 /**
- * Extract plain text from a replayed SDKUserMessage NDJSON line. Returns the
+ * Extract plain text from a replayed RuntimeUserMessage NDJSON line. Returns the
  * trimmed text if this looks like a real human-authored message, otherwise
  * undefined so the caller keeps waiting for the first real message.
  */
@@ -287,8 +287,8 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
       const args = [
         ...deps.scriptArgs,
         '--print',
-        '--sdk-url',
-        opts.sdkUrl,
+        '--runtime-url',
+        opts.runtimeUrl,
         '--session-id',
         opts.sessionId,
         '--input-format',
@@ -323,7 +323,7 @@ export function createSessionSpawner(deps: SessionSpawnerDeps): SessionSpawner {
       }
 
       deps.onDebug(
-        `[bridge:session] Spawning sessionId=${opts.sessionId} sdkUrl=${opts.sdkUrl} accessToken=${opts.accessToken ? 'present' : 'MISSING'}`,
+        `[bridge:session] Spawning sessionId=${opts.sessionId} runtimeUrl=${opts.runtimeUrl} accessToken=${opts.accessToken ? 'present' : 'MISSING'}`,
       )
       deps.onDebug(`[bridge:session] Child args: ${args.join(' ')}`)
       if (debugFile) {

@@ -393,7 +393,7 @@ describe('ConversationService', () => {
     const service = new ConversationService() as any
     const env = (await service.buildChildEnv(
       '/tmp',
-      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+      'ws://127.0.0.1:3456/sessions/test-session/runtime?token=test-token',
     )) as Record<string, string>
 
     expect(env.BEYA_COMPUTER_USE_HOST_BUNDLE_ID).toBe(
@@ -470,14 +470,14 @@ describe('ConversationService', () => {
       'B:\\~BUN\\root\\preload.ts',
       'B:\\~BUN\\root\\src\\entrypoints\\cli.tsx',
       '--print',
-      '--sdk-url',
-      'ws://127.0.0.1:3456/sdk/session?token=test',
+      '--runtime-url',
+      'ws://127.0.0.1:3456/sessions/session/runtime?token=test',
     ])
 
     expect(args).toEqual([
       '--print',
-      '--sdk-url',
-      'ws://127.0.0.1:3456/sdk/session?token=test',
+      '--runtime-url',
+      'ws://127.0.0.1:3456/sessions/session/runtime?token=test',
     ])
     expect(extractEmbeddedCliArgs(['beya-server.exe', '--port', '3456'])).toBeNull()
   })
@@ -505,13 +505,13 @@ describe('ConversationService', () => {
     const service = new ConversationService() as any
     const args = service.buildSessionCliArgs(
       '123e4567-e89b-12d3-a456-426614174000',
-      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+      'ws://127.0.0.1:3456/sessions/test-session/runtime?token=test-token',
       false,
       { permissionMode: 'bypassPermissions' },
     ) as string[]
 
     expect(args).toContain('--include-partial-messages')
-    expect(args).toContain('--sdk-url')
+    expect(args).toContain('--runtime-url')
     expect(args).toContain('--replay-user-messages')
   })
 
@@ -519,7 +519,7 @@ describe('ConversationService', () => {
     const service = new ConversationService() as any
     const env = (await service.buildChildEnv(
       '/tmp',
-      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+      'ws://127.0.0.1:3456/sessions/test-session/runtime?token=test-token',
     )) as Record<string, string>
 
     expect(env.BEYA_DESKTOP_AWAIT_MCP).toBe('1')
@@ -530,7 +530,7 @@ describe('ConversationService', () => {
     const service = new ConversationService() as any
     const env = (await service.buildChildEnv(
       '/tmp',
-      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+      'ws://127.0.0.1:3456/sessions/test-session/runtime?token=test-token',
       {
         metadata: {
           user_id: 'u1',
@@ -551,7 +551,7 @@ describe('ConversationService', () => {
     const service = new ConversationService() as any
     const env = (await service.buildChildEnv(
       '/tmp',
-      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+      'ws://127.0.0.1:3456/sessions/test-session/runtime?token=test-token',
     )) as Record<string, string>
 
     expect(env.CLAUDE_ENABLE_STREAM_WATCHDOG).toBe('1')
@@ -561,7 +561,7 @@ describe('ConversationService', () => {
     const service = new ConversationService() as any
     const args = service.buildSessionCliArgs(
       '123e4567-e89b-12d3-a456-426614174000',
-      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+      'ws://127.0.0.1:3456/sessions/test-session/runtime?token=test-token',
       false,
       {
         model: 'model-b-opus',
@@ -579,7 +579,7 @@ describe('ConversationService', () => {
     const service = new ConversationService() as any
     const args = service.buildSessionCliArgs(
       '123e4567-e89b-12d3-a456-426614174000',
-      'ws://127.0.0.1:3456/sdk/test-session?token=test-token',
+      'ws://127.0.0.1:3456/sessions/test-session/runtime?token=test-token',
       false,
       undefined,
       {
@@ -642,7 +642,7 @@ describe('ConversationService', () => {
     await service.startSession(
       'local-cli-session',
       workDir,
-      'ws://127.0.0.1:3456/sdk/local-cli-session?token=test-token',
+      'ws://127.0.0.1:3456/sessions/local-cli-session/runtime?token=test-token',
       { executionMode: 'local_cli' },
     )
 
@@ -693,8 +693,8 @@ describe('ConversationService', () => {
         outputCallbacks: [],
         workDir: tmpDir,
         permissionMode: 'default',
-        sdkToken: `${sessionId}-token`,
-        sdkSocket: null,
+        runtimeToken: `${sessionId}-token`,
+        runtimeSocket: null,
         pendingOutbound: [],
         startupPending: false,
         startupExitCode: null,
@@ -703,7 +703,7 @@ describe('ConversationService', () => {
         outputDrain: Promise.resolve().then(() => {
           drained.push(sessionId)
         }),
-        sdkMessages: [],
+        runtimeMessages: [],
         initMessage: null,
         pendingPermissionRequests: new Map(),
       }

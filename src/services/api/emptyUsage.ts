@@ -1,5 +1,5 @@
 import type { BetaUsage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type { NonNullableUsage } from '../../entrypoints/sdk/sdkUtilityTypes.js'
+import type { NonNullableUsage } from '../../entrypoints/runtime/runtimeUtilityTypes.js'
 
 /**
  * Zero-initialized usage object. Extracted from logging.ts so that

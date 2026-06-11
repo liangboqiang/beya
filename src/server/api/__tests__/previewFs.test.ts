@@ -80,7 +80,7 @@ describe('handlePreviewFs', () => {
   it('serves an in-workspace file with content-type', async () => {
     const root = setupWorkspace()
     const resolve = async (id: string) => (id === 's1' ? root : null)
-    const res = await handlePreviewFs(new URL('http://127.0.0.1/preview-fs/s1/index.html'), resolve)
+    const res = await handlePreviewFs(new URL('http://127.0.0.1/files/preview/s1/index.html'), resolve)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
     expect(await res.text()).toBe('<h1>ok</h1>')
@@ -89,7 +89,7 @@ describe('handlePreviewFs', () => {
   it('serves nested assets', async () => {
     const root = setupWorkspace()
     const resolve = async () => root
-    const res = await handlePreviewFs(new URL('http://127.0.0.1/preview-fs/s1/assets/a.css'), resolve)
+    const res = await handlePreviewFs(new URL('http://127.0.0.1/files/preview/s1/assets/a.css'), resolve)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('text/css; charset=utf-8')
   })
@@ -97,31 +97,31 @@ describe('handlePreviewFs', () => {
   it('rewrites root-relative HTML assets to stay under the preview-fs file directory', async () => {
     const root = setupWorkspace()
     const resolve = async () => root
-    const res = await handlePreviewFs(new URL('http://127.0.0.1/preview-fs/s1/dist/index.html'), resolve)
+    const res = await handlePreviewFs(new URL('http://127.0.0.1/files/preview/s1/dist/index.html'), resolve)
     expect(res.status).toBe(200)
     const body = await res.text()
-    expect(body).toContain('<base href="/preview-fs/s1/dist/">')
-    expect(body).toContain('href="/preview-fs/s1/dist/assets/app.css"')
-    expect(body).toContain('src="/preview-fs/s1/dist/assets/app.js"')
+    expect(body).toContain('<base href="/files/preview/s1/dist/">')
+    expect(body).toContain('href="/files/preview/s1/dist/assets/app.css"')
+    expect(body).toContain('src="/files/preview/s1/dist/assets/app.js"')
   })
 
   it('blocks path traversal with 403', async () => {
     const root = setupWorkspace()
     const resolve = async () => root
-    const res = await handlePreviewFs(new URL('http://127.0.0.1/preview-fs/s1/../../etc/passwd'), resolve)
+    const res = await handlePreviewFs(new URL('http://127.0.0.1/files/preview/s1/../../etc/passwd'), resolve)
     expect(res.status).toBe(403)
   })
 
   it('404 when session has no workdir', async () => {
     const resolve = async () => null
-    const res = await handlePreviewFs(new URL('http://127.0.0.1/preview-fs/sX/index.html'), resolve)
+    const res = await handlePreviewFs(new URL('http://127.0.0.1/files/preview/sX/index.html'), resolve)
     expect(res.status).toBe(404)
   })
 
   it('serves .mp4 with video content-type and Accept-Ranges on a 200', async () => {
     const root = setupWorkspace()
     const resolve = async () => root
-    const res = await handlePreviewFs(new URL('http://127.0.0.1/preview-fs/s1/clip.mp4'), resolve)
+    const res = await handlePreviewFs(new URL('http://127.0.0.1/files/preview/s1/clip.mp4'), resolve)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('video/mp4')
     expect(res.headers.get('accept-ranges')).toBe('bytes')
@@ -133,7 +133,7 @@ describe('handlePreviewFs', () => {
     const root = setupWorkspace()
     const resolve = async () => root
     const res = await handlePreviewFs(
-      new URL('http://127.0.0.1/preview-fs/s1/clip.mp4'),
+      new URL('http://127.0.0.1/files/preview/s1/clip.mp4'),
       resolve,
       new Headers({ Range: 'bytes=0-99' }),
     )
@@ -150,7 +150,7 @@ describe('handlePreviewFs', () => {
     const root = setupWorkspace()
     const resolve = async () => root
     const res = await handlePreviewFs(
-      new URL('http://127.0.0.1/preview-fs/s1/clip.mp4'),
+      new URL('http://127.0.0.1/files/preview/s1/clip.mp4'),
       resolve,
       new Headers({ Range: 'bytes=100-' }),
     )
@@ -166,7 +166,7 @@ describe('handlePreviewFs', () => {
     const root = setupWorkspace()
     const resolve = async () => root
     const res = await handlePreviewFs(
-      new URL('http://127.0.0.1/preview-fs/s1/clip.mp4'),
+      new URL('http://127.0.0.1/files/preview/s1/clip.mp4'),
       resolve,
       new Headers({ Range: 'bytes=999999-' }),
     )
@@ -178,7 +178,7 @@ describe('handlePreviewFs', () => {
     const root = setupWorkspace()
     const resolve = async () => root
     const res = await handlePreviewFs(
-      new URL('http://127.0.0.1/preview-fs/s1/clip.mp4'),
+      new URL('http://127.0.0.1/files/preview/s1/clip.mp4'),
       resolve,
       new Headers(),
     )

@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { handleDoctorApi } from '../api/doctor.js'
-import { handleApiRequest } from '../router.js'
+import { handleResourceRequest } from '../router.js'
 import { DoctorService } from '../services/doctorService.js'
 
 let tmpDir: string
@@ -157,12 +157,12 @@ describe('doctor API', () => {
     expect(repairBody.result.mutated).toBe(false)
   })
 
-  test('routes doctor requests through the main API router', async () => {
+  test('routes doctor requests through the resource router', async () => {
     const url = new URL(
-      `/api/doctor/report?cwd=${encodeURIComponent(projectRoot)}`,
+      `/doctor/report?cwd=${encodeURIComponent(projectRoot)}`,
       'http://localhost:3456',
     )
-    const res = await handleApiRequest(new Request(url.toString(), { method: 'GET' }), url)
+    const res = await handleResourceRequest(new Request(url.toString(), { method: 'GET' }), url)
 
     expect(res.status).toBe(200)
     const body = await res.json() as {

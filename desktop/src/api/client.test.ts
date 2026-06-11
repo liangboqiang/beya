@@ -26,7 +26,7 @@ describe('app resource client', () => {
   it('sends resource requests through app WebSocket RPC without Authorization by default', async () => {
     rpcMock.mockResolvedValueOnce({ status: 200, headers: {}, body: { ok: true } })
 
-    await api.get('/api/status')
+    await api.get('/status')
 
     expect(rpcMock).toHaveBeenCalledWith(expect.objectContaining({
       method: 'GET',
@@ -50,7 +50,7 @@ describe('app resource client', () => {
     rpcMock.mockResolvedValueOnce({ status: 200, headers: {}, body: { ok: true } })
 
     setAuthToken('h5_x')
-    await api.get('/api/status')
+    await api.get('/status')
 
     expect(rpcMock).toHaveBeenCalledWith(expect.objectContaining({
       headers: expect.objectContaining({
@@ -64,14 +64,14 @@ describe('app resource client', () => {
       .mockResolvedValueOnce({ status: 500, headers: {}, body: { message: 'Nope' } })
       .mockResolvedValueOnce({ status: 200, headers: {}, body: { ok: true } })
 
-    await expect(api.post('/api/providers/test', { apiKey: 'sk-should-not-report' })).rejects.toThrow('Nope')
+    await expect(api.post('/providers/test', { apiKey: 'sk-should-not-report' })).rejects.toThrow('Nope')
 
     expect(rpcMock).toHaveBeenCalledTimes(2)
     const diagnosticCall = rpcMock.mock.calls[1]?.[0]
     expect(diagnosticCall.path).toBe('/diagnostics/events')
-    const body = JSON.parse(String(diagnosticCall.body))
+    const body = diagnosticCall.body as Record<string, unknown>
     expect(body.type).toBe('client_resource_request_failed')
-    expect(body.details.path).toBe('/api/providers/test')
+    expect((body.details as Record<string, unknown>).path).toBe('/providers/test')
     expect(JSON.stringify(body)).not.toContain('sk-should-not-report')
   })
 
@@ -82,16 +82,16 @@ describe('app resource client', () => {
 
     setAuthToken('h5_super_secret')
 
-    await expect(api.get('/api/status')).rejects.toThrow('Unauthorized')
+    await expect(api.get('/status')).rejects.toThrow('Unauthorized')
 
-    const body = JSON.parse(String(rpcMock.mock.calls[1]?.[0].body))
+    const body = rpcMock.mock.calls[1]?.[0].body as Record<string, unknown>
     expect(JSON.stringify(body)).not.toContain('h5_super_secret')
   })
 
   it('does not recursively report diagnostics endpoint failures', async () => {
     rpcMock.mockResolvedValueOnce({ status: 500, headers: {}, body: { message: 'diagnostics down' } })
 
-    await expect(api.get('/api/diagnostics/status')).rejects.toThrow('diagnostics down')
+    await expect(api.get('/diagnostics/status')).rejects.toThrow('diagnostics down')
 
     expect(rpcMock).toHaveBeenCalledTimes(1)
   })
@@ -107,7 +107,7 @@ describe('app resource client', () => {
     })
 
     expect(rpcMock).toHaveBeenCalledTimes(1)
-    const body = JSON.parse(String(rpcMock.mock.calls[0]?.[0].body))
+    const body = rpcMock.mock.calls[0]?.[0].body as Record<string, unknown>
     expect(body.type).toBe('client_window_error')
   })
 })

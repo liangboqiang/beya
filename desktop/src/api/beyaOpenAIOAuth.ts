@@ -1,4 +1,4 @@
-// desktop/src/api/beyaOpenAIOAuth.ts
+// desktop/src/beyaOpenAIOAuth.ts
 
 import { api, getBaseUrl } from './client'
 
@@ -23,16 +23,16 @@ function currentServerPort(): number {
 export const beyaOpenAIOAuthApi = {
   start() {
     return api.post<{ authorizeUrl: string; state: string }>(
-      '/api/beya-openai-oauth/start',
+      '/beya-openai-oauth/start',
       { serverPort: currentServerPort() },
     )
   },
 
   status() {
-    return api.get<BeyaOpenAIOAuthStatus>('/api/beya-openai-oauth')
+    return api.get<BeyaOpenAIOAuthStatus>('/beya-openai-oauth')
   },
 
   logout() {
-    return api.delete<{ ok: true }>('/api/beya-openai-oauth')
+    return api.delete<{ ok: true }>('/beya-openai-oauth')
   },
 }

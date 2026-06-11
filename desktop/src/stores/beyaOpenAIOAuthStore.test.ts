@@ -41,13 +41,13 @@ describe('beyaOpenAIOAuthStore', () => {
 
   it('login returns authorizeUrl without starting polling', async () => {
     startMock.mockResolvedValue({
-      authorizeUrl: 'http://localhost:3456/callback/openai?state=openai-state',
+      authorizeUrl: 'http://localhost:3456/oauth/openai/callback?state=openai-state',
       state: 'openai-state',
     })
 
     const result = await useBeyaOpenAIOAuthStore.getState().login()
 
-    expect(result.authorizeUrl).toContain('/callback/openai')
+    expect(result.authorizeUrl).toContain('/oauth/openai/callback')
     expect(useBeyaOpenAIOAuthStore.getState().isPolling).toBe(false)
   })
 

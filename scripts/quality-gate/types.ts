@@ -110,6 +110,7 @@ export type QualityGateOptions = {
   runId?: string
   onlyLaneSelectors?: string[]
   skipLaneSelectors?: string[]
+  fast?: boolean
 }
 
 export type QualityGateReport = {

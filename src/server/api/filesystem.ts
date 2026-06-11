@@ -142,19 +142,19 @@ export async function handleFilesystemRoute(
   req: Request = new Request(url.toString()),
   options: FilesystemRouteOptions = {},
 ): Promise<Response> {
-  if (pathname === '/api/filesystem/browse') {
+  if (pathname === '/filesystem/browse') {
     return handleBrowse(url)
   }
 
-  if (pathname === '/api/filesystem/file') {
+  if (pathname === '/filesystem/file') {
     return handleServeFile(url)
   }
 
-  if (pathname === '/api/filesystem/pick-directory') {
+  if (pathname === '/filesystem/pick-directory') {
     return handlePickDirectory(req, options.pickDirectory ?? pickSystemDirectory)
   }
 
-  if (pathname === '/api/filesystem/register-directory') {
+  if (pathname === '/filesystem/register-directory') {
     return handleRegisterDirectory(req)
   }
 

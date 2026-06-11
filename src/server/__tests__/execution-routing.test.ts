@@ -52,7 +52,7 @@ describe('execution routing', () => {
         {
           sessionId: 'session-1',
           workDir: tmpDir,
-          sdkUrl: 'ws://127.0.0.1:3456/sdk/session-1',
+          runtimeUrl: 'ws://127.0.0.1:3456/sessions/session-1/runtime',
           options: { executionMode: 'provider', model: 'model-a' },
         },
         {
@@ -93,7 +93,7 @@ function makePreparedStart(
     sessionId: 'session-1',
     requestedWorkDir: 'F:\\workspace',
     launchWorkDir: 'F:\\workspace',
-    sdkUrl: 'ws://127.0.0.1:3456/sdk/session-1',
+    runtimeUrl: 'ws://127.0.0.1:3456/sessions/session-1/runtime',
     options,
     launchInfo: null,
     launchRepository: undefined,

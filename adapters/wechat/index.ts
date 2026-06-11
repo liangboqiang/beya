@@ -354,9 +354,9 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
   const runtime = getRuntimeState(chatId)
 
   switch (msg.type) {
-    case 'connected':
+    case 'session.connected':
       break
-    case 'status':
+    case 'session.status.changed':
       runtime.state = msg.state
       runtime.verb = typeof msg.verb === 'string' ? msg.verb : undefined
       if (msg.state === 'thinking' || msg.state === 'tool_executing') {
@@ -365,7 +365,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
         typingController.stop(chatId)
       }
       break
-    case 'content_start':
+    case 'session.message.started':
       if (msg.blockType === 'text') {
         runtime.state = 'streaming'
       } else if (msg.blockType === 'tool_use') {
@@ -374,22 +374,22 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
         typingController.start(chatId)
       }
       break
-    case 'content_delta':
+    case 'session.message.delta':
       if (typeof msg.text === 'string' && msg.text) {
         getBlockBuffer(chatId).append(msg.text)
       }
       break
-    case 'tool_use_complete':
+    case 'session.tool.completed':
       runtime.state = 'tool_executing'
       runtime.verb = typeof msg.toolName === 'string' ? msg.toolName : runtime.verb
       typingController.start(chatId)
       break
-    case 'tool_result':
+    case 'session.tool.result':
       runtime.state = 'thinking'
       runtime.verb = undefined
       typingController.start(chatId)
       break
-    case 'permission_request': {
+    case 'session.permission.requested': {
       runtime.pendingPermissionCount += 1
       runtime.state = 'permission_pending'
       let pending = pendingPermissions.get(chatId)
@@ -405,7 +405,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       )
       break
     }
-    case 'message_complete': {
+    case 'session.completed': {
       runtime.state = 'idle'
       runtime.verb = undefined
       typingController.stop(chatId)
@@ -413,7 +413,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       blockBuffers.delete(chatId)
       break
     }
-    case 'error':
+    case 'session.failed':
       runtime.state = 'idle'
       runtime.verb = undefined
       typingController.stop(chatId)
@@ -421,7 +421,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       blockBuffers.delete(chatId)
       await sendText(chatId, `错误: ${msg.message}`)
       break
-    case 'system_notification':
+    case 'session.system.notification':
       if (msg.subtype === 'init' && msg.data && typeof msg.data === 'object') {
         const model = (msg.data as Record<string, unknown>).model
         if (typeof model === 'string' && model.trim()) runtime.model = model

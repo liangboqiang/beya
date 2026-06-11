@@ -12,9 +12,9 @@ import {
   createToolStub,
 } from '../remote/remotePermissionBridge.js'
 import {
-  convertSDKMessage,
+  convertRuntimeMessage,
   isSessionEndMessage,
-} from '../remote/sdkMessageAdapter.js'
+} from '../remote/runtimeMessageAdapter.js'
 import { useSetAppState } from '../state/AppState.js'
 import type { AppState } from '../state/AppStateStore.js'
 import type { Tool } from '../Tool.js'
@@ -243,7 +243,7 @@ export function useRemoteSession({
 
         // Clear in-progress tool_use IDs when their tool_result arrives.
         // Must read the RAW sdkMessage: in non-viewerOnly mode,
-        // convertSDKMessage returns {type:'ignored'} for user messages, so the
+        // convertRuntimeMessage returns {type:'ignored'} for user messages, so the
         // delete would never fire post-conversion. Mirrors the add site below
         // and inProcessRunner.ts; without this the set grows unbounded for the
         // session lifetime (BQ: CCR cohort shows 5.2x higher RSS slope).
@@ -270,7 +270,7 @@ export function useRemoteSession({
         // remote agent runs BriefTool (SendUserMessage) — its tool_use block
         // renders empty (userFacingName() === ''), actual content is in the
         // tool_result. So we must convert tool_results to render them.
-        const converted = convertSDKMessage(
+        const converted = convertRuntimeMessage(
           sdkMessage,
           config.viewerOnly
             ? { convertToolResults: true, convertUserTextMessages: true }

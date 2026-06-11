@@ -41,7 +41,7 @@ export function contentTypeForPath(filePath: string): string {
 
 export type ResolveWorkDir = (sessionId: string) => Promise<string | null>
 
-const PREFIX = '/preview-fs/'
+const PREFIX = '/files/preview/'
 
 /**
  * Upper bound on what we'll serve. The old 50 MB cap existed because the file
@@ -117,11 +117,11 @@ export function parseRange(
 /**
  * Serve a single file from a session's sandboxed workspace directory.
  *
- * URL shape: `/preview-fs/<sessionId>/<relPath>` where `<relPath>` may itself
+ * URL shape: `/files/preview/<sessionId>/<relPath>` where `<relPath>` may itself
  * contain `/` separators. The WHATWG URL parser collapses `..` segments before
  * this handler runs, so a traversal attempt such as
- * `/preview-fs/s1/../../etc/passwd` arrives with its pathname normalized to
- * `/etc/passwd` — i.e. the `/preview-fs/` prefix is gone. We treat any request
+ * `/files/preview/s1/../../etc/passwd` arrives with its pathname normalized to
+ * `/etc/passwd` — i.e. the `/files/preview/` prefix is gone. We treat any request
  * that lost the prefix as a sandbox escape and return 403. Requests that keep
  * the prefix are additionally re-validated against the resolved work-dir root.
  */

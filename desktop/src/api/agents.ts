@@ -31,6 +31,6 @@ export type AgentListResponse = {
 export const agentsApi = {
   list: (cwd?: string) => {
     const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''
-    return api.get<AgentListResponse>(`/api/agents${query}`)
+    return api.get<AgentListResponse>(`/agents${query}`)
   },
 }

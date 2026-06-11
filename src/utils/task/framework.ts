@@ -14,7 +14,7 @@ import {
 } from '../../Task.js'
 import type { TaskState } from '../../tasks/types.js'
 import { enqueuePendingNotification } from '../messageQueueManager.js'
-import { enqueueSdkEvent } from '../sdkEventQueue.js'
+import { enqueueRuntimeEvent } from '../runtimeEventQueue.js'
 import { getTaskOutputDelta, getTaskOutputPath } from './diskOutput.js'
 
 type AppState = Record<string, unknown> & {
@@ -104,7 +104,7 @@ export function registerTask(task: TaskState, setAppState: SetAppState): void {
   // Replacement (resume) — not a new start. Skip to avoid double-emit.
   if (isReplacement) return
 
-  enqueueSdkEvent({
+  enqueueRuntimeEvent({
     type: 'system',
     subtype: 'task_started',
     task_id: task.id,

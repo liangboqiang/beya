@@ -16,7 +16,7 @@ import {
 export type ExecutionSessionStartRequest = {
   sessionId: string
   workDir: string
-  sdkUrl: string
+  runtimeUrl: string
   options?: SessionStartOptions
 }
 
@@ -27,7 +27,7 @@ export class ExecutionSessionFacade {
     request: ExecutionSessionStartRequest,
     host: ExecutionBackendHost,
   ): Promise<void> {
-    const { sessionId, workDir, sdkUrl, options } = request
+    const { sessionId, workDir, runtimeUrl, options } = request
     if (host.isSessionDeleted(sessionId)) {
       throw new ConversationStartupError(
         `Session was deleted before startup completed: ${sessionId}`,
@@ -89,7 +89,7 @@ export class ExecutionSessionFacade {
         sessionId,
         requestedWorkDir: workDir,
         launchWorkDir,
-        sdkUrl,
+        runtimeUrl,
         options,
         launchInfo,
         launchRepository,

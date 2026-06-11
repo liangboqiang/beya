@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { ConversationService, ConversationStartupError, conversationService } from '../services/conversationService.js'
 import { SessionService, sessionService } from '../services/sessionService.js'
 import { ProviderService } from '../services/providerService.js'
+import { buildRpcResourceCall } from '../../generated/contracts/index.js'
 
 async function rmWithRetry(targetPath: string): Promise<void> {
   const attempts = process.platform === 'win32' ? 5 : 1
@@ -54,7 +55,7 @@ describe('ConversationService', () => {
     svc.markSessionDeleted(sid)
 
     try {
-      await svc.startSession(sid, process.cwd(), 'ws://127.0.0.1:1/sdk/test')
+      await svc.startSession(sid, process.cwd(), 'ws://127.0.0.1:1/sessions/test/runtime')
       throw new Error('expected startSession to reject')
     } catch (error) {
       expect(error).toBeInstanceOf(ConversationStartupError)
@@ -81,15 +82,15 @@ describe('ConversationService', () => {
       proc: null,
       outputCallbacks: [],
       workDir: process.cwd(),
-      sdkToken: 'token',
-      sdkSocket: {
+      runtimeToken: 'token',
+      runtimeSocket: {
         send(data: string) {
           sent.push(JSON.parse(data))
         },
       },
       pendingOutbound: [],
       stderrLines: [],
-      sdkMessages: [],
+      runtimeMessages: [],
       pendingPermissionRequests: new Map(),
     })
 
@@ -108,15 +109,15 @@ describe('ConversationService', () => {
       outputCallbacks: [],
       workDir: process.cwd(),
       permissionMode: 'default',
-      sdkToken: 'token',
-      sdkSocket: null,
+      runtimeToken: 'token',
+      runtimeSocket: null,
       pendingOutbound: [],
       startupPending: false,
       startupExitCode: null,
       stdoutLines: [],
       stderrLines: [],
       outputDrain: Promise.resolve(),
-      sdkMessages: [],
+      runtimeMessages: [],
       initMessage: null,
       pendingPermissionRequests: new Map(),
     }
@@ -128,7 +129,7 @@ describe('ConversationService', () => {
     expect(session.pendingOutbound).toHaveLength(0)
     expect(sent).toHaveLength(0)
 
-    session.sdkSocket = {
+    session.runtimeSocket = {
       send(data: string) {
         sent.push(JSON.parse(data))
       },
@@ -161,15 +162,15 @@ describe('ConversationService', () => {
       proc: null,
       outputCallbacks: [],
       workDir: process.cwd(),
-      sdkToken: 'token',
-      sdkSocket: {
+      runtimeToken: 'token',
+      runtimeSocket: {
         send(data: string) {
           sent.push(JSON.parse(data))
         },
       },
       pendingOutbound: [],
       stderrLines: [],
-      sdkMessages: [],
+      runtimeMessages: [],
       pendingPermissionRequests: new Map([
         ['req-1', {
           toolName: 'Bash',
@@ -223,15 +224,15 @@ describe('ConversationService', () => {
       proc: null,
       outputCallbacks: [],
       workDir: process.cwd(),
-      sdkToken: 'token',
-      sdkSocket: {
+      runtimeToken: 'token',
+      runtimeSocket: {
         send(data: string) {
           sent.push(JSON.parse(data))
         },
       },
       pendingOutbound: [],
       stderrLines: [],
-      sdkMessages: [],
+      runtimeMessages: [],
       pendingPermissionRequests: new Map(),
     })
 
@@ -276,7 +277,7 @@ describe('ConversationService', () => {
     const svc = new ConversationService() as any
     const sent: string[] = []
     svc.sessions.set('session-thinking-control', {
-      sdkSocket: { send: (data: string) => sent.push(data) },
+      runtimeSocket: { send: (data: string) => sent.push(data) },
       pendingOutbound: [],
     })
 
@@ -326,11 +327,11 @@ describe('ConversationService', () => {
       outputCallbacks: [],
       workDir: process.cwd(),
       permissionMode: 'bypassPermissions',
-      sdkToken: 'token',
-      sdkSocket: null,
+      runtimeToken: 'token',
+      runtimeSocket: null,
       pendingOutbound: [],
       stderrLines: [],
-      sdkMessages: [],
+      runtimeMessages: [],
       pendingPermissionRequests: new Map(),
     })
 
@@ -349,16 +350,16 @@ describe('ConversationService', () => {
       outputCallbacks: [],
       workDir: process.cwd(),
       permissionMode: 'default',
-      sdkToken: 'token',
-      sdkSocket: null,
+      runtimeToken: 'token',
+      runtimeSocket: null,
       pendingOutbound: [],
       stderrLines: [],
-      sdkMessages: [],
+      runtimeMessages: [],
       initMessage: null,
       pendingPermissionRequests: new Map(),
     })
 
-    ;(svc as any).handleSdkPayload('session-init-retention', JSON.stringify({
+    ;(svc as any).handleRuntimePayload('session-init-retention', JSON.stringify({
       type: 'system',
       subtype: 'init',
       model: 'mock-powerful',
@@ -367,13 +368,13 @@ describe('ConversationService', () => {
     }))
 
     for (let i = 0; i < 45; i++) {
-      ;(svc as any).handleSdkPayload('session-init-retention', JSON.stringify({
+      ;(svc as any).handleRuntimePayload('session-init-retention', JSON.stringify({
         type: 'stream_event',
         event: { type: 'message_delta', index: i },
       }))
     }
 
-    expect(svc.getRecentSdkMessages('session-init-retention').some((message) => message.subtype === 'init')).toBe(false)
+    expect(svc.getRecentRuntimeMessages('session-init-retention').some((message) => message.subtype === 'init')).toBe(false)
     expect(svc.getSessionInitMessage('session-init-retention')).toMatchObject({
       model: 'mock-powerful',
       claude_code_version: 'test-version',
@@ -389,16 +390,16 @@ describe('ConversationService', () => {
       outputCallbacks: [],
       workDir: process.cwd(),
       permissionMode: 'default',
-      sdkToken: 'token',
-      sdkSocket: null,
+      runtimeToken: 'token',
+      runtimeSocket: null,
       pendingOutbound: [],
       stderrLines: [],
-      sdkMessages: [],
+      runtimeMessages: [],
       initMessage: null,
       pendingPermissionRequests: new Map(),
     })
 
-    ;(svc as any).handleSdkPayload('session-pending-permission', JSON.stringify({
+    ;(svc as any).handleRuntimePayload('session-pending-permission', JSON.stringify({
       type: 'control_request',
       request_id: 'request-ask-1',
       request: {
@@ -648,6 +649,107 @@ describe('WebSocket Chat Integration', () => {
   let wsUrl: string
   let tmpDir: string
 
+  async function fetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : input.url
+
+    if (baseUrl && wsUrl && url.startsWith(`${baseUrl}/api/`)) {
+      return fetchResourceOverRpc(url, init)
+    }
+
+    return globalThis.fetch(input, init)
+  }
+
+  async function fetchResourceOverRpc(urlString: string, init: RequestInit = {}): Promise<Response> {
+    const url = new URL(urlString)
+    const resourcePath = `${url.pathname.slice('/api'.length)}${url.search}`
+    const requestId = `test-rpc-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(`${wsUrl}/rpc`)
+      let settled = false
+      const timer = setTimeout(() => {
+        settled = true
+        ws.close()
+        reject(new Error(`Timed out waiting for RPC response for ${resourcePath}`))
+      }, 10_000)
+
+      const finish = (callback: () => void) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close()
+        }
+        callback()
+      }
+
+      ws.onopen = () => {
+        const call = buildRpcResourceCall({
+          httpMethod: init.method ?? 'GET',
+          path: resourcePath,
+          headers: Object.fromEntries(new Headers(init.headers).entries()),
+          body: init.body as never,
+        })
+        ws.send(JSON.stringify({
+          type: 'rpc.request',
+          id: requestId,
+          method: call.method,
+          params: call.params,
+        }))
+      }
+
+      ws.onmessage = (event) => {
+        const message = JSON.parse(String(event.data)) as {
+          type: string
+          id?: string
+          status?: number
+          headers?: Record<string, string>
+          result?: unknown
+          code?: string
+          message?: string
+        }
+        if (message.type === 'rpc.connected' || message.type === 'rpc.pong') return
+        if (message.id !== requestId) return
+        if (message.type === 'rpc.error') {
+          finish(() => resolve(Response.json(
+            { error: message.code, message: message.message },
+            { status: 400 },
+          )))
+          return
+        }
+        if (message.type !== 'rpc.response') return
+
+        finish(() => resolve(new Response(
+          message.result === undefined || message.result === null
+            ? null
+            : typeof message.result === 'string'
+              ? message.result
+              : JSON.stringify(message.result),
+          {
+            status: message.status ?? 200,
+            headers: message.headers,
+          },
+        )))
+      }
+
+      ws.onerror = () => {
+        finish(() => reject(new Error(`RPC WebSocket failed for ${resourcePath}`)))
+      }
+
+      ws.onclose = () => {
+        clearTimeout(timer)
+        if (!settled) {
+          settled = true
+          reject(new Error(`RPC WebSocket closed before response for ${resourcePath}`))
+        }
+      }
+    })
+  }
+
   function git(cwd: string, ...args: string[]): string {
     return execFileSync('git', args, {
       cwd,
@@ -823,7 +925,7 @@ describe('WebSocket Chat Integration', () => {
 
   async function runTurn(sessionId: string, content: string, allowError = false): Promise<any[]> {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -834,10 +936,10 @@ describe('WebSocket Chat Integration', () => {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
-          ws.send(JSON.stringify({ type: 'user_message', content }))
+        if (msg.type === 'session.connected') {
+          ws.send(JSON.stringify({ type: 'session.message.send', content }))
         }
-        if (msg.type === 'error') {
+        if (msg.type === 'session.failed') {
           clearTimeout(timeout)
           ws.close()
           if (allowError) {
@@ -846,7 +948,7 @@ describe('WebSocket Chat Integration', () => {
             reject(new Error(msg.message))
           }
         }
-        if (msg.type === 'message_complete') {
+        if (msg.type === 'session.completed') {
           clearTimeout(timeout)
           ws.close()
           resolve()
@@ -865,7 +967,7 @@ describe('WebSocket Chat Integration', () => {
 
   async function runTurnUntilComplete(sessionId: string, content: string): Promise<any[]> {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -876,10 +978,10 @@ describe('WebSocket Chat Integration', () => {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
-          ws.send(JSON.stringify({ type: 'user_message', content }))
+        if (msg.type === 'session.connected') {
+          ws.send(JSON.stringify({ type: 'session.message.send', content }))
         }
-        if (msg.type === 'message_complete') {
+        if (msg.type === 'session.completed') {
           clearTimeout(timeout)
           ws.close()
           resolve()
@@ -961,7 +1063,7 @@ describe('WebSocket Chat Integration', () => {
 
   it('should connect and receive connected event', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/chat-test-1`)
+    const ws = new WebSocket(`${wsUrl}/sessions/chat-test-1/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (e) => {
@@ -981,22 +1083,22 @@ describe('WebSocket Chat Integration', () => {
       }, 3000)
     })
 
-    expect(messages[0].type).toBe('connected')
+    expect(messages[0].type).toBe('session.connected')
     expect(messages[0].sessionId).toBe('chat-test-1')
   })
 
   it('should handle stop_generation and return idle status', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/chat-test-2`)
+    const ws = new WebSocket(`${wsUrl}/sessions/chat-test-2/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
-          ws.send(JSON.stringify({ type: 'stop_generation' }))
+        if (msg.type === 'session.connected') {
+          ws.send(JSON.stringify({ type: 'session.generation.stop' }))
         }
-        if (msg.type === 'status' && msg.state === 'idle') {
+        if (msg.type === 'session.status.changed' && msg.state === 'idle') {
           ws.close()
           resolve()
         }
@@ -1011,26 +1113,26 @@ describe('WebSocket Chat Integration', () => {
       }, 3000)
     })
 
-    expect(messages.some((m) => m.type === 'status' && m.state === 'idle')).toBe(true)
+    expect(messages.some((m) => m.type === 'session.status.changed' && m.state === 'idle')).toBe(true)
   })
 
   it('should send user_message and receive streamed SDK response', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/chat-test-3`)
+    const ws = new WebSocket(`${wsUrl}/sessions/chat-test-3/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
+        if (msg.type === 'session.connected') {
           ws.send(
-            JSON.stringify({ type: 'user_message', content: 'Hello from test' })
+            JSON.stringify({ type: 'session.message.send', content: 'Hello from test' })
           )
         }
         // Wait until we receive completion after the streamed response
         if (
-          msg.type === 'message_complete' &&
-          messages.some((entry) => entry.type === 'thinking')
+          msg.type === 'session.completed' &&
+          messages.some((entry) => entry.type === 'session.thinking.delta')
         ) {
           ws.close()
           resolve()
@@ -1047,16 +1149,16 @@ describe('WebSocket Chat Integration', () => {
     })
 
     const types = messages.map((m) => m.type)
-    expect(types).toContain('connected')
-    expect(types).toContain('status')
+    expect(types).toContain('session.connected')
+    expect(types).toContain('session.status.changed')
     // Mock SDK flow produces text streaming, thinking, and completion events.
-    expect(types).toContain('content_start')
-    expect(types).toContain('content_delta')
-    expect(types).toContain('thinking')
-    expect(types).toContain('message_complete')
+    expect(types).toContain('session.message.started')
+    expect(types).toContain('session.message.delta')
+    expect(types).toContain('session.thinking.delta')
+    expect(types).toContain('session.completed')
 
     // Verify thinking was first status
-    const statusMsgs = messages.filter((m) => m.type === 'status')
+    const statusMsgs = messages.filter((m) => m.type === 'session.status.changed')
     expect(statusMsgs[0].state).toBe('thinking')
   })
 
@@ -1069,7 +1171,7 @@ describe('WebSocket Chat Integration', () => {
 
     const messages = await runTurn(sessionId, 'Hello from repository launch test')
     const statusVerbs = messages
-      .filter((msg) => msg.type === 'status')
+      .filter((msg) => msg.type === 'session.status.changed')
       .map((msg) => msg.verb)
 
     expect(statusVerbs).toContain('Creating worktree')
@@ -1094,7 +1196,7 @@ describe('WebSocket Chat Integration', () => {
 
     const messages = await runTurn(sessionId, 'Continue in the existing worktree')
     const statusVerbs = messages
-      .filter((msg) => msg.type === 'status')
+      .filter((msg) => msg.type === 'session.status.changed')
       .map((msg) => msg.verb)
 
     expect(statusVerbs).toContain('Thinking')
@@ -1110,7 +1212,7 @@ describe('WebSocket Chat Integration', () => {
 
     const messages = await runTurn(sessionId, 'Hello from current worktree launch test')
     const statusVerbs = messages
-      .filter((msg) => msg.type === 'status')
+      .filter((msg) => msg.type === 'session.status.changed')
       .map((msg) => msg.verb)
 
     expect(statusVerbs).toContain('Thinking')
@@ -1120,7 +1222,7 @@ describe('WebSocket Chat Integration', () => {
   it('emits the derived session title before the first response completes', async () => {
     const sessionId = `title-fast-${crypto.randomUUID()}`
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -1131,14 +1233,14 @@ describe('WebSocket Chat Integration', () => {
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
+        if (msg.type === 'session.connected') {
           ws.send(JSON.stringify({
-            type: 'user_message',
+            type: 'session.message.send',
             content: '寮€濮嬩紭鍖朥I',
           }))
           return
         }
-        if (msg.type === 'message_complete') {
+        if (msg.type === 'session.completed') {
           clearTimeout(timeout)
           ws.close()
           resolve()
@@ -1150,8 +1252,8 @@ describe('WebSocket Chat Integration', () => {
       }
     })
 
-    const titleIndex = messages.findIndex((msg) => msg.type === 'session_title_updated')
-    const completionIndex = messages.findIndex((msg) => msg.type === 'message_complete')
+    const titleIndex = messages.findIndex((msg) => msg.type === 'session.title.updated')
+    const completionIndex = messages.findIndex((msg) => msg.type === 'session.completed')
     expect(titleIndex).toBeGreaterThan(-1)
     expect(completionIndex).toBeGreaterThan(-1)
     expect(messages[titleIndex].title).toBe('寮€濮嬩紭鍖朥I')
@@ -1161,7 +1263,7 @@ describe('WebSocket Chat Integration', () => {
   it('uses the /goal objective for the derived session title', async () => {
     const sessionId = `title-goal-${crypto.randomUUID()}`
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
 
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -1172,14 +1274,14 @@ describe('WebSocket Chat Integration', () => {
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
+        if (msg.type === 'session.connected') {
           ws.send(JSON.stringify({
-            type: 'user_message',
+            type: 'session.message.send',
             content: '/goal ship the desktop goal card',
           }))
           return
         }
-        if (msg.type === 'session_title_updated') {
+        if (msg.type === 'session.title.updated') {
           clearTimeout(timeout)
           ws.close()
           resolve()
@@ -1191,7 +1293,7 @@ describe('WebSocket Chat Integration', () => {
       }
     })
 
-    const title = messages.find((msg) => msg.type === 'session_title_updated')?.title
+    const title = messages.find((msg) => msg.type === 'session.title.updated')?.title
     expect(title).toBe('ship the desktop goal card')
   })
 
@@ -1203,13 +1305,13 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       if (sid === sessionId) {
         startOptions.push({ thinking: options?.thinking, model: options?.model })
       }
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     try {
@@ -1221,7 +1323,7 @@ describe('WebSocket Chat Integration', () => {
 
       const messages = await runTurn(sessionId, 'Hello without thinking')
 
-      expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
+      expect(messages.some((m) => m.type === 'session.completed')).toBe(true)
       expect(startOptions).toEqual([{ thinking: 'disabled', model: 'mock-powerful' }])
     } finally {
       conversationService.startSession = originalStartSession as typeof conversationService.startSession
@@ -1258,7 +1360,7 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       if (sessionIds.includes(sid)) {
@@ -1268,7 +1370,7 @@ describe('WebSocket Chat Integration', () => {
           providerId: options?.providerId,
         })
       }
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     try {
@@ -1280,7 +1382,7 @@ describe('WebSocket Chat Integration', () => {
         'utf-8',
       )
       const disabledMessages = await runTurn(disabledSessionId, 'DeepSeek with global thinking off')
-      expect(disabledMessages.some((m) => m.type === 'message_complete')).toBe(true)
+      expect(disabledMessages.some((m) => m.type === 'session.completed')).toBe(true)
 
       const enabledSessionId = `ds-think-on-${crypto.randomUUID()}`
       sessionIds.push(enabledSessionId)
@@ -1290,7 +1392,7 @@ describe('WebSocket Chat Integration', () => {
         'utf-8',
       )
       const enabledMessages = await runTurn(enabledSessionId, 'DeepSeek with global thinking on')
-      expect(enabledMessages.some((m) => m.type === 'message_complete')).toBe(true)
+      expect(enabledMessages.some((m) => m.type === 'session.completed')).toBe(true)
 
       expect(startOptions).toEqual([
         {
@@ -1319,11 +1421,11 @@ describe('WebSocket Chat Integration', () => {
       runTurn('chat-test-lazy-init', 'Hello after lazy init'),
     )
 
-    expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
-    expect(messages.some((m) => m.type === 'error')).toBe(false)
+    expect(messages.some((m) => m.type === 'session.completed')).toBe(true)
+    expect(messages.some((m) => m.type === 'session.failed')).toBe(false)
     expect(
       messages.some(
-        (m) => m.type === 'system_notification' && m.subtype === 'init',
+        (m) => m.type === 'session.system.notification' && m.subtype === 'init',
       ),
     ).toBe(true)
   })
@@ -1331,31 +1433,31 @@ describe('WebSocket Chat Integration', () => {
   it('should display CLI /cost local command output', async () => {
     const messages = await runTurn(`chat-cost-${crypto.randomUUID()}`, '/cost')
 
-    expect(messages.some((m) => m.type === 'error')).toBe(false)
+    expect(messages.some((m) => m.type === 'session.failed')).toBe(false)
     expect(
       messages.some(
         (m) =>
-          m.type === 'content_delta' &&
+          m.type === 'session.message.delta' &&
           typeof m.text === 'string' &&
           m.text.includes('Total cost: $0.0000'),
       ),
     ).toBe(true)
-    expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
+    expect(messages.some((m) => m.type === 'session.completed')).toBe(true)
   })
 
   it('should display CLI /context local command output', async () => {
     const messages = await runTurn(`chat-context-${crypto.randomUUID()}`, '/context')
 
-    expect(messages.some((m) => m.type === 'error')).toBe(false)
+    expect(messages.some((m) => m.type === 'session.failed')).toBe(false)
     expect(
       messages.some(
         (m) =>
-          m.type === 'content_delta' &&
+          m.type === 'session.message.delta' &&
           typeof m.text === 'string' &&
           m.text.includes('## Context Usage'),
       ),
     ).toBe(true)
-    expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
+    expect(messages.some((m) => m.type === 'session.completed')).toBe(true)
   })
 
   it('should expose structured session inspection data from the active CLI', async () => {
@@ -1409,7 +1511,7 @@ describe('WebSocket Chat Integration', () => {
       })
       expect(createRes.status).toBe(201)
       const { sessionId } = await createRes.json() as { sessionId: string }
-      const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+      const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
 
       try {
         await new Promise<void>((resolve, reject) => {
@@ -1420,9 +1522,9 @@ describe('WebSocket Chat Integration', () => {
 
           ws.onmessage = (event) => {
             const msg = JSON.parse(event.data as string)
-            if (msg.type === 'connected') {
+            if (msg.type === 'session.connected') {
               clearTimeout(timeout)
-              ws.send(JSON.stringify({ type: 'prewarm_session' }))
+              ws.send(JSON.stringify({ type: 'session.prewarm' }))
               resolve()
             }
           }
@@ -1466,14 +1568,14 @@ describe('WebSocket Chat Integration', () => {
     expect(
       messages.some(
         (m) =>
-          m.type === 'error' &&
+          m.type === 'session.failed' &&
           m.code === 'CLI_ERROR' &&
           typeof m.message === 'string' &&
           m.message.includes('Agent runtime exited unexpectedly'),
       ),
     ).toBe(true)
-    expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
-    expect(messages.at(-1)?.type).toBe('message_complete')
+    expect(messages.some((m) => m.type === 'session.completed')).toBe(true)
+    expect(messages.at(-1)?.type).toBe('session.completed')
   }, 15_000)
 
   it('should not duplicate SDK API errors with the final error result', async () => {
@@ -1482,14 +1584,14 @@ describe('WebSocket Chat Integration', () => {
       'trigger api error',
     )
 
-    const errors = messages.filter((m) => m.type === 'error')
+    const errors = messages.filter((m) => m.type === 'session.failed')
     expect(errors).toHaveLength(1)
     expect(errors[0]).toMatchObject({
       code: 'invalid_request',
       message: 'Prompt is too long',
     })
-    expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
-    expect(messages.at(-1)?.type).toBe('message_complete')
+    expect(messages.some((m) => m.type === 'session.completed')).toBe(true)
+    expect(messages.at(-1)?.type).toBe('session.completed')
   }, 15_000)
 
   it('should not add a CLI exit error after a reported SDK API error', async () => {
@@ -1498,29 +1600,29 @@ describe('WebSocket Chat Integration', () => {
       'trigger api error then exit',
     )
 
-    const errors = messages.filter((m) => m.type === 'error')
+    const errors = messages.filter((m) => m.type === 'session.failed')
     expect(errors).toHaveLength(1)
     expect(errors[0]).toMatchObject({
       code: 'invalid_request',
       message: 'Prompt is too long',
     })
-    expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
-    expect(messages.at(-1)?.type).toBe('message_complete')
+    expect(messages.some((m) => m.type === 'session.completed')).toBe(true)
+    expect(messages.at(-1)?.type).toBe('session.completed')
   }, 15_000)
 
   it('should report permission_response without pending request', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/chat-test-4`)
+    const ws = new WebSocket(`${wsUrl}/sessions/chat-test-4/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
+        if (msg.type === 'session.connected') {
           // Send a permission response (no active session, should not crash)
           ws.send(
             JSON.stringify({
-              type: 'permission_response',
+              type: 'session.permission.respond',
               requestId: 'test-req-1',
               allowed: true,
             })
@@ -1541,9 +1643,9 @@ describe('WebSocket Chat Integration', () => {
       }, 3000)
     })
 
-    expect(messages[0].type).toBe('connected')
+    expect(messages[0].type).toBe('session.connected')
     expect(messages).toContainEqual({
-      type: 'error',
+      type: 'session.failed',
       code: 'PERMISSION_RESPONSE_NOT_PENDING',
       message: 'No pending permission request test-req-1 is active for session chat-test-4',
       retryable: false,
@@ -1552,16 +1654,16 @@ describe('WebSocket Chat Integration', () => {
 
   it('should handle ping/pong', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/chat-test-5`)
+    const ws = new WebSocket(`${wsUrl}/sessions/chat-test-5/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (e) => {
         const msg = JSON.parse(e.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
-          ws.send(JSON.stringify({ type: 'ping' }))
+        if (msg.type === 'session.connected') {
+          ws.send(JSON.stringify({ type: 'session.ping' }))
         }
-        if (msg.type === 'pong') {
+        if (msg.type === 'session.pong') {
           ws.close()
           resolve()
         }
@@ -1576,7 +1678,7 @@ describe('WebSocket Chat Integration', () => {
       }, 3000)
     })
 
-    expect(messages.some((m) => m.type === 'pong')).toBe(true)
+    expect(messages.some((m) => m.type === 'session.pong')).toBe(true)
   })
 
   it('should start a placeholder REST session and continue it on a later reconnect', async () => {
@@ -1589,14 +1691,14 @@ describe('WebSocket Chat Integration', () => {
     const { sessionId } = await createRes.json() as { sessionId: string }
 
     const firstTurn = await runTurn(sessionId, 'reply with first')
-    expect(firstTurn.some((m) => m.type === 'message_complete')).toBe(true)
-    expect(firstTurn.some((m) => m.type === 'error')).toBe(false)
+    expect(firstTurn.some((m) => m.type === 'session.completed')).toBe(true)
+    expect(firstTurn.some((m) => m.type === 'session.failed')).toBe(false)
 
     await new Promise((resolve) => setTimeout(resolve, 1000))
 
     const secondTurn = await runTurn(sessionId, 'reply with second')
-    expect(secondTurn.some((m) => m.type === 'message_complete')).toBe(true)
-    expect(secondTurn.some((m) => m.type === 'error')).toBe(false)
+    expect(secondTurn.some((m) => m.type === 'session.completed')).toBe(true)
+    expect(secondTurn.some((m) => m.type === 'session.failed')).toBe(false)
   })
 
   it('should keep a long desktop session alive in a /tmp project across engineering turns', async () => {
@@ -1632,8 +1734,8 @@ describe('WebSocket Chat Integration', () => {
 
       for (const prompt of prompts) {
         const messages = await runTurn(sessionId, prompt)
-        expect(messages.some((m) => m.type === 'error')).toBe(false)
-        expect(messages.some((m) => m.type === 'message_complete')).toBe(true)
+        expect(messages.some((m) => m.type === 'session.failed')).toBe(false)
+        expect(messages.some((m) => m.type === 'session.completed')).toBe(true)
       }
     } finally {
       if (sessionId) {
@@ -1653,15 +1755,15 @@ describe('WebSocket Chat Integration', () => {
     const { sessionId } = await createRes.json() as { sessionId: string }
 
     const firstTurn = await runTurn(sessionId, 'message before clear')
-    expect(firstTurn.some((m) => m.type === 'message_complete')).toBe(true)
+    expect(firstTurn.some((m) => m.type === 'session.completed')).toBe(true)
 
     const clearTurn = await runTurn(sessionId, '/clear')
     expect(
       clearTurn.some(
-        (m) => m.type === 'system_notification' && m.subtype === 'session_cleared',
+        (m) => m.type === 'session.system.notification' && m.subtype === 'session_cleared',
       ),
     ).toBe(true)
-    expect(clearTurn.some((m) => m.type === 'content_delta')).toBe(false)
+    expect(clearTurn.some((m) => m.type === 'session.message.delta')).toBe(false)
 
     const messagesRes = await fetch(`${baseUrl}/api/sessions/${sessionId}/messages`)
     expect(messagesRes.status).toBe(200)
@@ -1683,17 +1785,17 @@ describe('WebSocket Chat Integration', () => {
     const clearTurn = await runTurn(sessionId, '/clear please keep this', true)
     expect(
       clearTurn.some(
-        (m) => m.type === 'error' && m.code === 'INVALID_SLASH_COMMAND_ARGS',
+        (m) => m.type === 'session.failed' && m.code === 'INVALID_SLASH_COMMAND_ARGS',
       ),
     ).toBe(true)
     expect(
       clearTurn.some(
-        (m) => m.type === 'system_notification' && m.subtype === 'session_cleared',
+        (m) => m.type === 'session.system.notification' && m.subtype === 'session_cleared',
       ),
     ).toBe(false)
 
     const nextTurn = await runTurn(sessionId, 'message after invalid clear')
-    expect(nextTurn.some((m) => m.type === 'message_complete')).toBe(true)
+    expect(nextTurn.some((m) => m.type === 'session.completed')).toBe(true)
   })
 
   it('should include desktop service diagnostics when CLI startup fails', async () => {
@@ -1710,7 +1812,7 @@ describe('WebSocket Chat Integration', () => {
     await fs.rm(workDir, { recursive: true, force: true })
 
     const messages = await runTurn(sessionId, 'trigger startup diagnostics', true)
-    const error = messages.find((msg) => msg.type === 'error')
+    const error = messages.find((msg) => msg.type === 'session.failed')
 
     expect(error).toMatchObject({
       code: 'WORKDIR_INVALID',
@@ -1731,7 +1833,7 @@ describe('WebSocket Chat Integration', () => {
       25,
       () => runTurn(sessionId, 'trigger startup stdout diagnostics', true),
     )
-    const error = messages.find((msg) => msg.type === 'error')
+    const error = messages.find((msg) => msg.type === 'session.failed')
 
     expect(error).toMatchObject({
       code: 'CLI_START_FAILED',
@@ -1757,15 +1859,15 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
     let connected = false
     let awaitingCompletion = false
     let preUserMessageCount = 0
@@ -1782,15 +1884,15 @@ describe('WebSocket Chat Integration', () => {
           const msg = JSON.parse(event.data as string)
           messages.push(msg)
 
-          if (msg.type === 'connected' && !connected) {
+          if (msg.type === 'session.connected' && !connected) {
             connected = true
             clearTimeout(timeout)
-            ws.send(JSON.stringify({ type: 'prewarm_session' }))
+            ws.send(JSON.stringify({ type: 'session.prewarm' }))
             resolve()
             return
           }
 
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             const err = new Error(msg.message)
             clearTimeout(timeout)
             rejectCompletion?.(err)
@@ -1798,7 +1900,7 @@ describe('WebSocket Chat Integration', () => {
             return
           }
 
-          if (awaitingCompletion && msg.type === 'message_complete') {
+          if (awaitingCompletion && msg.type === 'session.completed') {
             resolveCompletion?.()
           }
         }
@@ -1827,7 +1929,7 @@ describe('WebSocket Chat Integration', () => {
       expect(
         messages
           .slice(0, preUserMessageCount)
-          .some((msg) => ['content_start', 'content_delta', 'thinking', 'message_complete'].includes(msg.type)),
+          .some((msg) => ['session.message.started', 'session.message.delta', 'session.thinking.delta', 'session.completed'].includes(msg.type)),
       ).toBe(false)
 
       awaitingCompletion = true
@@ -1845,13 +1947,13 @@ describe('WebSocket Chat Integration', () => {
         }
       })
 
-      ws.send(JSON.stringify({ type: 'user_message', content: 'first turn after prewarm' }))
+      ws.send(JSON.stringify({ type: 'session.message.send', content: 'first turn after prewarm' }))
       await completion
 
       expect(startCalls).toHaveLength(1)
-      expect(messages.some((msg) => msg.type === 'content_delta')).toBe(true)
-      expect(messages.some((msg) => msg.type === 'message_complete')).toBe(true)
-      expect(messages.some((msg) => msg.type === 'error')).toBe(false)
+      expect(messages.some((msg) => msg.type === 'session.message.delta')).toBe(true)
+      expect(messages.some((msg) => msg.type === 'session.completed')).toBe(true)
+      expect(messages.some((msg) => msg.type === 'session.failed')).toBe(false)
     } finally {
       ws.close()
       conversationService.startSession = originalStartSession
@@ -1893,16 +1995,16 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     try {
       const messages = await runTurn(sessionId, 'first turn with active provider')
-      expect(messages.some((msg) => msg.type === 'message_complete')).toBe(true)
+      expect(messages.some((msg) => msg.type === 'session.completed')).toBe(true)
       expect(startCalls).toHaveLength(1)
       expect(startCalls[0]).toMatchObject({
         sessionId,
@@ -1967,11 +2069,11 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     const runRuntimeTurn = (
@@ -1980,7 +2082,7 @@ describe('WebSocket Chat Integration', () => {
       modelId: string,
       content: string,
     ) => new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+      const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
       const timeout = setTimeout(() => {
         ws.close()
         reject(new Error(`Timed out waiting for parallel runtime turn for ${sessionId}`))
@@ -1988,22 +2090,22 @@ describe('WebSocket Chat Integration', () => {
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data as string)
-        if (msg.type === 'connected') {
+        if (msg.type === 'session.connected') {
           ws.send(JSON.stringify({
-            type: 'set_runtime_config',
+            type: 'session.runtime.select',
             providerId,
             modelId,
           }))
-          ws.send(JSON.stringify({ type: 'user_message', content }))
+          ws.send(JSON.stringify({ type: 'session.message.send', content }))
           return
         }
-        if (msg.type === 'error') {
+        if (msg.type === 'session.failed') {
           clearTimeout(timeout)
           ws.close()
           reject(new Error(msg.message))
           return
         }
-        if (msg.type === 'message_complete') {
+        if (msg.type === 'session.completed') {
           clearTimeout(timeout)
           ws.close()
           resolve()
@@ -2082,7 +2184,7 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
@@ -2090,10 +2192,10 @@ describe('WebSocket Chat Integration', () => {
         markFirstStart()
         await firstStartGate
       }
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
     const messages: any[] = []
     try {
       await new Promise<void>((resolve, reject) => {
@@ -2103,11 +2205,11 @@ describe('WebSocket Chat Integration', () => {
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
           messages.push(msg)
-          if (msg.type === 'connected') {
+          if (msg.type === 'session.connected') {
             clearTimeout(timeout)
             resolve()
           }
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             reject(new Error(msg.message))
           }
@@ -2118,11 +2220,11 @@ describe('WebSocket Chat Integration', () => {
         }
       })
 
-      ws.send(JSON.stringify({ type: 'prewarm_session' }))
+      ws.send(JSON.stringify({ type: 'session.prewarm' }))
       await firstStartEntered
 
       ws.send(JSON.stringify({
-        type: 'set_runtime_config',
+        type: 'session.runtime.select',
         providerId: provider.providerId,
         modelId: 'late-balanced',
       }))
@@ -2130,7 +2232,7 @@ describe('WebSocket Chat Integration', () => {
 
       await waitUntil(async () => startCalls.length >= 2, `runtime restart for ${sessionId}`)
       await waitUntil(
-        async () => messages.some((msg) => msg.type === 'status' && msg.state === 'idle'),
+        async () => messages.some((msg) => msg.type === 'session.status.changed' && msg.state === 'idle'),
         `runtime restart idle status for ${sessionId}`,
       )
 
@@ -2193,7 +2295,7 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
@@ -2201,7 +2303,7 @@ describe('WebSocket Chat Integration', () => {
         markFirstStart()
         await firstStartGate
       }
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     conversationService.sendMessage = (function patchedSendMessage(
@@ -2213,7 +2315,7 @@ describe('WebSocket Chat Integration', () => {
       return originalSendMessage(sid, content, attachments)
     }) as typeof conversationService.sendMessage
 
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
     const messages: any[] = []
     try {
       await new Promise<void>((resolve, reject) => {
@@ -2225,12 +2327,12 @@ describe('WebSocket Chat Integration', () => {
           const msg = JSON.parse(event.data as string)
           messages.push(msg)
 
-          if (msg.type === 'connected') {
-            ws.send(JSON.stringify({ type: 'prewarm_session' }))
+          if (msg.type === 'session.connected') {
+            ws.send(JSON.stringify({ type: 'session.prewarm' }))
             void firstStartEntered.then(() => {
-              ws.send(JSON.stringify({ type: 'user_message', content: 'first turn while runtime changes' }))
+              ws.send(JSON.stringify({ type: 'session.message.send', content: 'first turn while runtime changes' }))
               ws.send(JSON.stringify({
-                type: 'set_runtime_config',
+                type: 'session.runtime.select',
                 providerId: provider.providerId,
                 modelId: 'first-turn-balanced',
               }))
@@ -2239,13 +2341,13 @@ describe('WebSocket Chat Integration', () => {
             return
           }
 
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             reject(new Error(msg.message))
             return
           }
 
-          if (msg.type === 'message_complete') {
+          if (msg.type === 'session.completed') {
             clearTimeout(timeout)
             resolve()
           }
@@ -2271,7 +2373,7 @@ describe('WebSocket Chat Integration', () => {
         content: 'first turn while runtime changes',
         startCallCount: 2,
       }])
-      expect(messages.some((msg) => msg.type === 'content_delta')).toBe(true)
+      expect(messages.some((msg) => msg.type === 'session.message.delta')).toBe(true)
     } finally {
       ws.close()
       conversationService.startSession = originalStartSession
@@ -2313,14 +2415,14 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
     const messages: any[] = []
     try {
       await new Promise<void>((resolve, reject) => {
@@ -2330,12 +2432,12 @@ describe('WebSocket Chat Integration', () => {
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
           messages.push(msg)
-          if (msg.type === 'connected') {
+          if (msg.type === 'session.connected') {
             clearTimeout(timeout)
-            ws.send(JSON.stringify({ type: 'prewarm_session' }))
+            ws.send(JSON.stringify({ type: 'session.prewarm' }))
             resolve()
           }
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             reject(new Error(msg.message))
           }
@@ -2359,13 +2461,13 @@ describe('WebSocket Chat Integration', () => {
 
       const switchStartIndex = messages.length
       ws.send(JSON.stringify({
-        type: 'set_runtime_config',
+        type: 'session.runtime.select',
         providerId: provider.providerId,
         modelId: 'idle-balanced',
       }))
 
       await waitUntil(
-        async () => messages.slice(switchStartIndex).some((msg) => msg.type === 'status' && msg.state === 'idle'),
+        async () => messages.slice(switchStartIndex).some((msg) => msg.type === 'session.status.changed' && msg.state === 'idle'),
         `idle runtime switch completion for ${sessionId}`,
       )
 
@@ -2380,10 +2482,10 @@ describe('WebSocket Chat Integration', () => {
       expect(
         messages
           .slice(switchStartIndex)
-          .filter((msg) => msg.type === 'status')
+          .filter((msg) => msg.type === 'session.status.changed')
           .map((msg) => msg.state),
       ).toEqual(['idle'])
-      expect(messages.slice(switchStartIndex).some((msg) => msg.type === 'error')).toBe(false)
+      expect(messages.slice(switchStartIndex).some((msg) => msg.type === 'session.failed')).toBe(false)
     } finally {
       ws.close()
       conversationService.startSession = originalStartSession
@@ -2415,14 +2517,14 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
     const messages: any[] = []
     try {
       await new Promise<void>((resolve, reject) => {
@@ -2432,12 +2534,12 @@ describe('WebSocket Chat Integration', () => {
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
           messages.push(msg)
-          if (msg.type === 'connected') {
+          if (msg.type === 'session.connected') {
             clearTimeout(timeout)
-            ws.send(JSON.stringify({ type: 'prewarm_session' }))
+            ws.send(JSON.stringify({ type: 'session.prewarm' }))
             resolve()
           }
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             reject(new Error(msg.message))
           }
@@ -2461,12 +2563,12 @@ describe('WebSocket Chat Integration', () => {
 
       const switchStartIndex = messages.length
       ws.send(JSON.stringify({
-        type: 'set_permission_mode',
+        type: 'session.permission.mode.set',
         mode: 'bypassPermissions',
       }))
 
       await waitUntil(
-        async () => messages.slice(switchStartIndex).some((msg) => msg.type === 'status' && msg.state === 'idle'),
+        async () => messages.slice(switchStartIndex).some((msg) => msg.type === 'session.status.changed' && msg.state === 'idle'),
         `idle permission switch completion for ${sessionId}`,
       )
 
@@ -2480,10 +2582,10 @@ describe('WebSocket Chat Integration', () => {
       expect(
         messages
           .slice(switchStartIndex)
-          .filter((msg) => msg.type === 'status')
+          .filter((msg) => msg.type === 'session.status.changed')
           .map((msg) => msg.state),
       ).toEqual(['idle'])
-      expect(messages.slice(switchStartIndex).some((msg) => msg.type === 'error')).toBe(false)
+      expect(messages.slice(switchStartIndex).some((msg) => msg.type === 'session.failed')).toBe(false)
     } finally {
       ws.close()
       conversationService.startSession = originalStartSession
@@ -2520,14 +2622,14 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
     try {
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
@@ -2535,15 +2637,15 @@ describe('WebSocket Chat Integration', () => {
         }, 5000)
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
-          if (msg.type === 'connected') {
+          if (msg.type === 'session.connected') {
             clearTimeout(timeout)
             ws.send(JSON.stringify({
-              type: 'set_permission_mode',
+              type: 'session.permission.mode.set',
               mode: 'acceptEdits',
             }))
             resolve()
           }
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             reject(new Error(msg.message))
           }
@@ -2567,16 +2669,16 @@ describe('WebSocket Chat Integration', () => {
         }, 10_000)
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
-          if (msg.type === 'message_complete') {
+          if (msg.type === 'session.completed') {
             clearTimeout(timeout)
             resolve()
           }
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             reject(new Error(msg.message))
           }
         }
-        ws.send(JSON.stringify({ type: 'user_message', content: 'first turn after permission switch' }))
+        ws.send(JSON.stringify({ type: 'session.message.send', content: 'first turn after permission switch' }))
       })
 
       expect(startCalls).toHaveLength(1)
@@ -2616,14 +2718,14 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
     const messages: any[] = []
     try {
       await new Promise<void>((resolve, reject) => {
@@ -2633,12 +2735,12 @@ describe('WebSocket Chat Integration', () => {
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
           messages.push(msg)
-          if (msg.type === 'connected') {
+          if (msg.type === 'session.connected') {
             clearTimeout(timeout)
-            ws.send(JSON.stringify({ type: 'prewarm_session' }))
+            ws.send(JSON.stringify({ type: 'session.prewarm' }))
             resolve()
           }
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             reject(new Error(msg.message))
           }
@@ -2662,12 +2764,12 @@ describe('WebSocket Chat Integration', () => {
 
       const switchStartIndex = messages.length
       ws.send(JSON.stringify({
-        type: 'set_permission_mode',
+        type: 'session.permission.mode.set',
         mode: 'default',
       }))
 
       await waitUntil(
-        async () => messages.slice(switchStartIndex).some((msg) => msg.type === 'status' && msg.state === 'idle'),
+        async () => messages.slice(switchStartIndex).some((msg) => msg.type === 'session.status.changed' && msg.state === 'idle'),
         `bypass-to-default permission switch completion for ${sessionId}`,
       )
 
@@ -2684,7 +2786,7 @@ describe('WebSocket Chat Integration', () => {
         const body = await res.json() as { status?: { permissionMode?: string } }
         return body.status?.permissionMode === 'default'
       }, `persisted bypass-to-default permission switch for ${sessionId}`)
-      expect(messages.slice(switchStartIndex).some((msg) => msg.type === 'error')).toBe(false)
+      expect(messages.slice(switchStartIndex).some((msg) => msg.type === 'session.failed')).toBe(false)
     } finally {
       ws.close()
       conversationService.startSession = originalStartSession
@@ -2735,14 +2837,14 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
-    const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+    const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
     const messages: any[] = []
     try {
       await new Promise<void>((resolve, reject) => {
@@ -2755,19 +2857,19 @@ describe('WebSocket Chat Integration', () => {
           const msg = JSON.parse(event.data as string)
           messages.push(msg)
 
-          if (msg.type === 'connected') {
-            ws.send(JSON.stringify({ type: 'user_message', content: 'resume old session' }))
+          if (msg.type === 'session.connected') {
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'resume old session' }))
             return
           }
 
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             ws.close()
             reject(new Error(msg.message))
             return
           }
 
-          if (msg.type === 'message_complete') {
+          if (msg.type === 'session.completed') {
             clearTimeout(timeout)
             ws.close()
             resolve()
@@ -2788,7 +2890,7 @@ describe('WebSocket Chat Integration', () => {
         },
       })
       expect(startCalls[0]?.options?.model).not.toBe('stale-model')
-      expect(messages.some((msg) => msg.type === 'message_complete')).toBe(true)
+      expect(messages.some((msg) => msg.type === 'session.completed')).toBe(true)
     } finally {
       ws.close()
       conversationService.startSession = originalStartSession
@@ -2823,11 +2925,11 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     try {
@@ -2835,7 +2937,7 @@ describe('WebSocket Chat Integration', () => {
 
       expect(startCalls).toHaveLength(0)
       expect(messages).toContainEqual(expect.objectContaining({
-        type: 'error',
+        type: 'session.failed',
         code: 'CLI_START_FAILED',
         message: expect.stringContaining('no active provider is configured'),
       }))
@@ -2875,30 +2977,30 @@ describe('WebSocket Chat Integration', () => {
           reject(new Error(message))
         }
 
-        const ws1 = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+        const ws1 = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
         ws1.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
           firstMessages.push(msg)
 
-          if (msg.type === 'connected') {
-            ws1.send(JSON.stringify({ type: 'user_message', content: 'resume after reconnect' }))
+          if (msg.type === 'session.connected') {
+            ws1.send(JSON.stringify({ type: 'session.message.send', content: 'resume after reconnect' }))
             return
           }
 
-          if (msg.type === 'thinking' && !reconnected) {
+          if (msg.type === 'session.thinking.delta' && !reconnected) {
             reconnected = true
             ws1.close()
 
             setTimeout(() => {
-              ws2 = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+              ws2 = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
               ws2.onmessage = (reconnectEvent) => {
                 const reconnectMsg = JSON.parse(reconnectEvent.data as string)
                 secondMessages.push(reconnectMsg)
-                if (reconnectMsg.type === 'error') {
+                if (reconnectMsg.type === 'session.failed') {
                   handleFailure(reconnectMsg.message)
                   return
                 }
-                if (reconnectMsg.type === 'message_complete') {
+                if (reconnectMsg.type === 'session.completed') {
                   cleanup()
                 }
               }
@@ -2910,10 +3012,10 @@ describe('WebSocket Chat Integration', () => {
         ws1.onerror = () => handleFailure(`Initial WebSocket error for session ${sessionId}`)
       })
 
-      expect(firstMessages.some((msg) => msg.type === 'thinking')).toBe(true)
-      expect(secondMessages.some((msg) => msg.type === 'connected')).toBe(true)
-      expect(secondMessages.some((msg) => msg.type === 'content_delta')).toBe(true)
-      expect(secondMessages.some((msg) => msg.type === 'message_complete')).toBe(true)
+      expect(firstMessages.some((msg) => msg.type === 'session.thinking.delta')).toBe(true)
+      expect(secondMessages.some((msg) => msg.type === 'session.connected')).toBe(true)
+      expect(secondMessages.some((msg) => msg.type === 'session.message.delta')).toBe(true)
+      expect(secondMessages.some((msg) => msg.type === 'session.completed')).toBe(true)
     })
   })
 
@@ -2950,27 +3052,27 @@ describe('WebSocket Chat Integration', () => {
           reject(new Error(message))
         }
 
-        const ws1 = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+        const ws1 = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
         ws1.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
           firstMessages.push(msg)
 
-          if (msg.type === 'connected') {
-            ws1.send(JSON.stringify({ type: 'user_message', content: 'multi client stream' }))
+          if (msg.type === 'session.connected') {
+            ws1.send(JSON.stringify({ type: 'session.message.send', content: 'multi client stream' }))
             return
           }
 
-          if (msg.type === 'thinking' && !secondConnected) {
+          if (msg.type === 'session.thinking.delta' && !secondConnected) {
             secondConnected = true
-            ws2 = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+            ws2 = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
             ws2.onmessage = (secondEvent) => {
               const secondMsg = JSON.parse(secondEvent.data as string)
               secondMessages.push(secondMsg)
-              if (secondMsg.type === 'error') {
+              if (secondMsg.type === 'session.failed') {
                 handleFailure(secondMsg.message)
                 return
               }
-              if (secondMsg.type === 'message_complete') {
+              if (secondMsg.type === 'session.completed') {
                 secondComplete = true
                 cleanup()
               }
@@ -2978,7 +3080,7 @@ describe('WebSocket Chat Integration', () => {
             ws2.onerror = () => handleFailure(`Second WebSocket error for session ${sessionId}`)
           }
 
-          if (msg.type === 'message_complete') {
+          if (msg.type === 'session.completed') {
             firstComplete = true
             cleanup()
           }
@@ -2987,11 +3089,11 @@ describe('WebSocket Chat Integration', () => {
         ws1.onerror = () => handleFailure(`First WebSocket error for session ${sessionId}`)
       })
 
-      expect(firstMessages.some((msg) => msg.type === 'content_delta')).toBe(true)
-      expect(firstMessages.some((msg) => msg.type === 'message_complete')).toBe(true)
-      expect(secondMessages.some((msg) => msg.type === 'connected')).toBe(true)
-      expect(secondMessages.some((msg) => msg.type === 'content_delta')).toBe(true)
-      expect(secondMessages.some((msg) => msg.type === 'message_complete')).toBe(true)
+      expect(firstMessages.some((msg) => msg.type === 'session.message.delta')).toBe(true)
+      expect(firstMessages.some((msg) => msg.type === 'session.completed')).toBe(true)
+      expect(secondMessages.some((msg) => msg.type === 'session.connected')).toBe(true)
+      expect(secondMessages.some((msg) => msg.type === 'session.message.delta')).toBe(true)
+      expect(secondMessages.some((msg) => msg.type === 'session.completed')).toBe(true)
     })
   })
 
@@ -3041,15 +3143,15 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     try {
-      const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+      const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
       let phase: 'boot' | 'turn1' | 'switching' | 'turn2' | 'turn3' | 'done' = 'boot'
       let switchingTriggered = false
 
@@ -3062,30 +3164,30 @@ describe('WebSocket Chat Integration', () => {
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
 
-          if (msg.type === 'connected' && phase === 'boot') {
+          if (msg.type === 'session.connected' && phase === 'boot') {
             ws.send(JSON.stringify({
-              type: 'set_runtime_config',
+              type: 'session.runtime.select',
               providerId: providerA.providerId,
               modelId: 'model-a-balanced',
               effortLevel: 'medium',
             }))
-            ws.send(JSON.stringify({ type: 'user_message', content: 'first turn' }))
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'first turn' }))
             phase = 'turn1'
             return
           }
 
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             ws.close()
             reject(new Error(msg.message))
             return
           }
 
-          if (msg.type === 'message_complete' && phase === 'turn1' && !switchingTriggered) {
+          if (msg.type === 'session.completed' && phase === 'turn1' && !switchingTriggered) {
             switchingTriggered = true
             phase = 'switching'
             ws.send(JSON.stringify({
-              type: 'set_runtime_config',
+              type: 'session.runtime.select',
               providerId: providerB.providerId,
               modelId: 'model-b-powerful',
               effortLevel: 'max',
@@ -3094,22 +3196,22 @@ describe('WebSocket Chat Integration', () => {
           }
 
           if (
-            msg.type === 'status' &&
+            msg.type === 'session.status.changed' &&
             msg.state === 'idle' &&
             phase === 'switching'
           ) {
-            ws.send(JSON.stringify({ type: 'user_message', content: 'second turn' }))
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'second turn' }))
             phase = 'turn2'
             return
           }
 
-          if (msg.type === 'message_complete' && phase === 'turn2') {
-            ws.send(JSON.stringify({ type: 'user_message', content: 'third turn' }))
+          if (msg.type === 'session.completed' && phase === 'turn2') {
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'third turn' }))
             phase = 'turn3'
             return
           }
 
-          if (msg.type === 'message_complete' && phase === 'turn3') {
+          if (msg.type === 'session.completed' && phase === 'turn3') {
             clearTimeout(timeout)
             phase = 'done'
             ws.close()
@@ -3191,15 +3293,15 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     try {
-      const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+      const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
       let phase: 'boot' | 'turn1' | 'turn2' | 'turn3' | 'done' = 'boot'
 
       await new Promise<void>((resolve, reject) => {
@@ -3211,42 +3313,42 @@ describe('WebSocket Chat Integration', () => {
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
 
-          if (msg.type === 'connected' && phase === 'boot') {
+          if (msg.type === 'session.connected' && phase === 'boot') {
             ws.send(JSON.stringify({
-              type: 'set_runtime_config',
+              type: 'session.runtime.select',
               providerId: providerA.providerId,
               modelId: 'restart-a-balanced',
             }))
-            ws.send(JSON.stringify({ type: 'user_message', content: 'first turn' }))
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'first turn' }))
             phase = 'turn1'
             return
           }
 
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             ws.close()
             reject(new Error(msg.message))
             return
           }
 
-          if (msg.type === 'message_complete' && phase === 'turn1') {
+          if (msg.type === 'session.completed' && phase === 'turn1') {
             ws.send(JSON.stringify({
-              type: 'set_runtime_config',
+              type: 'session.runtime.select',
               providerId: providerB.providerId,
               modelId: 'restart-b-powerful',
             }))
-            ws.send(JSON.stringify({ type: 'user_message', content: 'second turn immediately after switch' }))
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'second turn immediately after switch' }))
             phase = 'turn2'
             return
           }
 
-          if (msg.type === 'message_complete' && phase === 'turn2') {
-            ws.send(JSON.stringify({ type: 'user_message', content: 'third turn should reuse restarted runtime' }))
+          if (msg.type === 'session.completed' && phase === 'turn2') {
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'third turn should reuse restarted runtime' }))
             phase = 'turn3'
             return
           }
 
-          if (msg.type === 'message_complete' && phase === 'turn3') {
+          if (msg.type === 'session.completed' && phase === 'turn3') {
             clearTimeout(timeout)
             phase = 'done'
             ws.close()
@@ -3310,11 +3412,11 @@ describe('WebSocket Chat Integration', () => {
     conversationService.startSession = (async function patchedStartSession(
       sid: string,
       workDir: string,
-      sdkUrl: string,
+      runtimeUrl: string,
       options?: { permissionMode?: string; model?: string; effort?: string; thinking?: 'enabled' | 'adaptive' | 'disabled'; providerId?: string | null },
     ) {
       startCalls.push({ sessionId: sid, options })
-      return originalStartSession(sid, workDir, sdkUrl, options)
+      return originalStartSession(sid, workDir, runtimeUrl, options)
     }) as typeof conversationService.startSession
 
     conversationService.sendMessage = (function patchedSendMessage(
@@ -3331,7 +3433,7 @@ describe('WebSocket Chat Integration', () => {
     }) as typeof conversationService.sendMessage
 
     try {
-      const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+      const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
       let phase: 'boot' | 'turn1' | 'turn2' | 'done' = 'boot'
 
       await new Promise<void>((resolve, reject) => {
@@ -3343,30 +3445,30 @@ describe('WebSocket Chat Integration', () => {
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data as string)
 
-          if (msg.type === 'connected' && phase === 'boot') {
-            ws.send(JSON.stringify({ type: 'user_message', content: 'first turn before permission switch' }))
+          if (msg.type === 'session.connected' && phase === 'boot') {
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'first turn before permission switch' }))
             phase = 'turn1'
             return
           }
 
-          if (msg.type === 'error') {
+          if (msg.type === 'session.failed') {
             clearTimeout(timeout)
             ws.close()
             reject(new Error(msg.message))
             return
           }
 
-          if (msg.type === 'message_complete' && phase === 'turn1') {
+          if (msg.type === 'session.completed' && phase === 'turn1') {
             ws.send(JSON.stringify({
-              type: 'set_permission_mode',
+              type: 'session.permission.mode.set',
               mode: 'bypassPermissions',
             }))
-            ws.send(JSON.stringify({ type: 'user_message', content: 'second turn immediately after permission switch' }))
+            ws.send(JSON.stringify({ type: 'session.message.send', content: 'second turn immediately after permission switch' }))
             phase = 'turn2'
             return
           }
 
-          if (msg.type === 'message_complete' && phase === 'turn2') {
+          if (msg.type === 'session.completed' && phase === 'turn2') {
             clearTimeout(timeout)
             phase = 'done'
             ws.close()

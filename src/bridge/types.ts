@@ -191,7 +191,7 @@ export type SessionHandle = {
 
 export type SessionSpawnOpts = {
   sessionId: string
-  sdkUrl: string
+  runtimeUrl: string
   accessToken: string
   /** When true, spawn the child with CCR v2 env vars (SSE transport + CCRClient). */
   useCcrV2?: boolean

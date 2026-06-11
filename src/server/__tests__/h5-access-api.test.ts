@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { handleApiRequest } from '../router.js'
+import { handleResourceRequest } from '../router.js'
 
 let tmpDir: string
 let originalConfigDir: string | undefined
@@ -25,7 +25,7 @@ async function api(
     headers.Authorization = `Bearer ${options.bearerToken}`
   }
 
-  return handleApiRequest(
+  return handleResourceRequest(
     new Request(url.toString(), {
       method,
       headers,
@@ -47,9 +47,9 @@ afterEach(async () => {
   await fs.rm(tmpDir, { recursive: true, force: true })
 })
 
-describe('/api/h5-access', () => {
+describe('/h5-access resource', () => {
   test('GET returns sanitized disabled status by default', async () => {
-    const response = await api('GET', '/api/h5-access')
+    const response = await api('GET', '/h5-access')
 
     expect(response.status).toBe(200)
     const body = await response.json() as {
@@ -75,7 +75,7 @@ describe('/api/h5-access', () => {
   })
 
   test('enable returns raw token once and status stays sanitized', async () => {
-    const enableResponse = await api('POST', '/api/h5-access/enable')
+    const enableResponse = await api('POST', '/h5-access/enable')
     expect(enableResponse.status).toBe(200)
 
     const enablePayload = await enableResponse.json() as {
@@ -89,7 +89,7 @@ describe('/api/h5-access', () => {
     expect(enablePayload.settings.enabled).toBe(true)
     expect(enablePayload.token).toMatch(/^h5_/)
 
-    const statusResponse = await api('GET', '/api/h5-access')
+    const statusResponse = await api('GET', '/h5-access')
     expect(statusResponse.status).toBe(200)
     const statusPayload = await statusResponse.json() as {
       settings: {
@@ -105,23 +105,23 @@ describe('/api/h5-access', () => {
   })
 
   test('verify accepts a good bearer token and rejects missing or bad tokens', async () => {
-    const enableResponse = await api('POST', '/api/h5-access/enable')
+    const enableResponse = await api('POST', '/h5-access/enable')
     const enablePayload = await enableResponse.json() as { token: string }
 
     expect(
-      await api('POST', '/api/h5-access/verify', { bearerToken: enablePayload.token }),
+      await api('POST', '/h5-access/verify', { bearerToken: enablePayload.token }),
     ).toMatchObject({ status: 200 })
-    expect(await api('POST', '/api/h5-access/verify')).toMatchObject({ status: 401 })
+    expect(await api('POST', '/h5-access/verify')).toMatchObject({ status: 401 })
     expect(
-      await api('POST', '/api/h5-access/verify', { bearerToken: 'bad-token' }),
+      await api('POST', '/h5-access/verify', { bearerToken: 'bad-token' }),
     ).toMatchObject({ status: 401 })
   })
 
   test('regenerate returns a new token and invalidates the previous one', async () => {
-    const enableResponse = await api('POST', '/api/h5-access/enable')
+    const enableResponse = await api('POST', '/h5-access/enable')
     const enablePayload = await enableResponse.json() as { token: string }
 
-    const regenerateResponse = await api('POST', '/api/h5-access/regenerate')
+    const regenerateResponse = await api('POST', '/h5-access/regenerate')
     expect(regenerateResponse.status).toBe(200)
     const regeneratePayload = await regenerateResponse.json() as {
       settings: {
@@ -134,18 +134,18 @@ describe('/api/h5-access', () => {
     expect(regeneratePayload.token).toMatch(/^h5_/)
     expect(regeneratePayload.token).not.toBe(enablePayload.token)
     expect(
-      await api('POST', '/api/h5-access/verify', { bearerToken: enablePayload.token }),
+      await api('POST', '/h5-access/verify', { bearerToken: enablePayload.token }),
     ).toMatchObject({ status: 401 })
     expect(
-      await api('POST', '/api/h5-access/verify', { bearerToken: regeneratePayload.token }),
+      await api('POST', '/h5-access/verify', { bearerToken: regeneratePayload.token }),
     ).toMatchObject({ status: 200 })
   })
 
   test('disable clears access and causes the old token to fail verification', async () => {
-    const enableResponse = await api('POST', '/api/h5-access/enable')
+    const enableResponse = await api('POST', '/h5-access/enable')
     const enablePayload = await enableResponse.json() as { token: string }
 
-    const disableResponse = await api('POST', '/api/h5-access/disable')
+    const disableResponse = await api('POST', '/h5-access/disable')
     expect(disableResponse.status).toBe(200)
     await expect(disableResponse.json()).resolves.toEqual({
       settings: {
@@ -157,12 +157,12 @@ describe('/api/h5-access', () => {
     })
 
     expect(
-      await api('POST', '/api/h5-access/verify', { bearerToken: enablePayload.token }),
+      await api('POST', '/h5-access/verify', { bearerToken: enablePayload.token }),
     ).toMatchObject({ status: 401 })
   })
 
   test('PUT updates sanitized settings', async () => {
-    const response = await api('PUT', '/api/h5-access', {
+    const response = await api('PUT', '/h5-access', {
       body: {
         allowedOrigins: ['https://example.com/path'],
         publicBaseUrl: 'https://public.example.com/app/',

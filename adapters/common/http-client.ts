@@ -1,6 +1,14 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import WebSocket from 'ws'
+import {
+  createRpcResourceCall,
+  type JsonValue,
+  RPC_PATH,
+  type RpcMethod,
+  type RpcResourceParams,
+} from '../../src/generated/contracts/index.js'
 
 export type RecentProject = {
   projectPath: string
@@ -28,8 +36,9 @@ export type SessionTask = {
 
 export class AdapterHttpClient {
   readonly httpBaseUrl: string
+  readonly rpcWebSocketUrl: string
   private readonly allowedProjectRoots: string[]
-  /** Default timeout for HTTP requests (30 seconds) */
+  /** Default timeout for RPC requests (30 seconds) */
   private static readonly DEFAULT_TIMEOUT_MS = 30_000
 
   constructor(wsUrl: string, options?: { allowedProjectRoots?: string[] }) {
@@ -37,72 +46,38 @@ export class AdapterHttpClient {
       .replace(/^ws:/, 'http:')
       .replace(/^wss:/, 'https:')
       .replace(/\/$/, '')
+    this.rpcWebSocketUrl = `${wsUrl.replace(/\/$/, '')}${RPC_PATH}`
     this.allowedProjectRoots = (options?.allowedProjectRoots ?? [])
       .map(resolveExistingProjectPath)
       .filter((value): value is string => Boolean(value))
   }
 
-  /** Create an AbortController with timeout */
-  private createTimeoutController(timeoutMs = AdapterHttpClient.DEFAULT_TIMEOUT_MS): {
-    controller: AbortController
-    timer: ReturnType<typeof setTimeout>
-  } {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    return { controller, timer }
-  }
-
   async createSession(workDir: string): Promise<string> {
-    const { controller, timer } = this.createTimeoutController()
+    const data = await this.requestResource<{ sessionId: string }>('sessions.create', {
+      body: { workDir } as JsonValue,
+    })
     try {
-      const res = await fetch(`${this.httpBaseUrl}/api/sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workDir }),
-        signal: controller.signal,
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: res.statusText }))
-        throw new Error(`Failed to create session: ${(err as any).message}`)
-      }
-      const data = (await res.json()) as { sessionId: string }
       return data.sessionId
-    } finally {
-      clearTimeout(timer)
+    } catch {
+      throw new Error('Failed to create session: missing session id')
     }
   }
 
   async sessionExists(sessionId: string): Promise<boolean> {
-    const { controller, timer } = this.createTimeoutController()
     try {
-      const res = await fetch(`${this.httpBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}`, {
-        signal: controller.signal,
+      await this.requestResource('sessions.get', {
+        path: { sessionId },
       })
-      if (res.status === 404) return false
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: res.statusText }))
-        throw new Error(`Failed to check session: ${(err as any).message}`)
-      }
       return true
-    } finally {
-      clearTimeout(timer)
+    } catch (error) {
+      if (error instanceof AdapterRpcError && error.status === 404) return false
+      throw error
     }
   }
 
   async listRecentProjects(): Promise<RecentProject[]> {
-    const { controller, timer } = this.createTimeoutController()
-    try {
-      const res = await fetch(`${this.httpBaseUrl}/api/sessions/recent-projects`, {
-        signal: controller.signal,
-      })
-      if (!res.ok) {
-        throw new Error(`Failed to list projects: ${res.statusText}`)
-      }
-      const data = (await res.json()) as { projects: RecentProject[] }
-      return data.projects
-    } finally {
-      clearTimeout(timer)
-    }
+    const data = await this.requestResource<{ projects: RecentProject[] }>('sessions.recentprojects')
+    return data.projects
   }
 
   /**
@@ -156,38 +131,124 @@ export class AdapterHttpClient {
   }
 
   async getGitInfo(sessionId: string): Promise<GitInfo> {
-    const { controller, timer } = this.createTimeoutController()
-    try {
-      const res = await fetch(`${this.httpBaseUrl}/api/sessions/${encodeURIComponent(sessionId)}/git-info`, {
-        signal: controller.signal,
-      })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: res.statusText }))
-        throw new Error(`Failed to load git info: ${(err as any).message}`)
-      }
-      return (await res.json()) as GitInfo
-    } finally {
-      clearTimeout(timer)
-    }
+    return this.requestResource<GitInfo>('sessions.gitinfo', {
+      path: { sessionId },
+    })
   }
 
   async getTasksForSession(sessionId: string): Promise<SessionTask[]> {
-    const { controller, timer } = this.createTimeoutController()
     try {
-      const res = await fetch(`${this.httpBaseUrl}/api/tasks/lists/${encodeURIComponent(sessionId)}`, {
-        signal: controller.signal,
+      const data = await this.requestResource<{ tasks?: SessionTask[] }>('tasks.getlist', {
+        path: { taskListId: sessionId },
       })
-      if (!res.ok) {
-        if (res.status === 404) return []
-        const err = await res.json().catch(() => ({ message: res.statusText }))
-        throw new Error(`Failed to load tasks: ${(err as any).message}`)
-      }
-      const data = (await res.json()) as { tasks?: SessionTask[] }
       return Array.isArray(data.tasks) ? data.tasks : []
-    } finally {
-      clearTimeout(timer)
+    } catch (error) {
+      if (error instanceof AdapterRpcError && error.status === 404) return []
+      throw error
     }
   }
+
+  private requestResource<T = unknown>(
+    method: RpcMethod,
+    params: RpcResourceParams = {},
+    timeoutMs = AdapterHttpClient.DEFAULT_TIMEOUT_MS,
+  ): Promise<T> {
+    const requestId = `adapter-rpc-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const call = createRpcResourceCall(method, {
+      headers: { 'Content-Type': 'application/json' },
+      ...params,
+    })
+
+    return new Promise((resolve, reject) => {
+      const ws = new WebSocket(this.rpcWebSocketUrl)
+      let settled = false
+      const timer = setTimeout(() => {
+        finish(() => reject(new Error(`RPC request timed out after ${timeoutMs}ms`)))
+      }, timeoutMs)
+
+      const finish = (callback: () => void) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        ws.removeAllListeners()
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close()
+        }
+        callback()
+      }
+
+      ws.on('open', () => {
+        ws.send(JSON.stringify({
+          type: 'rpc.request',
+          id: requestId,
+          method: call.method,
+          params: call.params,
+        }))
+      })
+
+      ws.on('message', (raw) => {
+        const message = parseRpcMessage(raw.toString())
+        if (!message) return
+        if (message.type === 'rpc.connected' || message.type === 'rpc.pong') return
+        if (message.id !== requestId) return
+
+        if (message.type === 'rpc.error') {
+          finish(() => reject(new Error(message.message || message.code || 'Adapter RPC failed')))
+          return
+        }
+
+        if (message.type !== 'rpc.response') return
+        if (message.status >= 400) {
+          finish(() => reject(new AdapterRpcError(
+            message.status,
+            errorMessageFromBody(message.result) || `RPC request failed with status ${message.status}`,
+          )))
+          return
+        }
+        finish(() => resolve(message.result as T))
+      })
+
+      ws.on('error', (error) => {
+        finish(() => reject(error))
+      })
+
+      ws.on('close', () => {
+        finish(() => reject(new Error('RPC WebSocket closed before a response was received')))
+      })
+    })
+  }
+}
+
+class AdapterRpcError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+    this.name = 'AdapterRpcError'
+  }
+}
+
+type RpcMessage =
+  | { type: 'rpc.connected'; id?: string }
+  | { type: 'rpc.pong'; id?: string }
+  | { type: 'rpc.error'; id?: string; code?: string; message?: string }
+  | { type: 'rpc.response'; id: string; status: number; result: unknown }
+
+function parseRpcMessage(raw: string): RpcMessage | null {
+  try {
+    const parsed = JSON.parse(raw) as RpcMessage
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function errorMessageFromBody(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return null
+  const record = body as Record<string, unknown>
+  return typeof record.message === 'string'
+    ? record.message
+    : typeof record.error === 'string'
+      ? record.error
+      : null
 }
 
 function isPathWithinAllowedRoots(target: string, roots: string[]): boolean {

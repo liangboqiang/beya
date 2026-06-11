@@ -60,21 +60,21 @@ export type ComputerUseConfig = {
 
 export const computerUseApi = {
   getStatus() {
-    return api.get<ComputerUseStatus>('/api/computer-use/status')
+    return api.get<ComputerUseStatus>('/computer-use/status')
   },
   runSetup() {
-    return api.post<SetupResult>('/api/computer-use/setup', undefined, { timeout: 300_000 })
+    return api.post<SetupResult>('/computer-use/setup', undefined, { timeout: 300_000 })
   },
   getInstalledApps() {
-    return api.get<{ apps: InstalledApp[] }>('/api/computer-use/apps')
+    return api.get<{ apps: InstalledApp[] }>('/computer-use/apps')
   },
   getAuthorizedApps() {
-    return api.get<ComputerUseConfig>('/api/computer-use/authorized-apps')
+    return api.get<ComputerUseConfig>('/computer-use/authorized-apps')
   },
   setAuthorizedApps(config: Partial<ComputerUseConfig>) {
-    return api.put<{ ok: true }>('/api/computer-use/authorized-apps', config)
+    return api.put<{ ok: true }>('/computer-use/authorized-apps', config)
   },
   openSettings(pane: 'Privacy_ScreenCapture' | 'Privacy_Accessibility') {
-    return api.post<{ ok: true }>('/api/computer-use/open-settings', { pane })
+    return api.post<{ ok: true }>('/computer-use/open-settings', { pane })
   },
 }

@@ -1,25 +1,33 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const rpcMock = vi.hoisted(() => vi.fn())
+
+vi.mock('./appRpc', () => ({
+  sendAppRpcRequest: rpcMock,
+}))
+
 import { setBaseUrl } from './client'
 import { sessionsApi } from './sessions'
 
 describe('sessionsApi', () => {
   afterEach(() => {
     setBaseUrl('http://127.0.0.1:3456')
+    rpcMock.mockReset()
     vi.restoreAllMocks()
   })
 
   it('posts branch requests to the session branch endpoint', async () => {
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
-      sessionId: 'branch-session',
-      title: 'Branch',
-      workDir: '/workspace/repo',
-      sourceSessionId: 'source-session',
-      targetMessageId: 'message-1',
-    }), {
+    rpcMock.mockResolvedValueOnce({
       status: 201,
-      headers: { 'Content-Type': 'application/json' },
-    }))
+      headers: {},
+      body: {
+        sessionId: 'branch-session',
+        title: 'Branch',
+        workDir: '/workspace/repo',
+        sourceSessionId: 'source-session',
+        targetMessageId: 'message-1',
+      },
+    })
 
     setBaseUrl('http://127.0.0.1:49237')
     const result = await sessionsApi.branch('source-session', {
@@ -28,15 +36,14 @@ describe('sessionsApi', () => {
     })
 
     expect(result.sessionId).toBe('branch-session')
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, init] = fetchMock.mock.calls[0]!
-    expect(url).toBe('http://127.0.0.1:49237/api/sessions/source-session/branch')
-    expect(init).toMatchObject({
+    expect(rpcMock).toHaveBeenCalledOnce()
+    expect(rpcMock).toHaveBeenCalledWith(expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({
+      path: '/sessions/source-session/branch',
+      body: {
         targetMessageId: 'message-1',
         title: 'Branch',
-      }),
-    })
+      },
+    }))
   })
 })

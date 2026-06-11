@@ -36,7 +36,7 @@ export function openWithContextForHref(
   }
   if (c.kind === 'browser-file' && c.path) {
     // Absolute paths may be outside the session workspace → serve via the
-    // $HOME-sandboxed /local-file route; relative paths stay workspace-scoped.
+    // $HOME-sandboxed /files/local route; relative paths stay workspace-scoped.
     const absolutePath = resolveAbsolute(opts.workDir, c.path)
     if (isAbsoluteLocalPath(c.path)) {
       return { kind: 'file', absolutePath, inAppBrowserUrl: localFileUrl(opts.serverBaseUrl, c.path) }

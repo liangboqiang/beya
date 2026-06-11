@@ -130,7 +130,7 @@ Server 为每个 Session spawn 一个 CLI 子进程，通过 stdin/stdout JSON �
 
 ### Sidecar 构建
 
-使用 Bun 编译为独立二进制（`desktop/scripts/build-sidecars.ts`）：
+使用 Bun 编译为独立二进制（`scripts/desktop/build-sidecars.ts`）：
 
 三种模式共用一个入口 `desktop/sidecars/beya-sidecar.ts`：
 - `server` — 启动 HTTP/WS 服务
@@ -146,7 +146,7 @@ Server 为每个 Session spawn 一个 CLI 子进程，通过 stdin/stdout JSON �
 ### 连接地址
 
 ```
-ws://127.0.0.1:{port}/ws/{sessionId}
+ws://127.0.0.1:{port}/sessions/{sessionId}/live
 ```
 
 前端通过 `WebSocketManager`（per-session 连接）管理，支持自动重连、消息队列缓冲、ping 心跳保活。
@@ -155,85 +155,87 @@ ws://127.0.0.1:{port}/ws/{sessionId}
 
 | type | 说明 |
 |------|------|
-| `user_message` | 用户消息（含 content, attachments） |
-| `permission_response` | 权限审批（requestId, allowed, rule） |
-| `set_permission_mode` | 切换权限模式 |
-| `stop_generation` | 停止生成 |
-| `ping` | 心跳 |
+| `session.message.send` | 用户消息（含 content, attachments） |
+| `session.permission.respond` | 权限审批（requestId, allowed, rule） |
+| `session.permission.mode.set` | 切换权限模式 |
+| `session.generation.stop` | 停止生成 |
+| `session.ping` | 心跳 |
 
 ### 服务端 → 客户端
 
 | type | 说明 |
 |------|------|
-| `connected` | 连接成功 |
-| `status` | 状态变更（thinking/generating） |
-| `content_start` / `content_delta` | 流式文本 |
-| `thinking` | Extended Thinking |
-| `tool_use_complete` | 工具调用就绪 |
-| `tool_result` | 工具执行结果 |
-| `permission_request` | 权限请求 |
-| `message_complete` | 消息完成（含 Token 统计） |
-| `error` | 错误通知 |
-| `session_title_updated` | 标题更新 |
-| `team_update` / `team_created` / `team_deleted` | 团队事件 |
-| `task_update` | 任务变更 |
-| `pong` | 心跳响应 |
+| `session.connected` | 连接成功 |
+| `session.status.changed` | 状态变更（thinking/generating） |
+| `session.message.started` / `session.message.delta` | 流式文本 |
+| `session.thinking.delta` | Extended Thinking |
+| `session.tool.completed` | 工具调用就绪 |
+| `session.tool.result` | 工具执行结果 |
+| `session.permission.requested` | 权限请求 |
+| `session.completed` | 消息完成（含 Token 统计） |
+| `session.failed` | 错误通知 |
+| `session.title.updated` | 标题更新 |
+| `session.team.updated` / `session.team.created` / `session.team.deleted` | 团队事件 |
+| `session.task.updated` | 任务变更 |
+| `session.pong` | 心跳响应 |
 
 ### 连接管理
 
-- **心跳**：30s 间隔 ping/pong
+- **心跳**：30s 间隔 `session.ping` / `session.pong`
 - **重连**：指数退避 `min(1000ms × 2^n, 30000ms)`，最多 10 次
 - **缓冲**：未连接时消息暂存队列，恢复后自动发送
 
 ---
 
-## HTTP API
+## Resource RPC
+
+桌面端资源调用统一通过 `/rpc` typed RPC 进入；下表中的路径是 contract resource path，不是公开 HTTP `/api/*` 入口。
 
 ### 会话
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| `GET` | `/api/sessions` | 列表（支持 project/limit/offset 筛选） |
-| `POST` | `/api/sessions` | 创建 |
-| `GET` | `/api/sessions/:id/messages` | 历史消息 |
-| `PATCH` | `/api/sessions/:id` | 重命名 |
-| `DELETE` | `/api/sessions/:id` | 删除 |
-| `GET` | `/api/sessions/:id/git-info` | Git 信息 |
-| `GET` | `/api/sessions/:id/slash-commands` | 可用斜杠命令 |
-| `GET` | `/api/sessions/recent-projects` | 最近项目 |
+| `GET` | `/sessions` | 列表（支持 project/limit/offset 筛选） |
+| `POST` | `/sessions` | 创建 |
+| `GET` | `/sessions/:id/messages` | 历史消息 |
+| `PATCH` | `/sessions/:id` | 重命名 |
+| `DELETE` | `/sessions/:id` | 删除 |
+| `GET` | `/sessions/:id/git-info` | Git 信息 |
+| `GET` | `/sessions/:id/slash-commands` | 可用斜杠命令 |
+| `GET` | `/sessions/recent-projects` | 最近项目 |
 
 ### 模型与提供商
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| `GET/PUT` | `/api/models/current` | 当前模型 |
-| `GET` | `/api/models` | 可用模型列表 |
-| `GET/PUT` | `/api/effort` | Effort 级别 |
-| `GET/POST/PUT/DELETE` | `/api/providers` | 提供商 CRUD |
-| `POST` | `/api/providers/:id/activate` | 激活 |
-| `POST` | `/api/providers/:id/test` | 测试连接 |
-| `GET` | `/api/providers/presets` | 预设列表 |
+| `GET/PUT` | `/models/current` | 当前模型 |
+| `GET` | `/models` | 可用模型列表 |
+| `GET/PUT` | `/effort` | Effort 级别 |
+| `GET/POST/PUT/DELETE` | `/providers` | 提供商 CRUD |
+| `POST` | `/providers/:id/activate` | 激活 |
+| `POST` | `/providers/:id/test` | 测试连接 |
+| `GET` | `/providers/presets` | 预设列表 |
 
 ### 定时任务
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| `GET/POST/PUT/DELETE` | `/api/scheduled-tasks` | 任务 CRUD |
-| `POST` | `/api/scheduled-tasks/:id/run` | 手动运行 |
-| `GET` | `/api/scheduled-tasks/runs` | 运行记录 |
+| `GET/POST/PUT/DELETE` | `/scheduled-tasks` | 任务 CRUD |
+| `POST` | `/scheduled-tasks/:id/run` | 手动运行 |
+| `GET` | `/scheduled-tasks/runs` | 运行记录 |
 
 ### 其他
 
 | 方法 | 端点 | 说明 |
 |------|------|------|
-| `GET` | `/api/teams` | Agent 团队 |
-| `GET` | `/api/teams/:name/members/:agentId/transcript` | 成员转录 |
-| `GET` | `/api/agents` | Agent 定义 |
-| `GET` | `/api/skills` | 技能列表 |
-| `GET/PUT` | `/api/adapters` | 适配器配置 |
-| `GET/PUT` | `/api/settings/user` | 用户设置 |
-| `GET/PUT` | `/api/permissions/mode` | 权限模式 |
-| `GET` | `/api/tasks/lists` | CLI 任务清单 |
+| `GET` | `/teams` | Agent 团队 |
+| `GET` | `/teams/:name/members/:agentId/transcript` | 成员转录 |
+| `GET` | `/agents` | Agent 定义 |
+| `GET` | `/skills` | 技能列表 |
+| `GET/PUT` | `/adapters` | 适配器配置 |
+| `GET/PUT` | `/settings/user` | 用户设置 |
+| `GET/PUT` | `/permissions/mode` | 权限模式 |
+| `GET` | `/tasks/lists` | CLI 任务清单 |
 | `GET` | `/health` | 健康检查 |
 
 ---
@@ -359,7 +361,7 @@ desktop/
 │   └── tauri.conf.json
 ├── sidecars/
 │   └── beya-sidecar.ts            #   统一入口 (server/cli/adapters)
-└── scripts/
+scripts/desktop/
     ├── build-sidecars.ts
     ├── build-macos-arm64.sh
     └── build-windows-x64.ps1

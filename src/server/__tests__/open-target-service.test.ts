@@ -93,7 +93,7 @@ describe('openTargetService', () => {
     expect(result.primaryTargetId).toBe('vscode')
     expect(result.targets.find((target) => target.id === 'finder')?.kind).toBe('file_manager')
     expect(result.targets.find((target) => target.id === 'vscode')?.iconUrl)
-      .toBe('/api/open-targets/icons/vscode')
+      .toBe('/open-target-icons/vscode')
   })
 
   it('does not treat macOS command shims as installed IDEs without the app bundle', async () => {
@@ -118,7 +118,7 @@ describe('openTargetService', () => {
 
     expect(result.targets.map((target) => target.id)).toEqual(['explorer'])
     expect(result.primaryTargetId).toBe('explorer')
-    expect(result.targets[0]?.iconUrl).toBe('/api/open-targets/icons/explorer')
+    expect(result.targets[0]?.iconUrl).toBe('/open-target-icons/explorer')
   })
 
   it('does not include stale Windows command shims without the app executable', async () => {

@@ -8,7 +8,7 @@
  * Both files now import from this shared location instead of each other.
  */
 
-import { HOOK_EVENTS, type HookEvent } from 'src/types/sdkProtocol.js'
+import { HOOK_EVENTS, type HookEvent } from 'src/types/runtimeProtocol.js'
 import { z } from 'zod/v4'
 import { lazySchema } from '../utils/lazySchema.js'
 import { SHELL_TYPES } from '../utils/shell/shellProvider.js'

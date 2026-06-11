@@ -1,189 +1,43 @@
 /**
  * Internal Beya resource router.
  *
- * Public clients enter through /ws/app resource RPC. The /api-prefixed URL
- * shape below is a temporary internal adapter for existing resource handlers.
+ * Public clients enter through /rpc resource RPC. Resource paths are canonical
+ * paths such as /sessions, /settings/user, and /tools. Dispatch is generated
+ * from contracts/resources/v1/resources.yaml so production routing cannot drift
+ * from the contract registry.
  */
 
-import { handleSessionsApi } from './api/sessions.js'
-import { handleSettingsApi } from './api/settings.js'
-import { handleModelsApi } from './api/models.js'
-import { handleScheduledTasksApi } from './api/scheduled-tasks.js'
-import { handleSearchApi } from './api/search.js'
-import { handleAgentsApi } from './api/agents.js'
-import { handleStatusApi } from './api/status.js'
-import { handleConversationsApi } from './api/conversations.js'
-import { handleTeamsApi } from './api/teams.js'
-import { handleFilesystemRoute } from './api/filesystem.js'
-import { handleProvidersApi } from './api/providers.js'
-import { handleLocalCliApi } from './api/local-cli.js'
-import { handleAdaptersApi } from './api/adapters.js'
-import { handlePluginsApi } from './api/plugins.js'
-import { handleSkillsApi } from './api/skills.js'
-import { handleComputerUseApi } from './api/computer-use.js'
-import { handleBeyaOpenAIOAuthApi } from './api/beya-openai-oauth.js'
-import { handleMcpApi } from './api/mcp.js'
-import { handleDiagnosticsApi } from './api/diagnostics.js'
-import { handleDoctorApi } from './api/doctor.js'
-import { handleH5AccessApi } from './api/h5-access.js'
-import { handleActivityStatsApi } from './api/activityStats.js'
-import { handleOpenTargetsApi } from './api/open-targets.js'
-import { handleMemoryApi } from './api/memory.js'
-import { handleDesktopUiApi } from './api/desktop-ui.js'
+import {
+  dispatchGeneratedResourceRequest,
+  type GeneratedResourceRequestOptions,
+} from '../generated/modules/resourceHandlers.js'
 import { errorResponse } from './middleware/errorHandler.js'
-import { handleServerTools } from './api/tools.js'
+import type { handleFilesystemRoute } from './api/filesystem.js'
 
-type ApiRequestOptions = {
+type ResourceRequestOptions = {
   filesystem?: Parameters<typeof handleFilesystemRoute>[3]
 }
 
-export async function handleApiRequest(
+export async function handleResourceRequest(
   req: Request,
   url: URL,
-  options: ApiRequestOptions = {},
+  options: ResourceRequestOptions = {},
 ): Promise<Response> {
   try {
-    return await routeApiRequest(req, url, options)
-  } catch (error) {
-    return errorResponse(error)
-  }
-}
-
-async function routeApiRequest(req: Request, url: URL, options: ApiRequestOptions): Promise<Response> {
-  const path = url.pathname
-  const segments = path.split('/').filter(Boolean) // ['api', 'sessions', ...]
-  if (segments[0] !== 'api') {
-    return Response.json(
-      { error: 'Not Found', message: `Unknown internal resource path: ${path}` },
-      { status: 404 },
-    )
-  }
-
-  // Route to appropriate handler based on the second segment
-  const resource = segments[1]
-
-  switch (resource) {
-    case 'health':
-      if (req.method !== 'GET') {
-        return Response.json(
-          { error: 'Method Not Allowed', message: `Method ${req.method} not allowed on /api/health` },
-          { status: 405 },
-        )
-      }
-      return Response.json({
-        status: 'ok',
-        service: 'beya-server',
-        timestamp: new Date().toISOString(),
-      })
-
-    case 'readiness':
-      if (req.method !== 'GET') {
-        return Response.json(
-          { error: 'Method Not Allowed', message: `Method ${req.method} not allowed on /api/readiness` },
-          { status: 405 },
-        )
-      }
-      return Response.json({
-        status: 'ready',
-        service: 'beya-server',
-        timestamp: new Date().toISOString(),
-      })
-
-    case 'sessions': {
-      // Route /api/sessions/:id/chat/* to conversations handler
-      const subResource = segments[3]
-      if (subResource === 'chat') {
-        return handleConversationsApi(req, url, segments)
-      }
-      return handleSessionsApi(req, url, segments)
+    const firstSegment = url.pathname.split('/').filter(Boolean)[0]
+    if (!firstSegment || firstSegment === 'api') {
+      return Response.json(
+        { error: 'Not Found', message: `Unknown resource path: ${url.pathname}` },
+        { status: 404 },
+      )
     }
 
-    case 'conversations':
-      return handleConversationsApi(req, url, segments)
-
-    case 'settings':
-      return handleSettingsApi(req, url, segments)
-
-    case 'models':
-    case 'effort':
-      return handleModelsApi(req, url, segments)
-
-    case 'permissions':
-      return handleSettingsApi(req, url, segments) // permissions under settings
-
-    case 'scheduled-tasks':
-      return handleScheduledTasksApi(req, url, segments)
-
-    case 'search':
-      return handleSearchApi(req, url, segments)
-
-    case 'agents':
-      return handleAgentsApi(req, url, segments)
-
-    case 'tasks':
-      return handleAgentsApi(req, url, segments)
-
-    case 'status':
-      return handleStatusApi(req, url, segments)
-
-    case 'teams':
-      return handleTeamsApi(req, url, segments)
-
-    case 'providers':
-      return handleProvidersApi(req, url, segments)
-
-    case 'local-cli':
-      return handleLocalCliApi(req, url, segments)
-
-    case 'beya-openai-oauth':
-      return handleBeyaOpenAIOAuthApi(req, url, segments)
-
-    case 'adapters':
-      return handleAdaptersApi(req, url, segments)
-
-    case 'skills':
-      return handleSkillsApi(req, url, segments)
-
-    case 'mcp':
-      return handleMcpApi(req, url, segments)
-
-    case 'plugins':
-      return handlePluginsApi(req, url, segments)
-
-    case 'tools':
-      return handleServerTools(req, url, segments)
-
-    case 'computer-use':
-      return handleComputerUseApi(req, url, segments)
-
-    case 'diagnostics':
-      return handleDiagnosticsApi(req, url, segments)
-
-    case 'doctor':
-      return handleDoctorApi(req, url, segments)
-
-    case 'h5-access':
-      return handleH5AccessApi(req, url, segments)
-
-    case 'activity-stats':
-      return handleActivityStatsApi(req, url, segments)
-
-    case 'open-targets':
-      return handleOpenTargetsApi(req, url, segments)
-
-    case 'memory':
-      return handleMemoryApi(req, url, segments)
-
-    case 'desktop-ui':
-      return handleDesktopUiApi(req, url, segments)
-
-    case 'filesystem':
-      return handleFilesystemRoute(url.pathname, url, req, options.filesystem)
-
-    default:
-      return Response.json(
-        { error: 'Not Found', message: `Unknown resource: ${resource}` },
-        { status: 404 }
-      )
+    return await dispatchGeneratedResourceRequest(
+      req,
+      url,
+      options as GeneratedResourceRequestOptions,
+    )
+  } catch (error) {
+    return errorResponse(error)
   }
 }

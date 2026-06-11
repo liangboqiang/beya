@@ -86,10 +86,10 @@ describe('POST /api/beya-openai-oauth/start', () => {
       'codex_cli_simplified_flow=true',
     )
     expect(data.authorizeUrl).toContain(
-      encodeURIComponent(`http://localhost:${callbackPort}/auth/callback`),
+      encodeURIComponent(`http://localhost:${callbackPort}/oauth/openai/callback`),
     )
     expect(data.authorizeUrl).not.toContain(
-      encodeURIComponent('http://localhost:54321/auth/callback'),
+      encodeURIComponent('http://localhost:54321/oauth/openai/callback'),
     )
     expect(data.authorizeUrl).not.toContain('originator=')
     expect(data.state).toMatch(/^[a-f0-9]{64}$/)
@@ -186,16 +186,16 @@ describe('DELETE /api/beya-openai-oauth', () => {
   })
 })
 
-describe('GET /auth/callback', () => {
+describe('GET /oauth/openai/callback', () => {
   beforeEach(setup)
   afterEach(teardown)
 
-  test('routes the OpenAI Codex redirect path to the desktop callback page', async () => {
+  test('routes the Beya OpenAI redirect path to the desktop callback page', async () => {
     const port = await getFreePort()
     const originalServerPort = ProviderService.getServerPort()
     const server = startServer(port, '127.0.0.1')
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/auth/callback`)
+      const res = await fetch(`http://127.0.0.1:${port}/oauth/openai/callback`)
       expect(res.status).toBe(200)
       const html = await res.text()
       expect(html).toContain('OpenAI Login Failed')

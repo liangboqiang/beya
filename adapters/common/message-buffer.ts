@@ -1,7 +1,7 @@
 /**
  * 流式消息缓冲
  *
- * 将 content_delta 累积后按时间窗口或字符数批量 flush。
+ * 将 session.message.delta 累积后按时间窗口或字符数批量 flush。
  * 用于 Telegram editMessage / 飞书流式卡片更新。
  */
 
@@ -33,7 +33,7 @@ export class MessageBuffer {
     }
   }
 
-  /** Immediately flush all remaining content (called on message_complete). */
+  /** Immediately flush all remaining content (called on session.completed). */
   async complete(): Promise<void> {
     if (this.timer) {
       clearTimeout(this.timer)

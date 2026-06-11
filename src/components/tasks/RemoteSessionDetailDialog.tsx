@@ -1,7 +1,7 @@
 import { c as _c } from "react/compiler-runtime";
 import figures from 'figures';
 import React, { useMemo, useState } from 'react';
-import type { SDKMessage } from 'src/types/sdkProtocol.js';
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js';
 import type { ToolUseContext } from 'src/Tool.js';
 import type { DeepImmutable } from 'src/types/utils.js';
 import type { CommandResultDisplay } from '../../commands.js';
@@ -792,7 +792,7 @@ export function RemoteSessionDetailDialog({
   // Ultraplan/review sessions never read this —skip the normalize work for them.
   const lastMessages = useMemo(() => {
     if (session.isUltraplan || session.isRemoteReview) return [];
-    return normalizeMessages(toInternalMessages(session.log as SDKMessage[])).filter(_ => _.type !== 'progress').slice(-3);
+    return normalizeMessages(toInternalMessages(session.log as RuntimeMessage[])).filter(_ => _.type !== 'progress').slice(-3);
   }, [session]);
   if (session.isUltraplan) {
     return <UltraplanSessionDetail session={session} onDone={onDone} onBack={onBack} onKill={onKill} />;

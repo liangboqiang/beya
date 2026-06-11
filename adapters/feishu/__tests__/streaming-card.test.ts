@@ -536,7 +536,7 @@ describe('StreamingCard: 错误处理', () => {
     expect(calls.some((c) => c.api === 'im.message.patch')).toBe(false)
   })
 
-  it('CardKit 中间帧请求挂住时不会阻塞 message_complete 收尾', async () => {
+  it('CardKit 中间帧请求挂住时不会阻塞 session.completed 收尾', async () => {
     const previousTimeout = process.env.BEYA_IM_CARD_REQUEST_TIMEOUT_MS
     process.env.BEYA_IM_CARD_REQUEST_TIMEOUT_MS = '20'
     try {
@@ -763,8 +763,8 @@ describe('StreamingCard: 真实事件流（用户场景回归）', () => {
     const creating = sc.ensureCreated()
     await creating // 等卡可写
 
-    // 2. 服务端: status streaming + content_start{text} (thinking block)
-    //    feishu/index.ts 的 content_start text 分支会再 await ensureCreated（no-op）
+    // 2. 服务端: session.status.changed streaming + session.message.started{text} (thinking block)
+    //    feishu/index.ts 的 session.message.started text 分支会再 await ensureCreated（no-op）
     // (no direct call here — 等同于 no-op)
 
     // 3. 服务端: thinking deltas（5 个增量，间隔 30ms 模拟流式）
@@ -791,7 +791,7 @@ describe('StreamingCard: 真实事件流（用户场景回归）', () => {
     expect(lastReasoningContent).toContain('breaking changes')
     expect(lastReasoningContent).toContain('git log first')
 
-    // 4. 服务端: content_start{tool_use, name: 'Bash'}
+    // 4. 服务端: session.message.started{tool_use, name: 'Bash'}
     sc.startTool('tu_bash_1', 'Bash')
     await sleep(150)
 
@@ -802,7 +802,7 @@ describe('StreamingCard: 真实事件流（用户场景回归）', () => {
     expect(lastWithTool).toContain('⚙️')
     expect(lastWithTool).toContain('🛠️')
 
-    // 5. 服务端: tool_use_complete
+    // 5. 服务端: session.tool.completed
     sc.completeTool('tu_bash_1', 'Bash')
     await sleep(150)
 
@@ -838,7 +838,7 @@ describe('StreamingCard: 真实事件流（用户场景回归）', () => {
     expect(lastWithText).toContain('破坏性变更分析') // answer (post optimize: H2→H5)
     expect(lastWithText).toContain('API 重命名')
 
-    // 8. message_complete → finalize
+    // 8. session.completed → finalize
     await sc.finalize()
     expect(sc._getPhase()).toBe('completed')
 

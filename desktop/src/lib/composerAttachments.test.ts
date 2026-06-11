@@ -15,14 +15,14 @@ describe('composer attachment payloads', () => {
       mimeType: 'application/octet-stream',
     }))
     const oldInlinePayload = JSON.stringify({
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'analyze these files',
       attachments: oldInlineAttachments,
     })
 
     const pathOnlyAttachments = files.map(pathToComposerAttachment)
     const pathOnlyPayload = JSON.stringify({
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'analyze these files',
       attachments: pathOnlyAttachments,
     })

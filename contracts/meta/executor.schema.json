@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://beya.local/contracts/meta/executor.schema.json",
+  "title": "Beya Executor Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "kind", "owner", "stability", "implementation"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.-]*$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["agent", "workflow", "capability"]
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "stability": {
+      "type": "string",
+      "enum": ["experimental", "stable", "deprecated"]
+    },
+    "description": { "type": "string" },
+    "input": { "type": "object" },
+    "output": { "type": "object" },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module", "export"],
+      "properties": {
+        "module": { "type": "string" },
+        "export": {
+          "type": "string",
+          "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"
+        }
+      }
+    },
+    "emits": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "consumes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

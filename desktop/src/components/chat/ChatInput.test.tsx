@@ -466,7 +466,7 @@ describe('ChatInput file mentions', () => {
     })
     expect(mocks.delete).toHaveBeenCalledWith(sessionId)
     expect(mocks.wsSend).toHaveBeenCalledWith('created-direct', {
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'run on feature branch',
       attachments: [],
     })
@@ -533,7 +533,7 @@ describe('ChatInput file mentions', () => {
     })
     expect(mocks.delete).toHaveBeenCalledWith(sessionId)
     expect(mocks.wsSend).toHaveBeenCalledWith('created-worktree', {
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'run in a worktree',
       attachments: [],
     })
@@ -572,7 +572,7 @@ describe('ChatInput file mentions', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(mocks.wsSend).toHaveBeenCalledWith(sessionId, {
-      type: 'user_message',
+      type: 'session.message.send',
       content: '记一下这个文件讲了什么东西。',
       attachments: [{
         type: 'file',
@@ -635,7 +635,7 @@ describe('ChatInput file mentions', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(mocks.wsSend).toHaveBeenCalledWith(sessionId, {
-      type: 'user_message',
+      type: 'session.message.send',
       content: '请看 @"src/App.tsx" 实现',
       attachments: [{
         type: 'file',
@@ -688,7 +688,7 @@ describe('ChatInput file mentions', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(mocks.wsSend).toHaveBeenCalledWith(sessionId, {
-      type: 'user_message',
+      type: 'session.message.send',
       content: '讲一下这个目录。',
       attachments: [{
         type: 'file',
@@ -738,7 +738,7 @@ describe('ChatInput file mentions', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(mocks.wsSend).toHaveBeenCalledWith(sessionId, {
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'analyze these',
       attachments: [
         expect.objectContaining({
@@ -815,7 +815,7 @@ describe('ChatInput file mentions', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     expect(mocks.wsSend).toHaveBeenCalledWith(sessionId, {
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'analyze dropped file',
       attachments: [
         expect.objectContaining({
@@ -944,7 +944,7 @@ describe('ChatInput file mentions', () => {
 
     fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true })
     expect(mocks.wsSend).toHaveBeenCalledWith(sessionId, {
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'avoid accidental sends',
       attachments: [],
     })

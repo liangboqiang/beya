@@ -67,7 +67,7 @@ export type {
 }
 
 import type { QuerySource } from './constants/querySource.js'
-import type { SDKStatus } from 'src/types/sdkProtocol.js'
+import type { RuntimeStatus } from 'src/types/runtimeProtocol.js'
 import type {
   HookProgress,
   PromptRequest,
@@ -247,7 +247,7 @@ export type ToolUseContext = {
   pushApiMetricsEntry?: (ttftMs: number) => void
   setStreamMode?: (mode: SpinnerMode) => void
   onCompactProgress?: (event: CompactProgressEvent) => void
-  setSDKStatus?: (status: SDKStatus) => void
+  setRuntimeStatus?: (status: RuntimeStatus) => void
   openMessageSelector?: () => void
   updateFileHistoryState: (
     updater: (prev: FileHistoryState) => FileHistoryState,

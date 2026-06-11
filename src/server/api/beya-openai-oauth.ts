@@ -2,8 +2,7 @@
  * Beya OpenAI OAuth REST API
  *
  * POST   /api/beya-openai-oauth/start    — 生成 PKCE+state,返回 authorize URL
- * GET    /auth/callback                  — 用户浏览器 redirect 到此,完成 token 交换
- * GET    /callback/openai                — 兼容旧路径
+ * GET    /oauth/openai/callback          — 用户浏览器 redirect 到此,完成 token 交换
  * GET    /api/beya-openai-oauth          — 查询当前登录状态(不回传 token 本体)
  * DELETE /api/beya-openai-oauth          — 登出,删除 token 文件
  */

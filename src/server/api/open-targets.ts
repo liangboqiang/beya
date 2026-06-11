@@ -37,25 +37,6 @@ export async function handleOpenTargetsApi(
       return Response.json(await openTargetService.openTarget({ targetId, path }))
     }
 
-    if (action === 'icons') {
-      if (req.method !== 'GET') {
-        throw new ApiError(405, `Method ${req.method} not allowed`, 'METHOD_NOT_ALLOWED')
-      }
-
-      const targetId = typeof segments[3] === 'string' ? decodeURIComponent(segments[3]).trim() : ''
-      if (!targetId) {
-        throw ApiError.badRequest('Missing open target icon id')
-      }
-
-      const icon = await openTargetService.getTargetIcon(targetId)
-      return new Response(icon.data, {
-        headers: {
-          'Cache-Control': 'private, max-age=86400',
-          'Content-Type': icon.contentType,
-        },
-      })
-    }
-
     throw ApiError.notFound(`Unknown open-targets endpoint: ${action}`)
   } catch (error) {
     return errorResponse(error)

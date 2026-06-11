@@ -1,5 +1,5 @@
 import { resolve } from 'path'
-import type { HookEvent } from 'src/types/sdkProtocol.js'
+import type { HookEvent } from 'src/types/runtimeProtocol.js'
 import { getSessionId } from '../../bootstrap/state.js'
 import type { EditableSettingSource } from '../settings/constants.js'
 import { SOURCES } from '../settings/constants.js'

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { ImageGalleryModal } from './ImageGalleryModal'
 import { getBaseUrl } from '../../api/client'
 import { extractAssistantOutputTargets } from '../../lib/assistantOutputTargets'
-import { previewFsUrl } from '../../lib/handlePreviewLink'
+import { localFileUrl, previewFsUrl } from '../../lib/handlePreviewLink'
 import { getServerBaseUrl } from '../../lib/desktopRuntime'
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i
@@ -31,7 +31,7 @@ export function extractImagePaths(text: string): string[] {
 }
 
 function fileUrl(filePath: string): string {
-  return `${getBaseUrl()}/api/filesystem/file?path=${encodeURIComponent(filePath)}`
+  return localFileUrl(getBaseUrl(), filePath)
 }
 
 function fileName(filePath: string): string {
@@ -47,8 +47,8 @@ type Props = {
   text: string
   /**
    * When provided, relative workspace image paths (e.g. `outputs/foo/frame.png`)
-   * are also rendered inline, served via `/preview-fs/<sessionId>/...`. Absent
-   * (ToolResult/ToolCall usage) keeps the legacy absolute-path-only behavior.
+   * are also rendered inline, served via `/files/preview/<sessionId>/...`. Absent
+   * (ToolResult/ToolCall usage) keeps absolute-path-only behavior.
    */
   sessionId?: string
   workDir?: string | null
@@ -60,7 +60,7 @@ export function InlineImageGallery({ text, sessionId, workDir }: Props) {
   const imagePaths = useMemo(() => extractImagePaths(text), [text])
 
   const images = useMemo<GalleryImage[]>(() => {
-    // 1. Absolute paths (legacy behavior) — served via /api/filesystem/file.
+    // 1. Absolute paths served via /files/local.
     const absolute: GalleryImage[] = imagePaths.map((p) => ({ src: fileUrl(p), name: fileName(p) }))
 
     if (!sessionId) {
@@ -68,7 +68,7 @@ export function InlineImageGallery({ text, sessionId, workDir }: Props) {
     }
 
     // 2. Relative workspace images — only when a sessionId is available so we can
-    //    build a /preview-fs URL. Reuses the sandboxed target extractor instead of
+    //    build a /files/preview URL. Reuses the sandboxed target extractor instead of
     //    a bespoke relative-path regex.
     const base = getServerBaseUrl()
     const relativeTargets = extractAssistantOutputTargets(text, { workDir }).filter(

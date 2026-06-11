@@ -42,7 +42,7 @@ function createWebSocket(sessionId: string): Promise<{
       reject: (err: Error) => void
     }> = []
 
-    const ws = new WebSocket(`${WS_URL}/ws/${sessionId}`)
+    const ws = new WebSocket(`${WS_URL}/sessions/${sessionId}/live`)
 
     ws.onmessage = (event) => {
       try {
@@ -195,7 +195,7 @@ async function testWebSocketConnect() {
   console.log('\n── Test 5: WebSocket Connect ──')
   const sessionId = uuid()
   const client = await createWebSocket(sessionId)
-  const connMsg = await client.waitForType('connected', 5000)
+  const connMsg = await client.waitForType('session.connected', 5000)
   if (connMsg.sessionId !== sessionId) {
     throw new Error(`Session ID mismatch: ${connMsg.sessionId} !== ${sessionId}`)
   }
@@ -210,11 +210,11 @@ async function testWebSocketPing() {
   console.log('\n── Test 6: WebSocket Ping/Pong ──')
   const sessionId = uuid()
   const client = await createWebSocket(sessionId)
-  await client.waitForType('connected', 5000)
+  await client.waitForType('session.connected', 5000)
 
   client.ws.send(JSON.stringify({ type: 'ping' }))
-  const pong = await client.waitForType('pong', 5000)
-  if (pong.type !== 'pong') {
+  const pong = await client.waitForType('session.pong', 5000)
+  if (pong.type !== 'session.pong') {
     throw new Error('Pong not received')
   }
   client.close()
@@ -230,13 +230,13 @@ async function testRealLLMChat() {
 
   const sessionId = uuid()
   const client = await createWebSocket(sessionId)
-  await client.waitForType('connected', 5000)
+  await client.waitForType('session.connected', 5000)
   console.log(`   Session: ${sessionId}`)
 
   // Send a simple message
   client.ws.send(
     JSON.stringify({
-      type: 'user_message',
+      type: 'session.message.send',
       content: 'Say "hello world" and nothing else. Keep it short.',
     })
   )
@@ -249,7 +249,7 @@ async function testRealLLMChat() {
 
   // Wait for either content_delta (success) or error
   const responseMsg = await client.waitForAny(
-    ['content_delta', 'content_start', 'error', 'message_complete'],
+    ['session.message.delta', 'content_start', 'error', 'session.completed'],
     120000 // 2 minutes for LLM response
   )
 
@@ -262,13 +262,13 @@ async function testRealLLMChat() {
 
   // Collect all messages until message_complete
   let fullText = ''
-  if (responseMsg.type === 'content_delta' && responseMsg.text) {
+  if (responseMsg.type === 'session.message.delta' && responseMsg.text) {
     fullText += responseMsg.text
   }
 
   // Wait for message_complete
   try {
-    const complete = await client.waitForType('message_complete', 120000)
+    const complete = await client.waitForType('session.completed', 120000)
     console.log(`   Usage: input=${complete.usage?.input_tokens}, output=${complete.usage?.output_tokens}`)
   } catch {
     console.log('   Warning: message_complete not received within timeout')
@@ -276,7 +276,7 @@ async function testRealLLMChat() {
 
   // Gather all content_delta text
   for (const msg of client.messages) {
-    if (msg.type === 'content_delta' && msg.text) {
+    if (msg.type === 'session.message.delta' && msg.text) {
       if (!fullText.includes(msg.text)) {
         fullText += msg.text
       }
