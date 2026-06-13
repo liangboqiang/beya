@@ -9,7 +9,7 @@ import { isPolicyAllowed } from 'src/services/policyLimits/index.js';
 import { z } from 'zod/v4';
 import { getTeleportErrors, TeleportError, type TeleportLocalErrorType } from '../components/TeleportError.js';
 import { getOauthConfig } from '../constants/oauth.js';
-import type { SDKMessage } from 'src/types/sdkProtocol.js';
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js';
 import type { Root } from '../ink.js';
 import { KeybindingSetup } from '../keybindings/KeybindingProviderSetup.js';
 import { queryFastModel } from '../services/api/claude.js';
@@ -619,7 +619,7 @@ export async function teleportFromSessionsAPI(sessionId: string, orgUUID: string
  * Response type for polling remote session events (uses SDK events format)
  */
 export type PollRemoteSessionResponse = {
-  newEvents: SDKMessage[];
+  newEvents: RuntimeMessage[];
   lastEventId: string | null;
   branch?: string;
   sessionStatus?: 'idle' | 'running' | 'requires_action' | 'archived';
@@ -656,7 +656,7 @@ export async function pollRemoteSessionEvents(sessionId: string, afterId: string
 
   // Cap is a safety valve against stuck cursors; steady-state is 0— pages.
   const MAX_EVENT_PAGES = 50;
-  const sdkMessages: SDKMessage[] = [];
+  const sdkMessages: RuntimeMessage[] = [];
   let cursor = afterId;
   for (let page = 0; page < MAX_EVENT_PAGES; page++) {
     const eventsResponse = await axios.get(eventsUrl, {
@@ -679,7 +679,7 @@ export async function pollRemoteSessionEvents(sessionId: string, afterId: string
           continue;
         }
         if ('session_id' in event) {
-          sdkMessages.push(event as SDKMessage);
+          sdkMessages.push(event as RuntimeMessage);
         }
       }
     }

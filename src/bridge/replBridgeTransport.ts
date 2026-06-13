@@ -1,4 +1,4 @@
-import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
+import type { StdoutMessage } from 'src/entrypoints/runtime/controlTypes.js'
 import { CCRClient } from '../cli/transports/ccrClient.js'
 import type { HybridTransport } from '../cli/transports/HybridTransport.js'
 import { SSETransport } from '../cli/transports/SSETransport.js'
@@ -186,7 +186,7 @@ export async function createV2ReplTransport(opts: {
   )
 
   // Derive SSE stream URL. Same logic as transportUtils.ts:26-33 but
-  // starting from an http(s) base instead of a --sdk-url that might be ws://.
+  // starting from an http(s) base instead of a --runtime-url that might be ws://.
   const sseUrl = new URL(sessionUrl)
   sseUrl.pathname = sseUrl.pathname.replace(/\/$/, '') + '/worker/events/stream'
 

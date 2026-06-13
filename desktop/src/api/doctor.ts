@@ -58,8 +58,8 @@ export type DoctorReportRepairResponse = {
 }
 
 export const doctorApi = {
-  report: () => api.get<{ report: DoctorReport }>('/api/doctor/report', { timeout: 3_000 }),
-  repair: () => api.post<{ result: DoctorRepairResult }>('/api/doctor/repair', {}, { timeout: 3_000 }),
+  report: () => api.get<{ report: DoctorReport }>('/doctor/report', { timeout: 3_000 }),
+  repair: () => api.post<{ result: DoctorRepairResult }>('/doctor/repair', {}, { timeout: 3_000 }),
   reportAndRepair: async (): Promise<DoctorReportRepairResponse> => {
     const [{ report }, { result }] = await Promise.all([
       doctorApi.report(),

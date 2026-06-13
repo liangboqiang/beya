@@ -11,8 +11,8 @@
 
 ```mermaid
 flowchart TD
-    A["Desktop Webapp<br/>Settings -> IM 接入"] --> B["GET / PUT /api/adapters"]
-    B --> C["Desktop Server<br/>配置接口"]
+    A["Desktop Webapp<br/>Settings -> IM 接入"] --> B["adapters.configread / adapters.configupdate"]
+    B --> C["Desktop Server<br/>/rpc resource gateway"]
     C --> D["本地配置持久化"]
     D --> E["~/.beya/adapters.json"]
 
@@ -25,10 +25,10 @@ flowchart TD
     F --> K{"当前 chatId<br/>是否已有 session?"}
     K -->|有历史映射| L["复用已有 sessionId"]
     K -->|无历史映射| M["解析工作目录<br/>defaultProjectDir 或当前用户工作目录"]
-    M --> N["POST /api/sessions<br/>创建新 session"]
+    M --> N["sessions.create<br/>创建新 session"]
 
     N --> Q["获得 sessionId"]
-    L --> R["连接 /ws/:sessionId"]
+    L --> R["连接 /sessions/{sessionId}/live"]
     Q --> R
 
     R --> S["adapters/common/ws-bridge.ts"]
@@ -46,7 +46,7 @@ flowchart TD
 - 配置层：桌面端 webapp 负责填写平台凭据、默认项目和配对码管理
 - 存储层：本地服务端把配置写入 `~/.beya/adapters.json`
 - 适配层：微信 / 钉钉 / Telegram / 飞书 adapter 进程负责接 IM 平台、做授权检查、恢复或创建会话
-- 会话层：adapter 通过 HTTP 创建 session，再通过 WebSocket 把 IM 消息桥接到 Beya 会话
+- 会话层：adapter 通过 `/rpc` 创建 session，再通过 WebSocket 把 IM 消息桥接到 Beya 会话
 
 ## 用户怎么用
 
@@ -59,7 +59,7 @@ flowchart TD
 - 微信 / 钉钉扫码绑定，或填写 Telegram / 飞书各自的凭据
 - 可选 `allowedUsers`
 
-这里的配置会通过 `GET /api/adapters` 和 `PUT /api/adapters` 读写到 `~/.beya/adapters.json`。
+这里的配置会通过 `/rpc` 上的 `adapters.configread` 和 `adapters.configupdate` 读写到 `~/.beya/adapters.json`。
 
 ### 2. 生成配对码
 
@@ -113,8 +113,8 @@ bun run dingtalk
 
 其中：
 
-- 敏感字段会在 API 返回时被脱敏
-- 配对码也会被 `/api/adapters` 返回值掩码为 `******`
+- 敏感字段会在 RPC 返回时被脱敏
+- 配对码也会被 `adapters.configread` 返回值掩码为 `******`
 
 ### `~/.beya/adapter-sessions.json`
 
@@ -143,12 +143,12 @@ bun run dingtalk
 
 Adapter 不是直接把消息丢给一个全局 Beya 进程，而是：
 
-1. 先用 `POST /api/sessions` 创建 session
-2. 再用 `ws://.../ws/:sessionId` 建立桥接
+1. 先用 `/rpc` 的 `sessions.create` 创建 session
+2. 再用 `ws://.../sessions/{sessionId}/live` 建立桥接
 3. 把 IM 消息转成：
-   - `user_message`
-   - `permission_response`
-   - `stop_generation`
+   - `session.message.send`
+   - `session.permission.respond`
+   - `session.generation.stop`
 4. 把服务端流式消息再格式化回 IM
 
 如果没有 `defaultProjectDir`，Adapter 会优先使用当前用户工作目录作为新 session 的工作目录，避免扫码绑定后还必须先在桌面端打开项目。

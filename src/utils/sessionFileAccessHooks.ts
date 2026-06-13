@@ -5,7 +5,7 @@
  */
 import { feature } from 'bun:bundle'
 import { registerHookCallbacks } from '../bootstrap/state.js'
-import type { HookInput, HookJSONOutput } from 'src/types/sdkProtocol.js'
+import type { HookInput, HookJSONOutput } from 'src/types/runtimeProtocol.js'
 import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,

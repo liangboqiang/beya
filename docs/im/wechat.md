@@ -64,7 +64,7 @@
 - `/new` 或 `新会话` — 清空当前 chat 绑定的 session，并重新选择项目
 - `/new <编号、项目名或绝对路径>` — 直接在指定项目下新建会话
 - `/clear` 或 `清空` — 清空当前会话上下文，保留项目绑定
-- `/stop` 或 `停止` — 向当前 session 发送 `stop_generation`
+- `/stop` 或 `停止` — 向当前 session 发送 `session.generation.stop`
 
 ## 权限审批
 

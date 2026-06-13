@@ -60,7 +60,7 @@ export type ActivityStatsResponse = ActivityStats & {
 export const activityStatsApi = {
   async getStats(range: ActivityStatsRange = 'all'): Promise<ActivityStatsResponse> {
     const suffix = range === 'all' ? '' : `/${range}`
-    const response = await api.get<ActivityStatsApiResponse>(`/api/activity-stats${suffix}`, { timeout: 120_000 })
+    const response = await api.get<ActivityStatsApiResponse>(`/activity-stats${suffix}`, { timeout: 120_000 })
     return {
       ...response.stats,
       range: response.range,

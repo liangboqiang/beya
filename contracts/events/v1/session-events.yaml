@@ -1,0 +1,23 @@
+name: events.session
+version: v1
+domain: events
+stability: stable
+description: Internal event bus names emitted from session and runtime modules.
+transport:
+  kind: event-bus
+  path: /internal/events
+events:
+  - name: session.created
+    direction: internal
+  - name: session.updated
+    direction: internal
+  - name: session.deleted
+    direction: internal
+  - name: session.runtime.started
+    direction: internal
+  - name: session.runtime.stopped
+    direction: internal
+  - name: session.permission.requested
+    direction: internal
+  - name: session.permission.resolved
+    direction: internal

@@ -2,7 +2,7 @@ import chalk from 'chalk'
 import { writeSync } from 'fs'
 import memoize from 'lodash-es/memoize.js'
 import { onExit } from 'signal-exit'
-import type { ExitReason } from 'src/types/sdkProtocol.js'
+import type { ExitReason } from 'src/types/runtimeProtocol.js'
 import {
   getIsInteractive,
   getIsScrollDraining,
@@ -256,7 +256,7 @@ export const setupGracefulShutdown = memoize(() => {
     // In print mode, print.ts registers its own SIGINT handler that aborts
     // the in-flight query and calls gracefulShutdown(0); skip here to
     // avoid racing with it. Only check print mode —other non-interactive
-    // sessions (--sdk-url, --init-only, non-TTY) don't register their own
+    // sessions (--runtime-url, --init-only, non-TTY) don't register their own
     // SIGINT handler and need gracefulShutdown to run.
     if (process.argv.includes('-p') || process.argv.includes('--print')) {
       return

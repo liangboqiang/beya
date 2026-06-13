@@ -325,7 +325,7 @@ function buildWorkspacePath(
   }
 
   const qs = query.toString()
-  return `/api/sessions/${sessionId}/workspace/${resource}${qs ? `?${qs}` : ''}`
+  return `/sessions/${sessionId}/workspace/${resource}${qs ? `?${qs}` : ''}`
 }
 
 export const sessionsApi = {
@@ -335,52 +335,52 @@ export const sessionsApi = {
     if (params?.limit) query.set('limit', String(params.limit))
     if (params?.offset) query.set('offset', String(params.offset))
     const qs = query.toString()
-    return api.get<SessionsResponse>(`/api/sessions${qs ? `?${qs}` : ''}`)
+    return api.get<SessionsResponse>(`/sessions${qs ? `?${qs}` : ''}`)
   },
 
   getMessages(sessionId: string) {
-    return api.get<MessagesResponse>(`/api/sessions/${sessionId}/history`)
+    return api.get<MessagesResponse>(`/sessions/${sessionId}/history`)
   },
 
   create(input?: string | CreateSessionRequest) {
     const body = typeof input === 'string'
       ? (input ? { workDir: input } : {})
       : (input ?? {})
-    return api.post<CreateSessionResponse>('/api/sessions', body)
+    return api.post<CreateSessionResponse>('/sessions', body)
   },
 
   branch(sessionId: string, body: BranchSessionRequest) {
-    return api.post<BranchSessionResponse>(`/api/sessions/${sessionId}/branch`, body)
+    return api.post<BranchSessionResponse>(`/sessions/${sessionId}/branch`, body)
   },
 
   delete(sessionId: string) {
-    return api.delete<{ ok: true }>(`/api/sessions/${sessionId}`)
+    return api.delete<{ ok: true }>(`/sessions/${sessionId}`)
   },
 
   batchDelete(sessionIds: string[]) {
-    return api.post<BatchDeleteSessionsResponse>('/api/sessions/batch-delete', { sessionIds })
+    return api.post<BatchDeleteSessionsResponse>('/sessions/batch-delete', { sessionIds })
   },
 
   rename(sessionId: string, title: string) {
-    return api.patch<{ ok: true }>(`/api/sessions/${sessionId}`, { title })
+    return api.patch<{ ok: true }>(`/sessions/${sessionId}`, { title })
   },
 
   getRecentProjects(limit?: number) {
     const query = typeof limit === 'number' ? `?limit=${limit}` : ''
-    return api.get<{ projects: RecentProject[] }>(`/api/sessions/recent-projects${query}`)
+    return api.get<{ projects: RecentProject[] }>(`/sessions/recent-projects${query}`)
   },
 
   getRepositoryContext(workDir: string) {
     const query = new URLSearchParams({ workDir })
-    return api.get<RepositoryContextResult>(`/api/sessions/repository-context?${query.toString()}`)
+    return api.get<RepositoryContextResult>(`/sessions/repository-context?${query.toString()}`)
   },
 
   getGitInfo(sessionId: string) {
-    return api.get<SessionGitInfo>(`/api/sessions/${sessionId}/git-info`)
+    return api.get<SessionGitInfo>(`/sessions/${sessionId}/git-info`)
   },
 
   getSlashCommands(sessionId: string) {
-    return api.get<{ commands: Array<{ name: string; description: string; argumentHint?: string }> }>(`/api/sessions/${sessionId}/slash-commands`)
+    return api.get<{ commands: Array<{ name: string; description: string; argumentHint?: string }> }>(`/sessions/${sessionId}/slash-commands`)
   },
 
   getInspection(sessionId: string, options?: { includeContext?: boolean; timeout?: number; contextOnly?: boolean }) {
@@ -392,7 +392,7 @@ export const sessionsApi = {
       query.set('contextOnly', '1')
     }
     const suffix = query.size > 0 ? `?${query.toString()}` : ''
-    return api.get<SessionInspectionResponse>(`/api/sessions/${sessionId}/inspection${suffix}`, {
+    return api.get<SessionInspectionResponse>(`/sessions/${sessionId}/inspection${suffix}`, {
       timeout: options?.timeout ?? (options?.includeContext ? 45_000 : 25_000),
     })
   },
@@ -414,7 +414,7 @@ export const sessionsApi = {
   },
 
   getTurnCheckpoints(sessionId: string) {
-    return api.get<SessionTurnCheckpointsResponse>(`/api/sessions/${sessionId}/turn-checkpoints`)
+    return api.get<SessionTurnCheckpointsResponse>(`/sessions/${sessionId}/turn-checkpoints`)
   },
 
   getTurnCheckpointDiff(
@@ -430,7 +430,7 @@ export const sessionsApi = {
     }
     query.set('path', workspacePath)
     return api.get<TurnCheckpointDiffResult>(
-      `/api/sessions/${sessionId}/turn-checkpoints/diff?${query.toString()}`,
+      `/sessions/${sessionId}/turn-checkpoints/diff?${query.toString()}`,
     )
   },
 
@@ -440,7 +440,7 @@ export const sessionsApi = {
     expectedContent?: string
     dryRun?: boolean
   }) {
-    return api.post<SessionRewindResponse>(`/api/sessions/${sessionId}/rewind`, body, {
+    return api.post<SessionRewindResponse>(`/sessions/${sessionId}/rewind`, body, {
       timeout: 60_000,
     })
   },

@@ -1,7 +1,7 @@
 /**
  * Telegram Adapter for Beya Desktop
  *
- * 基于 grammY 的轻量 Telegram Bot，直连服务端 /ws/:sessionId。
+ * 基于 grammY 的轻量 Telegram Bot，直连服务端 /sessions/:sessionId/live。
  * 启动：TELEGRAM_BOT_TOKEN=xxx bun run telegram/index.ts
  */
 
@@ -394,10 +394,10 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
   const runtime = getRuntimeState(chatId)
 
   switch (msg.type) {
-    case 'connected':
+    case 'session.connected':
       break
 
-    case 'status':
+    case 'session.status.changed':
       runtime.state = msg.state
       runtime.verb = typeof msg.verb === 'string' ? msg.verb : undefined
       if (msg.state === 'thinking' && !placeholders.has(chatId)) {
@@ -408,7 +408,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       }
       break
 
-    case 'content_start':
+    case 'session.message.started':
       if (msg.blockType === 'text') {
         accumulatedThinkingText.delete(chatId)
         if (!placeholders.has(chatId)) {
@@ -439,7 +439,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       }
       break
 
-    case 'content_delta':
+    case 'session.message.delta':
       if (msg.text) {
         accumulatedThinkingText.delete(chatId)
         buf.append(msg.text)
@@ -450,7 +450,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       }
       break
 
-    case 'thinking':
+    case 'session.thinking.delta':
       if (placeholders.has(chatId)) {
         const update = buildTelegramThinkingUpdate(
           accumulatedThinkingText.get(chatId) ?? '',
@@ -467,16 +467,16 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       }
       break
 
-    case 'tool_use_complete':
+    case 'session.tool.completed':
       // Tool details are noise for IM users; visible in Desktop if needed.
       break
 
-    case 'tool_result':
+    case 'session.tool.result':
       // Tool errors are handled internally by the AI (retries etc.)
       // No need to notify the user for every failed attempt.
       break
 
-    case 'permission_request': {
+    case 'session.permission.requested': {
       runtime.pendingPermissionCount += 1
       runtime.state = 'permission_pending'
       const pending = pendingPermissions.get(chatId) ?? new Set<string>()
@@ -492,7 +492,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       break
     }
 
-    case 'message_complete':
+    case 'session.completed':
       runtime.state = 'idle'
       runtime.verb = undefined
       await buf.complete()
@@ -515,7 +515,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       }
       break
 
-    case 'error':
+    case 'session.failed':
       runtime.state = 'idle'
       runtime.verb = undefined
       accumulatedThinkingText.delete(chatId)
@@ -543,7 +543,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       }
       break
 
-    case 'system_notification':
+    case 'session.system.notification':
       if (msg.subtype === 'init' && msg.data && typeof msg.data === 'object') {
         const model = (msg.data as Record<string, unknown>).model
         if (typeof model === 'string' && model.trim()) {

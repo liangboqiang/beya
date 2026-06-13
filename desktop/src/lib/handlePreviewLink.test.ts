@@ -33,10 +33,10 @@ describe('handlePreviewLink', () => {
     const handled = handlePreviewLink('/Users/x/index.html', deps)
     expect(handled).toBe(true)
     // Absolute paths may live outside the session workspace, so they go through
-    // the $HOME-sandboxed /local-file route, NOT /preview-fs.
+    // the $HOME-sandboxed /files/local route, NOT /files/preview.
     expect(deps.openBrowser).toHaveBeenCalledWith(
       's1',
-      'http://127.0.0.1:8787/local-file/Users/x/index.html',
+      'http://127.0.0.1:8787/files/local/Users/x/index.html',
     )
     expect(deps.openFilePreview).not.toHaveBeenCalled()
     expect(deps.openExternal).not.toHaveBeenCalled()
@@ -48,7 +48,7 @@ describe('handlePreviewLink', () => {
     expect(handled).toBe(true)
     expect(deps.openBrowser).toHaveBeenCalledWith(
       's1',
-      'http://127.0.0.1:8787/local-file/Users/x/page.html',
+      'http://127.0.0.1:8787/files/local/Users/x/page.html',
     )
   })
 
@@ -56,10 +56,10 @@ describe('handlePreviewLink', () => {
     const deps = makeDeps()
     const handled = handlePreviewLink('out/index.html', deps)
     expect(handled).toBe(true)
-    // Relative → stays workspace-scoped via /preview-fs.
+    // Relative → stays workspace-scoped via /files/preview.
     expect(deps.openBrowser).toHaveBeenCalledWith(
       's1',
-      'http://127.0.0.1:8787/preview-fs/s1/out/index.html',
+      'http://127.0.0.1:8787/files/preview/s1/out/index.html',
     )
     expect(deps.openFilePreview).not.toHaveBeenCalled()
   })
@@ -115,24 +115,24 @@ describe('isAbsoluteLocalPath', () => {
 })
 
 describe('localFileUrl', () => {
-  it('appends a POSIX absolute path after /local-file, preserving slashes', () => {
+  it('appends a POSIX absolute path after /files/local, preserving slashes', () => {
     expect(localFileUrl('http://127.0.0.1:8787', '/Users/x/page.html')).toBe(
-      'http://127.0.0.1:8787/local-file/Users/x/page.html',
+      'http://127.0.0.1:8787/files/local/Users/x/page.html',
     )
   })
   it('encodes spaces/unicode per segment but keeps separators', () => {
     expect(localFileUrl('http://127.0.0.1:8787', '/Users/x/with space/p.html')).toBe(
-      'http://127.0.0.1:8787/local-file/Users/x/with%20space/p.html',
+      'http://127.0.0.1:8787/files/local/Users/x/with%20space/p.html',
     )
   })
   it('normalizes Windows backslashes and keeps a leading slash', () => {
     expect(localFileUrl('http://127.0.0.1:8787', 'C:\\proj\\page.html')).toBe(
-      'http://127.0.0.1:8787/local-file/C%3A/proj/page.html',
+      'http://127.0.0.1:8787/files/local/C%3A/proj/page.html',
     )
   })
   it('trims a trailing slash on the base', () => {
     expect(localFileUrl('http://127.0.0.1:8787/', '/a/b.html')).toBe(
-      'http://127.0.0.1:8787/local-file/a/b.html',
+      'http://127.0.0.1:8787/files/local/a/b.html',
     )
   })
 })
@@ -140,7 +140,7 @@ describe('localFileUrl', () => {
 describe('previewFsUrl (unchanged, regression guard)', () => {
   it('still builds a workspace-scoped preview-fs url for relative paths', () => {
     expect(previewFsUrl('http://127.0.0.1:8787', 's1', 'out/index.html')).toBe(
-      'http://127.0.0.1:8787/preview-fs/s1/out/index.html',
+      'http://127.0.0.1:8787/files/preview/s1/out/index.html',
     )
   })
 })

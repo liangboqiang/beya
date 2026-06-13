@@ -18,7 +18,7 @@ describe('WebSocket memory events', () => {
       },
     }, 'session-1')).toEqual([
       {
-        type: 'error',
+        type: 'session.failed',
         message: 'This model does not support images.',
         code: 'invalid_request',
         businessErrorCode: 'image_unsupported',
@@ -43,7 +43,7 @@ describe('WebSocket memory events', () => {
 
     expect(messages).toEqual([
       {
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'memory_saved',
         message: undefined,
         data: {
@@ -79,7 +79,7 @@ describe('WebSocket AskUserQuestion events', () => {
       },
     }, 'session-1')).toEqual([
       {
-        type: 'tool_result',
+        type: 'session.tool.result',
         toolUseId: 'ask-1',
         content: {
           questions: [{ question: 'Pick one?', options: [{ label: 'A' }] }],
@@ -100,7 +100,7 @@ describe('WebSocket compact events', () => {
       status: 'compacting',
     }, 'session-1')).toEqual([
       {
-        type: 'status',
+        type: 'session.status.changed',
         state: 'compacting',
         verb: 'Compacting conversation',
       },
@@ -112,7 +112,7 @@ describe('WebSocket compact events', () => {
       status: null,
     }, 'session-1')).toEqual([
       {
-        type: 'status',
+        type: 'session.status.changed',
         state: 'thinking',
         verb: 'Thinking',
       },
@@ -141,7 +141,7 @@ describe('WebSocket compact events', () => {
       isSynthetic: true,
     }, 'session-1')).toEqual([
       {
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'compact_summary',
         message: summary,
         data: { isSynthetic: true },
@@ -172,7 +172,7 @@ describe('WebSocket API retry events', () => {
       error: 'server_error',
     }, 'session-1')).toEqual([
       {
-        type: 'api_retry',
+        type: 'session.api.retry',
         attempt: 2,
         maxRetries: 10,
         retryDelayMs: 1500,
@@ -197,13 +197,13 @@ describe('WebSocket background task events', () => {
 
     expect(translateCliMessage(started, 'session-1')).toEqual([
       {
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'task_started',
         message: 'Verify the todo app',
         data: started,
       },
       {
-        type: 'status',
+        type: 'session.status.changed',
         state: 'tool_executing',
         verb: 'Verify the todo app',
       },
@@ -226,13 +226,13 @@ describe('WebSocket background task events', () => {
 
     expect(translateCliMessage(progress, 'session-1')).toEqual([
       {
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'task_progress',
         message: 'Running Playwright checks',
         data: progress,
       },
       {
-        type: 'status',
+        type: 'session.status.changed',
         state: 'tool_executing',
         verb: 'Running Playwright checks',
       },
@@ -291,7 +291,7 @@ describe('WebSocket goal command events', () => {
       ].join('\n'),
     }, sessionId)).toEqual([
       {
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'goal_event',
         message: goalStatusOutput,
         data: {
@@ -307,7 +307,7 @@ describe('WebSocket goal command events', () => {
   it('classifies /goal clear and completion output for the desktop client', () => {
     expect(runGoalCommand(`goal-complete-${crypto.randomUUID()}`, 'complete', 'Goal marked complete.')).toEqual([
       expect.objectContaining({
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'goal_event',
         data: { action: 'completed', message: 'Goal marked complete.' },
       }),
@@ -315,7 +315,7 @@ describe('WebSocket goal command events', () => {
 
     expect(runGoalCommand(`goal-clear-${crypto.randomUUID()}`, 'clear', 'Goal cleared: ship docs')).toEqual([
       expect.objectContaining({
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'goal_event',
         data: { action: 'cleared', message: 'Goal cleared: ship docs' },
       }),
@@ -337,7 +337,7 @@ describe('WebSocket goal command events', () => {
   it('keeps negative /goal command output visible as a goal message event', () => {
     expect(runGoalCommand(`goal-empty-${crypto.randomUUID()}`, '', 'No active goal.', 'user')).toEqual([
       {
-        type: 'system_notification',
+        type: 'session.system.notification',
         subtype: 'goal_event',
         message: 'No active goal.',
         data: { action: 'message', message: 'No active goal.' },
@@ -359,8 +359,8 @@ describe('WebSocket goal command events', () => {
       subtype: 'local_command_output',
       content: '<local-command-stdout>Goal: active</local-command-stdout>',
     }, sessionId)).toEqual([
-      { type: 'content_start', blockType: 'text' },
-      { type: 'content_delta', text: 'Goal: active' },
+      { type: 'session.message.started', blockType: 'text' },
+      { type: 'session.message.delta', text: 'Goal: active' },
     ])
   })
 
@@ -410,7 +410,7 @@ describe('WebSocket stream event translation', () => {
       },
     }, sessionId)).toEqual([
       {
-        type: 'content_start',
+        type: 'session.message.started',
         blockType: 'tool_use',
         toolName: 'Read',
         toolUseId: 'read-1',
@@ -426,7 +426,7 @@ describe('WebSocket stream event translation', () => {
         delta: { type: 'input_json_delta', partial_json: '{"file_path":"src/App.tsx"}' },
       },
     }, sessionId)).toEqual([
-      { type: 'content_delta', toolInput: '{"file_path":"src/App.tsx"}' },
+      { type: 'session.message.delta', toolInput: '{"file_path":"src/App.tsx"}' },
     ])
 
     expect(translateCliMessage({
@@ -434,7 +434,7 @@ describe('WebSocket stream event translation', () => {
       event: { type: 'content_block_stop', index: 0 },
     }, sessionId)).toEqual([
       {
-        type: 'tool_use_complete',
+        type: 'session.tool.completed',
         toolName: 'Read',
         toolUseId: 'read-1',
         input: { file_path: 'src/App.tsx' },
@@ -451,7 +451,7 @@ describe('WebSocket stream event translation', () => {
       },
     }, sessionId)).toEqual([
       {
-        type: 'tool_result',
+        type: 'session.tool.result',
         toolUseId: 'read-1',
         content: 'ok',
         isError: false,
@@ -467,7 +467,7 @@ describe('WebSocket stream event translation', () => {
       type: 'stream_event',
       event: { type: 'message_start' },
     }, sessionId)).toEqual([
-      { type: 'status', state: 'thinking' },
+      { type: 'session.status.changed', state: 'thinking' },
     ])
 
     expect(translateCliMessage({
@@ -478,7 +478,7 @@ describe('WebSocket stream event translation', () => {
         content_block: { type: 'thinking', thinking: '' },
       },
     }, sessionId)).toEqual([
-      { type: 'status', state: 'thinking', verb: 'Thinking' },
+      { type: 'session.status.changed', state: 'thinking', verb: 'Thinking' },
     ])
 
     expect(translateCliMessage({
@@ -489,7 +489,7 @@ describe('WebSocket stream event translation', () => {
         delta: { type: 'thinking_delta', thinking: 'Let me think' },
       },
     }, sessionId)).toEqual([
-      { type: 'thinking', text: 'Let me think' },
+      { type: 'session.thinking.delta', text: 'Let me think' },
     ])
 
     expect(translateCliMessage({
@@ -505,7 +505,7 @@ describe('WebSocket stream event translation', () => {
         content_block: { type: 'text', text: '' },
       },
     }, sessionId)).toEqual([
-      { type: 'content_start', blockType: 'text' },
+      { type: 'session.message.started', blockType: 'text' },
     ])
   })
 })

@@ -1,4 +1,4 @@
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
 import { logForDebugging } from '../utils/debug.js'
 import { errorMessage } from '../utils/errors.js'
 import { extractErrorDetail } from './debugUtils.js'
@@ -19,7 +19,7 @@ type GitOutcome = {
 // POST /v1/sessions endpoint (discriminated union format).
 type SessionEvent = {
   type: 'event'
-  data: SDKMessage
+  data: RuntimeMessage
 }
 
 /**

@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { getOauthConfig } from '../constants/oauth.js'
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
 import { logForDebugging } from '../utils/debug.js'
 import { getOAuthHeaders, prepareApiRequest } from '../utils/teleport/api.js'
 
@@ -8,7 +8,7 @@ export const HISTORY_PAGE_SIZE = 100
 
 export type HistoryPage = {
   /** Chronological order within the page. */
-  events: SDKMessage[]
+  events: RuntimeMessage[]
   /** Oldest event ID in this page →before_id cursor for next-older page. */
   firstId: string | null
   /** true = older events exist. */
@@ -16,7 +16,7 @@ export type HistoryPage = {
 }
 
 type SessionEventsResponse = {
-  data: SDKMessage[]
+  data: RuntimeMessage[]
   has_more: boolean
   first_id: string | null
   last_id: string | null

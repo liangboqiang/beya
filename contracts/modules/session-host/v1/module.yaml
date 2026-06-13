@@ -1,0 +1,65 @@
+id: session-host
+version: v1
+name: Session Host
+layer: session
+layerOrder: 3
+stability: stable
+description: Session state, live commands, permission flow, transcript resources, and runtime process lifecycle.
+paths:
+  server:
+    - src/modules/session-host
+    - src/server/services/sessionService.ts
+    - src/server/services/conversationService.ts
+  desktop:
+    - desktop/src/modules/session-live
+  contracts:
+    - contracts/session/v1/live.yaml
+owns:
+  - Session lifecycle and transcript state.
+  - Session live command/event semantics.
+  - Permission request/response flow.
+  - Runtime process selection and bridge lifecycle.
+resourceMethods:
+  - sessions.list
+  - sessions.create
+  - sessions.get
+  - sessions.update
+  - sessions.delete
+  - sessions.history
+  - sessions.messages
+  - sessions.events
+  - sessions.branch
+  - sessions.batchdelete
+  - sessions.recentprojects
+  - sessions.repositorycontext
+  - sessions.gitinfo
+  - sessions.slashcommands
+  - sessions.inspection
+  - sessions.workspacestatus
+  - sessions.workspacetree
+  - sessions.workspacefile
+  - sessions.workspacediff
+  - sessions.turncheckpoints
+  - sessions.turncheckpointdiff
+  - sessions.rewind
+  - sessionchat.status
+  - sessionchat.send
+  - sessionchat.stop
+  - search.global
+  - search.sessions
+events:
+  - session.connected
+  - session.message.delta
+  - session.permission.requested
+  - session.completed
+allowedDependencies:
+  - agent-core
+  - capability-registry
+  - model-runtime
+  - foundation
+forbiddenDependencies:
+  - access-surfaces
+  - gateway
+implementationRoots:
+  - src/modules/session-host
+  - desktop/src/modules/session-live

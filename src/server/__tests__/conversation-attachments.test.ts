@@ -66,7 +66,7 @@ describe('ConversationService attachment materialization', () => {
     const original = Buffer.from('original-image')
 
     ;(svc as any).sessions.set(sessionId, {
-      sdkSocket: {
+      runtimeSocket: {
         send(data: string) {
           sent.push(JSON.parse(data))
         },
@@ -113,7 +113,7 @@ describe('ConversationService attachment materialization', () => {
     imageProcessorShouldThrow = true
 
     ;(svc as any).sessions.set(sessionId, {
-      sdkSocket: {
+      runtimeSocket: {
         send(data: string) {
           sent.push(JSON.parse(data))
         },
@@ -149,7 +149,7 @@ describe('ConversationService attachment materialization', () => {
     await fs.writeFile(imagePath, original)
 
     ;(svc as any).sessions.set(sessionId, {
-      sdkSocket: {
+      runtimeSocket: {
         send(data: string) {
           sent.push(JSON.parse(data))
         },

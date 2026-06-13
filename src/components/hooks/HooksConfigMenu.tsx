@@ -13,7 +13,7 @@ import { c as _c } from "react/compiler-runtime";
  */
 import * as React from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import type { HookEvent } from 'src/types/sdkProtocol.js';
+import type { HookEvent } from 'src/types/runtimeProtocol.js';
 import { useAppState, useAppStateStore } from 'src/state/AppState.js';
 import type { CommandResultDisplay } from '../../commands.js';
 import { useSettingsChange } from '../../hooks/useSettingsChange.js';

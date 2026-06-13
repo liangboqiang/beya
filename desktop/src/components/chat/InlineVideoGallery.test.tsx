@@ -2,7 +2,7 @@ import '@testing-library/jest-dom'
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-// getServerBaseUrl backs the relative-path src (/preview-fs/<sessionId>/...).
+// getServerBaseUrl backs the relative-path src (/files/preview/<sessionId>/...).
 vi.mock('../../lib/desktopRuntime', () => ({
   getServerBaseUrl: () => 'http://127.0.0.1:4321',
 }))
@@ -21,7 +21,7 @@ describe('InlineVideoGallery', () => {
 
     const srcs = videoSrcs(container)
     expect(srcs).toHaveLength(1)
-    expect(srcs[0]).toBe('http://127.0.0.1:4321/preview-fs/s1/outputs/demo.mp4')
+    expect(srcs[0]).toBe('http://127.0.0.1:4321/files/preview/s1/outputs/demo.mp4')
   })
 
   it('uses preload="metadata" and never autoplays', () => {

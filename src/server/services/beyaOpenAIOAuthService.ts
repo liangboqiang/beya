@@ -22,7 +22,6 @@ import {
   isOpenAITokenExpired,
   normalizeOpenAITokens,
   withRefreshedAccessToken,
-  OPENAI_CODEX_REDIRECT_PATH,
   OPENAI_CODEX_OAUTH_PORT,
 } from '../../services/openaiAuth/client.js'
 import type { OpenAIOAuthTokenResponse } from '../../services/openaiAuth/types.js'
@@ -52,6 +51,7 @@ type OpenAIRefreshFn = (
 ) => Promise<OpenAIOAuthTokenResponse>
 
 const SESSION_TTL_MS = 5 * 60 * 1000
+export const BEYA_OPENAI_OAUTH_CALLBACK_PATH = '/oauth/openai/callback'
 
 const HTML_SUCCESS = `<!doctype html>
 <html><head><meta charset="utf-8"><title>OpenAI Login Success</title>
@@ -150,7 +150,7 @@ export class BeyaOpenAIOAuthService {
 
     const codeVerifier = generateOpenAICodeVerifier()
     const state = generateOpenAIState()
-    const authCodeListener = new AuthCodeListener(OPENAI_CODEX_REDIRECT_PATH)
+    const authCodeListener = new AuthCodeListener(BEYA_OPENAI_OAUTH_CALLBACK_PATH)
 
     try {
       await authCodeListener.start(this.callbackPort)
@@ -162,7 +162,7 @@ export class BeyaOpenAIOAuthService {
       )
     }
 
-    const redirectUri = `http://localhost:${this.callbackPort}${OPENAI_CODEX_REDIRECT_PATH}`
+    const redirectUri = `http://localhost:${this.callbackPort}${BEYA_OPENAI_OAUTH_CALLBACK_PATH}`
     const authorizeUrl = buildOpenAIAuthorizeUrl({
       redirectUri,
       codeVerifier,

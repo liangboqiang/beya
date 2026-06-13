@@ -112,25 +112,25 @@ import {
 import { registerCleanup } from 'src/utils/cleanupRegistry.js'
 import { createIdleTimeoutManager } from 'src/utils/idleTimeout.js'
 import type {
-  SDKStatus,
+  RuntimeStatus,
   ModelInfo,
-  SDKMessage,
-  SDKUserMessage,
-  SDKUserMessageReplay,
+  RuntimeMessage,
+  RuntimeUserMessage,
+  RuntimeUserMessageReplay,
   PermissionResult,
   McpServerConfigForProcessTransport,
   McpServerStatus,
   RewindFilesResult,
-} from 'src/types/sdkProtocol.js'
+} from 'src/types/runtimeProtocol.js'
 import type {
   StdoutMessage,
-  SDKControlInitializeRequest,
-  SDKControlInitializeResponse,
-  SDKControlRequest,
-  SDKControlResponse,
-  SDKControlMcpSetServersResponse,
-  SDKControlReloadPluginsResponse,
-} from 'src/entrypoints/sdk/controlTypes.js'
+  RuntimeControlInitializeRequest,
+  RuntimeControlInitializeResponse,
+  RuntimeControlRequest,
+  RuntimeControlResponse,
+  RuntimeControlMcpSetServersResponse,
+  RuntimeControlReloadPluginsResponse,
+} from 'src/entrypoints/runtime/controlTypes.js'
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk'
 import type { PermissionMode as InternalPermissionMode } from 'src/types/permissions.js'
 import { cwd } from 'process'
@@ -197,7 +197,7 @@ import { installOAuthTokens } from 'src/cli/handlers/auth.js'
 import { getAPIProvider } from 'src/utils/model/providers.js'
 import type { HookCallbackMatcher } from 'src/types/hooks.js'
 import { AwsAuthStatusManager } from 'src/utils/awsAuthStatusManager.js'
-import type { HookEvent } from 'src/types/sdkProtocol.js'
+import type { HookEvent } from 'src/types/runtimeProtocol.js'
 import {
   registerHookCallbacks,
   setInitJsonSchema,
@@ -259,7 +259,7 @@ import {
 } from 'src/services/api/grove.js'
 import {
   toInternalMessages,
-  toSDKRateLimitInfo,
+  toRuntimeRateLimitInfo,
 } from 'src/utils/messages/mappers.js'
 import { createModelSwitchBreadcrumbs } from 'src/utils/messages.js'
 import { collectContextData } from 'src/commands/context/context-noninteractive.js'
@@ -352,7 +352,7 @@ import { unassignTeammateTasks } from '../utils/tasks.js'
 import { getRunningTasks } from '../utils/task/framework.js'
 import { isBackgroundTask } from '../tasks/types.js'
 import { stopTask } from '../tasks/stopTask.js'
-import { drainSdkEvents } from '../utils/sdkEventQueue.js'
+import { drainRuntimeEvents } from '../utils/runtimeEventQueue.js'
 import { initializeGrowthBook } from '../services/analytics/growthbook.js'
 import { errorMessage, toError } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
@@ -483,7 +483,7 @@ export async function runHeadless(
     userSpecifiedModel: string | undefined
     fallbackModel: string | undefined
     teleport: string | true | null | undefined
-    sdkUrl: string | undefined
+    runtimeUrl: string | undefined
     replayUserMessages: boolean | undefined
     includePartialMessages: boolean | undefined
     forkSession: boolean | undefined
@@ -493,7 +493,7 @@ export async function runHeadless(
     workload: string | undefined
     setupTrigger?: 'init' | 'maintenance' | undefined
     sessionStartHooksPromise?: ReturnType<typeof processSessionStartHooks>
-    setSDKStatus?: (status: SDKStatus) => void
+    setRuntimeStatus?: (status: RuntimeStatus) => void
   },
 ): Promise<void> {
   if (
@@ -775,13 +775,13 @@ export async function runHeadless(
     return
   }
 
-  // Check if we need input prompt - skip if we're resuming with a valid session ID/JSONL file or using SDK URL
+  // Check if we need input prompt - skip if we're resuming with a valid session ID/JSONL file or using runtime URL
   const hasValidResumeSessionId =
     typeof options.resume === 'string' &&
     (Boolean(validateUuid(options.resume)) || options.resume.endsWith('.jsonl'))
-  const isUsingSdkUrl = Boolean(options.sdkUrl)
+  const isUsingRuntimeUrl = Boolean(options.runtimeUrl)
 
-  if (!inputPrompt && !hasValidResumeSessionId && !isUsingSdkUrl) {
+  if (!inputPrompt && !hasValidResumeSessionId && !isUsingRuntimeUrl) {
     process.stderr.write(
       `Error: Input must be provided either through stdin or as a prompt argument when using --print\n`,
     )
@@ -804,8 +804,8 @@ export async function runHeadless(
   )
   let filteredTools = [...tools, ...allowedMcpTools]
 
-  // When using SDK URL, always use stdio permission prompting to delegate to the SDK
-  const effectivePermissionPromptToolName = options.sdkUrl
+  // When using runtime URL, always use stdio permission prompting to delegate to the SDK
+  const effectivePermissionPromptToolName = options.runtimeUrl
     ? 'stdio'
     : options.permissionPromptToolName
 
@@ -854,8 +854,8 @@ export async function runHeadless(
   // read for the exit code / final result. Avoid accumulating every message in
   // memory for the entire session.
   const needsFullArray = options.outputFormat === 'json' && options.verbose
-  const messages: SDKMessage[] = []
-  let lastMessage: SDKMessage | undefined
+  const messages: RuntimeMessage[] = []
+  let lastMessage: RuntimeMessage | undefined
   // Streamlined mode transforms messages when CLAUDE_CODE_STREAMLINED_OUTPUT=true and using stream-json
   // Build flag gates this out of external builds; env var is the runtime opt-in for ant builds
   const transformToStreamlined =
@@ -1006,7 +1006,7 @@ function runHeadlessStreaming(
     includePartialMessages?: boolean | undefined
     enableAuthStatus?: boolean | undefined
     agent?: string | undefined
-    setSDKStatus?: (status: SDKStatus) => void
+    setRuntimeStatus?: (status: RuntimeStatus) => void
     promptSuggestions?: boolean | undefined
     workload?: string | undefined
   },
@@ -1127,11 +1127,11 @@ function runHeadlessStreaming(
     })
   }
 
-  // Set up rate limit status listener to emit SDKRateLimitEvent for all status changes.
+  // Set up rate limit status listener to emit RuntimeRateLimitEvent for all status changes.
   // Emitting for all statuses (including 'allowed') ensures consumers can clear warnings
   // when rate limits reset. The upstream emitStatusChange already deduplicates via isEqual.
   const rateLimitListener = (limits: ClaudeAILimits) => {
-    const rateLimitInfo = toSDKRateLimitInfo(limits)
+    const rateLimitInfo = toRuntimeRateLimitInfo(limits)
     if (rateLimitInfo) {
       output.enqueue({
         type: 'rate_limit_event',
@@ -1245,7 +1245,7 @@ function runHeadlessStreaming(
           uuid: crumb.uuid,
           timestamp: crumb.timestamp,
           isReplay: true,
-        } satisfies SDKUserMessageReplay)
+        } satisfies RuntimeUserMessageReplay)
       }
     }
   }
@@ -1260,7 +1260,7 @@ function runHeadlessStreaming(
   /**
    * Register elicitation request/completion handlers on connected MCP clients
    * that haven't been registered yet. SDK MCP servers are excluded because they
-   * route through SdkControlClientTransport. Hooks run first (matching REPL
+   * route through RuntimeControlClientTransport. Hooks run first (matching REPL
    * behavior); if no hook responds, the request is forwarded to the SDK
    * consumer via the control protocol.
    */
@@ -1272,7 +1272,7 @@ function runHeadlessStreaming(
       ) {
         continue
       }
-      // Skip SDK MCP servers —elicitation flows through SdkControlClientTransport
+      // Skip SDK MCP servers —elicitation flows through RuntimeControlClientTransport
       if (connection.config.type === 'sdk') {
         continue
       }
@@ -1548,7 +1548,7 @@ function runHeadlessStreaming(
   // and background plugin installation.
   // NOTE: Nested function required - mutates closure state (sdkMcpConfigs, sdkClients, etc.)
   let mcpChangesPromise: Promise<{
-    response: SDKControlMcpSetServersResponse
+    response: RuntimeControlMcpSetServersResponse
     sdkServersChanged: boolean
   }> = Promise.resolve({
     response: {
@@ -1562,13 +1562,13 @@ function runHeadlessStreaming(
   function applyMcpServerChanges(
     servers: Record<string, McpServerConfigForProcessTransport>,
   ): Promise<{
-    response: SDKControlMcpSetServersResponse
+    response: RuntimeControlMcpSetServersResponse
     sdkServersChanged: boolean
   }> {
     // Serialize calls to prevent race conditions between concurrent callers
     // (background plugin install and mcp_set_servers control messages)
     const doWork = async (): Promise<{
-      response: SDKControlMcpSetServersResponse
+      response: RuntimeControlMcpSetServersResponse
       sdkServersChanged: boolean
     }> => {
       const oldSdkClientNames = new Set(sdkClients.map(c => c.name))
@@ -1990,7 +1990,7 @@ function runHeadlessStreaming(
                   parent_tool_use_id: null,
                   uuid: c.uuid,
                   isReplay: true,
-                } satisfies SDKUserMessageReplay)
+                } satisfies RuntimeUserMessageReplay)
               }
             }
           }
@@ -2217,7 +2217,7 @@ function runHeadlessStreaming(
                 ),
               agents: currentAgents,
               orphanedPermission: cmd.orphanedPermission,
-              setSDKStatus: status => {
+              setRuntimeStatus: status => {
                 output.enqueue({
                   type: 'system',
                   subtype: 'status',
@@ -2234,7 +2234,7 @@ function runHeadlessStreaming(
 
               if (message.type === 'result') {
                 // Flush pending SDK events so they appear before result on the stream.
-                for (const event of drainSdkEvents()) {
+                for (const event of drainRuntimeEvents()) {
                   output.enqueue(event)
                 }
 
@@ -2256,7 +2256,7 @@ function runHeadlessStreaming(
               } else {
                 // Flush SDK events (task_started, task_progress) so background
                 // agent progress is streamed in real-time, not batched until result.
-                for (const event of drainSdkEvents()) {
+                for (const event of drainRuntimeEvents()) {
                   output.enqueue(event)
                 }
                 output.enqueue(message)
@@ -2390,7 +2390,7 @@ function runHeadlessStreaming(
       do {
         // Drain SDK events (task_started, task_progress) before command queue
         // so progress events precede task_notification on the stream.
-        for (const event of drainSdkEvents()) {
+        for (const event of drainRuntimeEvents()) {
           output.enqueue(event)
         }
 
@@ -2482,7 +2482,7 @@ function runHeadlessStreaming(
         // command. The do-while drain above only runs while
         // waitingForAgents; once we're here the next drain would be the
         // top of the next run(), which won't come if input is idle.
-        for (const event of drainSdkEvents()) {
+        for (const event of drainRuntimeEvents()) {
           output.enqueue(event)
         }
       }
@@ -2753,7 +2753,7 @@ function runHeadlessStreaming(
   }
 
   const sendControlResponseSuccess = function (
-    message: SDKControlRequest,
+    message: RuntimeControlRequest,
     response?: Record<string, unknown>,
   ) {
     output.enqueue({
@@ -2767,7 +2767,7 @@ function runHeadlessStreaming(
   }
 
   const sendControlResponseError = function (
-    message: SDKControlRequest,
+    message: RuntimeControlRequest,
     errorMessage: string,
   ) {
     output.enqueue({
@@ -3108,7 +3108,7 @@ function runHeadlessStreaming(
             // Reload succeeded —gather response data best-effort so a
             // read failure doesn't mask the successful state change.
             // allSettled so one failure doesn't discard the others.
-            let plugins: SDKControlReloadPluginsResponse['plugins'] = []
+            let plugins: RuntimeControlReloadPluginsResponse['plugins'] = []
             const [cmdsR, mcpR, pluginsR, toolsR] = await Promise.allSettled([
               getCommands(cwd()),
               applyPluginMcpDiff(),
@@ -3157,7 +3157,7 @@ function runHeadlessStreaming(
               plugins,
               mcpServers: buildMcpServerStatuses(),
               error_count: r.error_count,
-            } satisfies SDKControlReloadPluginsResponse)
+            } satisfies RuntimeControlReloadPluginsResponse)
           } catch (error) {
             sendControlResponseError(message, errorMessage(error))
           }
@@ -4109,7 +4109,7 @@ function runHeadlessStreaming(
               uuid: message.uuid,
               timestamp: message.timestamp,
               isReplay: true,
-            } as SDKUserMessageReplay)
+            } as RuntimeUserMessageReplay)
           }
           // Historical dup = transcript already has this turn's output, so it
           // ran but its lifecycle was never closed (interrupted before ack).
@@ -4360,7 +4360,7 @@ export function getCanUseToolFn(
 }
 
 async function handleInitializeRequest(
-  request: SDKControlInitializeRequest,
+  request: RuntimeControlInitializeRequest,
   requestId: string,
   initialized: boolean,
   output: Stream<StdoutMessage>,
@@ -4476,7 +4476,7 @@ async function handleInitializeRequest(
   if (request.jsonSchema) {
     setInitJsonSchema(request.jsonSchema)
   }
-  const initResponse: SDKControlInitializeResponse = {
+  const initResponse: RuntimeControlInitializeResponse = {
     commands: commands
       .filter(cmd => cmd.userInvocable !== false)
       .map(cmd => ({
@@ -5224,7 +5224,7 @@ async function loadInitialMessages(
 function getStructuredIO(
   inputPrompt: string | AsyncIterable<string>,
   options: {
-    sdkUrl: string | undefined
+    runtimeUrl: string | undefined
     replayUserMessages?: boolean
   },
 ): StructuredIO {
@@ -5241,7 +5241,7 @@ function getStructuredIO(
             content: inputPrompt,
           },
           parent_tool_use_id: null,
-        } satisfies SDKUserMessage),
+        } satisfies RuntimeUserMessage),
       ])
     } else {
       // Empty string - create empty stream
@@ -5251,9 +5251,9 @@ function getStructuredIO(
     inputStream = inputPrompt
   }
 
-  // Use RemoteIO if sdkUrl is provided, otherwise use regular StructuredIO
-  return options.sdkUrl
-    ? new RemoteIO(options.sdkUrl, inputStream, options.replayUserMessages)
+  // Use RemoteIO if runtimeUrl is provided, otherwise use regular StructuredIO
+  return options.runtimeUrl
+    ? new RemoteIO(options.runtimeUrl, inputStream, options.replayUserMessages)
     : new StructuredIO(inputStream, options.replayUserMessages)
 }
 
@@ -5269,7 +5269,7 @@ export async function handleOrphanedPermissionResponse({
   onEnqueued,
   handledToolUseIds,
 }: {
-  message: SDKControlResponse
+  message: RuntimeControlResponse
   setAppState: (f: (prev: AppState) => AppState) => void
   onEnqueued?: () => void
   handledToolUseIds: Set<string>
@@ -5350,7 +5350,7 @@ function toScopedConfig(
 /**
  * State for SDK MCP servers that run in the SDK process.
  */
-export type SdkMcpState = {
+export type RuntimeMcpState = {
   configs: Record<string, McpSdkServerConfig>
   clients: MCPServerConnection[]
   tools: Tools
@@ -5360,8 +5360,8 @@ export type SdkMcpState = {
  * Result of handleMcpSetServers - contains new state and response data.
  */
 export type McpSetServersResult = {
-  response: SDKControlMcpSetServersResponse
-  newSdkState: SdkMcpState
+  response: RuntimeControlMcpSetServersResponse
+  newSdkState: RuntimeMcpState
   newDynamicState: DynamicMcpState
   sdkServersChanged: boolean
 }
@@ -5377,7 +5377,7 @@ export type McpSetServersResult = {
  */
 export async function handleMcpSetServers(
   servers: Record<string, McpServerConfigForProcessTransport>,
-  sdkState: SdkMcpState,
+  sdkState: RuntimeMcpState,
   dynamicState: DynamicMcpState,
   setAppState: (f: (prev: AppState) => AppState) => void,
 ): Promise<McpSetServersResult> {
@@ -5477,7 +5477,7 @@ export async function reconcileMcpServers(
   currentState: DynamicMcpState,
   setAppState: (f: (prev: AppState) => AppState) => void,
 ): Promise<{
-  response: SDKControlMcpSetServersResponse
+  response: RuntimeControlMcpSetServersResponse
   newState: DynamicMcpState
 }> {
   const currentNames = new Set(Object.keys(currentState.configs))

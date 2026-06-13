@@ -162,7 +162,7 @@ describe('buildOpenWithItems – file context with inAppBrowserUrl (no previewab
     const ctx: OpenWithContext = {
       kind: 'file',
       absolutePath: '/w/page.html',
-      inAppBrowserUrl: 'http://127.0.0.1:4321/preview-fs/s1/page.html',
+      inAppBrowserUrl: 'http://127.0.0.1:4321/files/preview/s1/page.html',
     }
     const items = buildOpenWithItems(ctx, [], deps)
     expect(items.map((i) => i.id)).toEqual(['in-app'])
@@ -170,7 +170,7 @@ describe('buildOpenWithItems – file context with inAppBrowserUrl (no previewab
 
   it('in-app calls openInAppBrowser with inAppBrowserUrl', () => {
     const deps = makeDeps()
-    const inAppBrowserUrl = 'http://127.0.0.1:4321/preview-fs/s1/page.html'
+    const inAppBrowserUrl = 'http://127.0.0.1:4321/files/preview/s1/page.html'
     const ctx: OpenWithContext = { kind: 'file', absolutePath: '/w/page.html', inAppBrowserUrl }
     const items = buildOpenWithItems(ctx, [], deps)
     items.find((i) => i.id === 'in-app')!.onSelect()

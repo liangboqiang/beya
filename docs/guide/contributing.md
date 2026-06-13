@@ -97,7 +97,7 @@ Git hook 不能提交到远端自动生效，所以每个 clone 需要安装一�
 bun run hooks:install
 ```
 
-安装后，每次 `git push` 都会先运行快速本地门禁（内部是 `bun run quality:push`）。它复用 PR gate 的 impact/policy/路径检查，但默认跳过耗时的 coverage lane；完整覆盖率仍保留在 `bun run verify`、`bun run quality:pr` 和 CI。如果单元测试、文档/native/adapter 等按路径选中的快速门禁失败，push 会被本机 hook 阻断。
+安装后，每次 `git push` 都会先运行快速本地门禁（内部是 `bun run quality:push`）。它复用 PR gate 的 impact/policy/路径检查，但默认跳过耗时的 coverage lane，并对 server 使用 fast 测试 profile；完整覆盖率和慢集成 server profile 仍保留在 `bun run verify`、`bun run quality:pr` 和 CI。如果单元测试、文档/native/adapter 等按路径选中的快速门禁失败，push 会被本机 hook 阻断。
 
 维护者或有模型额度的贡献者可以把真实 provider smoke 和桌面 agent-browser smoke 也纳入 push 前门禁：
 

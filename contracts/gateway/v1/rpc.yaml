@@ -1,0 +1,82 @@
+name: gateway.rpc
+version: v1
+domain: gateway
+stability: stable
+description: Resource RPC WebSocket gateway. This is the only public resource RPC transport.
+transport:
+  kind: websocket
+  path: /rpc
+messages:
+  - name: rpc.connected
+    direction: server-to-client
+    payload:
+      type: object
+      required: [type, schemaHash]
+      properties:
+        type:
+          const: rpc.connected
+        schemaHash:
+          type: string
+  - name: rpc.ping
+    direction: client-to-server
+    payload:
+      type: object
+      required: [type]
+      properties:
+        type:
+          const: rpc.ping
+        id:
+          type: string
+  - name: rpc.pong
+    direction: server-to-client
+    payload:
+      type: object
+      required: [type]
+      properties:
+        type:
+          const: rpc.pong
+        id:
+          type: string
+  - name: rpc.request
+    direction: client-to-server
+    payload:
+      type: object
+      required: [type, id, method]
+      properties:
+        type:
+          const: rpc.request
+        id:
+          type: string
+        method:
+          type: string
+        params:
+          type: object
+  - name: rpc.response
+    direction: server-to-client
+    payload:
+      type: object
+      required: [type, id, status, headers]
+      properties:
+        type:
+          const: rpc.response
+        id:
+          type: string
+        status:
+          type: number
+        headers:
+          type: object
+        result: {}
+  - name: rpc.error
+    direction: server-to-client
+    payload:
+      type: object
+      required: [type, code, message]
+      properties:
+        type:
+          const: rpc.error
+        id:
+          type: string
+        code:
+          type: string
+        message:
+          type: string

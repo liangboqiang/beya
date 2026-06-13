@@ -1,5 +1,5 @@
 import memoize from 'lodash-es/memoize.js'
-import type { HookEvent } from 'src/types/sdkProtocol.js'
+import type { HookEvent } from 'src/types/runtimeProtocol.js'
 import { getRegisteredHooks } from '../../bootstrap/state.js'
 import type { AppState } from '../../state/AppState.js'
 import {

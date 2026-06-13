@@ -269,7 +269,7 @@ describe('desktopRuntime browser H5 bootstrap', () => {
 
     expect(clientMocks.setBaseUrl).toHaveBeenLastCalledWith('https://public.example.com/app')
     expect(clientMocks.setAuthToken).toHaveBeenLastCalledWith('qr-token')
-    expect(clientMocks.postVerify).toHaveBeenCalledWith('/api/h5-access/verify')
+    expect(clientMocks.postVerify).toHaveBeenCalledWith('/h5-access/verify')
     expect(window.localStorage.getItem(H5_TOKEN_STORAGE_KEY)).toBe('qr-token')
   })
 

@@ -800,8 +800,8 @@ export async function main() {
   const cliArgs = process.argv.slice(2);
   const hasPrintFlag = cliArgs.includes('-p') || cliArgs.includes('--print');
   const hasInitOnlyFlag = cliArgs.includes('--init-only');
-  const hasSdkUrl = cliArgs.some(arg => arg.startsWith('--sdk-url'));
-  const isNonInteractive = hasPrintFlag || hasInitOnlyFlag || hasSdkUrl || !process.stdout.isTTY;
+  const hasRuntimeUrl = cliArgs.some(arg => arg.startsWith('--runtime-url'));
+  const isNonInteractive = hasPrintFlag || hasInitOnlyFlag || hasRuntimeUrl || !process.stdout.isTTY;
 
   // Stop capturing early input for non-interactive modes
   if (isNonInteractive) {
@@ -1221,23 +1221,23 @@ async function run(): Promise<CommanderCommand> {
     }
 
     // Extract remote sdk options
-    const sdkUrl = (options as {
-      sdkUrl?: string;
-    }).sdkUrl ?? undefined;
+    const runtimeUrl = (options as {
+      runtimeUrl?: string;
+    }).runtimeUrl ?? undefined;
 
     // Allow env var to enable partial messages (used by sandbox gateway for baku)
     const effectiveIncludePartialMessages = includePartialMessages || isEnvTruthy(process.env.CLAUDE_CODE_INCLUDE_PARTIAL_MESSAGES);
 
-    // Enable all hook event types when explicitly requested via SDK option
+    // Enable all hook event types when explicitly requested via runtime option
     // or when running in CLAUDE_CODE_REMOTE mode (CCR needs them).
     // Without this, only SessionStart and Setup events are emitted.
     if (includeHookEvents || isEnvTruthy(process.env.CLAUDE_CODE_REMOTE)) {
       setAllHookEventsEnabled(true);
     }
 
-    // Auto-set input/output formats, verbose mode, and print mode when SDK URL is provided
-    if (sdkUrl) {
-      // If SDK URL is provided, automatically use stream-json formats unless explicitly set
+    // Auto-set input/output formats, verbose mode, and print mode when runtime URL is provided
+    if (runtimeUrl) {
+      // If runtime URL is provided, automatically use stream-json formats unless explicitly set
       if (!inputFormat) {
         inputFormat = 'stream-json';
       }
@@ -1286,10 +1286,10 @@ async function run(): Promise<CommanderCommand> {
         process.exit(1);
       }
 
-      // When --sdk-url is provided (bridge/remote mode), the session ID is a
+      // When --runtime-url is provided (bridge/remote mode), the session ID is a
       // server-assigned tagged ID (e.g. "session_local_01...") rather than a
       // UUID. Skip UUID validation and local existence checks in that case.
-      if (!sdkUrl) {
+      if (!runtimeUrl) {
         const validatedSessionId = validateUuid(sessionId);
         if (!validatedSessionId) {
           process.stderr.write(chalk.red('Error: Invalid session ID. Must be a valid UUID.\n'));
@@ -1840,11 +1840,11 @@ async function run(): Promise<CommanderCommand> {
       process.exit(1);
     }
 
-    // Validate sdkUrl is only used with appropriate formats (formats are auto-set above)
-    if (sdkUrl) {
+    // Validate runtimeUrl is only used with appropriate formats (formats are auto-set above)
+    if (runtimeUrl) {
       if (inputFormat !== 'stream-json' || outputFormat !== 'stream-json') {
         // biome-ignore lint/suspicious/noConsole:: intentional console output
-        console.error(`Error: --sdk-url requires both --input-format=stream-json and --output-format=stream-json.`);
+        console.error(`Error: --runtime-url requires both --input-format=stream-json and --output-format=stream-json.`);
         process.exit(1);
       }
     }
@@ -2764,7 +2764,7 @@ async function run(): Promise<CommanderCommand> {
       // doesn't help. SDK init message and turn-1 tool list should include
       // configured MCP tools when running plain `beya -p`.
       //
-      // Desktop/bridge sessions (`--sdk-url`) are different: the user is
+      // Desktop/bridge sessions (`--runtime-url`) are different: the user is
       // waiting on the first visible assistant token, not a fully populated
       // MCP inventory. Blocking startup on slow or failing MCP servers (for
       // example a local `chatlog` HTTP endpoint timing out) makes the whole
@@ -2779,7 +2779,7 @@ async function run(): Promise<CommanderCommand> {
       // here. --bare skips claude.ai entirely for perf-sensitive scripts.
       profileCheckpoint('before_connectMcp');
       const regularMcpConnect = connectMcpBatch(regularMcpConfigs, 'regular');
-      if (sdkUrl) {
+      if (runtimeUrl) {
         if (process.env.BEYA_DESKTOP_AWAIT_MCP === '1') {
           await waitForDesktopMcpStartup(regularMcpConnect, 'regular MCP');
         }
@@ -2904,7 +2904,7 @@ async function run(): Promise<CommanderCommand> {
         userSpecifiedModel: effectiveModel,
         fallbackModel: userSpecifiedFallbackModel,
         teleport,
-        sdkUrl,
+        runtimeUrl,
         replayUserMessages: effectiveReplayUserMessages,
         includePartialMessages: effectiveIncludePartialMessages,
         forkSession: options.forkSession || false,
@@ -3917,8 +3917,8 @@ async function run(): Promise<CommanderCommand> {
   program.addOption(new Option('--teammate-mode <mode>', 'How to spawn teammates: "tmux", "in-process", or "auto"').choices(['auto', 'tmux', 'in-process']).hideHelp());
   program.addOption(new Option('--agent-type <type>', 'Custom agent type for this teammate').hideHelp());
 
-  // Enable SDK URL for all builds but hide from help
-  program.addOption(new Option('--sdk-url <url>', 'Use remote WebSocket endpoint for SDK I/O streaming (only with -p and stream-json format)').hideHelp());
+  // Enable runtime URL for all builds but hide from help
+  program.addOption(new Option('--runtime-url <url>', 'Use remote WebSocket endpoint for runtime I/O streaming (only with -p and stream-json format)').hideHelp());
 
   // Enable teleport/remote flags for all builds but keep them undocumented until GA
   program.addOption(new Option('--teleport [session]', 'Resume a teleport session, optionally specify session ID').hideHelp());

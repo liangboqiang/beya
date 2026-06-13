@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://beya.local/contracts/meta/protocol.schema.json",
+  "title": "Beya Protocol Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "domain", "stability"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^v[0-9]+$"
+    },
+    "domain": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "stability": {
+      "type": "string",
+      "enum": ["experimental", "stable", "deprecated"]
+    },
+    "description": {
+      "type": "string"
+    },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["websocket", "http", "event-bus"]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        }
+      }
+    },
+    "methods": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/method" }
+    },
+    "messages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/message" }
+    },
+    "events": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/message" }
+    }
+  },
+  "$defs": {
+    "jsonSchema": {
+      "type": "object"
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*\\.[a-z][a-z0-9]*$"
+        },
+        "description": { "type": "string" },
+        "owner": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "request": { "$ref": "#/$defs/jsonSchema" },
+        "response": { "$ref": "#/$defs/jsonSchema" },
+        "auth": {
+          "type": "string",
+          "enum": ["none", "local-trusted", "runtime", "user"]
+        },
+        "client": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["exposed"],
+          "properties": {
+            "exposed": { "type": "boolean" },
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z][A-Za-z0-9]*$"
+            }
+          }
+        },
+        "resource": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["httpMethod", "path"],
+          "properties": {
+            "httpMethod": {
+              "type": "string",
+              "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "*"]
+            },
+            "path": {
+              "type": "string",
+              "pattern": "^/"
+            },
+            "handler": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["module", "export"],
+              "properties": {
+                "module": { "type": "string" },
+                "export": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$"
+                }
+              }
+            }
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "deprecated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "direction"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "client-to-server",
+            "server-to-client",
+            "runtime-to-server",
+            "server-to-runtime",
+            "internal"
+          ]
+        },
+        "description": { "type": "string" },
+        "payload": { "$ref": "#/$defs/jsonSchema" },
+        "deprecated": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

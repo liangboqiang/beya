@@ -630,7 +630,7 @@ describe('Business Flow: WebSocket Chat', () => {
 
   it('should establish WebSocket connection and receive connected event', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/ws-test-1`)
+    const ws = new WebSocket(`${wsUrl}/sessions/ws-test-1/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (event) => {
@@ -644,21 +644,21 @@ describe('Business Flow: WebSocket Chat', () => {
       setTimeout(() => { ws.close(); resolve() }, 3000)
     })
 
-    expect(messages[0].type).toBe('connected')
+    expect(messages[0].type).toBe('session.connected')
     expect(messages[0].sessionId).toBe('ws-test-1')
   })
 
   it('should establish WebSocket connection and handle messages', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/ws-test-2`)
+    const ws = new WebSocket(`${wsUrl}/sessions/ws-test-2/live`)
 
     await new Promise<void>((resolve) => {
       ws.onopen = () => {}
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
-          ws.send(JSON.stringify({ type: 'user_message', content: 'test message' }))
+        if (msg.type === 'session.connected') {
+          ws.send(JSON.stringify({ type: 'session.message.send', content: 'test message' }))
         }
         if (msg.type === 'status' && msg.state === 'idle' && messages.length >= 3) {
           ws.close()
@@ -670,13 +670,13 @@ describe('Business Flow: WebSocket Chat', () => {
     })
 
     const types = messages.map((m) => m.type)
-    expect(types).toContain('connected')
+    expect(types).toContain('session.connected')
     expect(types).toContain('status')
 
-    const hasContent = types.includes('content_start') || types.includes('content_delta')
+    const hasContent = types.includes('content_start') || types.includes('session.message.delta')
     if (hasContent) {
       expect(types).toContain('content_start')
-      expect(types).toContain('message_complete')
+      expect(types).toContain('session.completed')
       const statusMsgs = messages.filter((m) => m.type === 'status')
       expect(statusMsgs[0].state).toBe('thinking')
     }
@@ -684,16 +684,16 @@ describe('Business Flow: WebSocket Chat', () => {
 
   it('should handle ping/pong', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/ws-test-3`)
+    const ws = new WebSocket(`${wsUrl}/sessions/ws-test-3/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
+        if (msg.type === 'session.connected') {
           ws.send(JSON.stringify({ type: 'ping' }))
         }
-        if (msg.type === 'pong') {
+        if (msg.type === 'session.pong') {
           ws.close()
           resolve()
         }
@@ -701,19 +701,19 @@ describe('Business Flow: WebSocket Chat', () => {
       setTimeout(() => { ws.close(); resolve() }, 3000)
     })
 
-    expect(messages.some((m) => m.type === 'pong')).toBe(true)
+    expect(messages.some((m) => m.type === 'session.pong')).toBe(true)
   })
 
   it('should handle stop_generation', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/ws-test-4`)
+    const ws = new WebSocket(`${wsUrl}/sessions/ws-test-4/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
-          ws.send(JSON.stringify({ type: 'stop_generation' }))
+        if (msg.type === 'session.connected') {
+          ws.send(JSON.stringify({ type: 'session.generation.stop' }))
         }
         if (msg.type === 'status' && msg.state === 'idle') {
           ws.close()
@@ -729,13 +729,13 @@ describe('Business Flow: WebSocket Chat', () => {
 
   it('should handle invalid message gracefully', async () => {
     const messages: any[] = []
-    const ws = new WebSocket(`${wsUrl}/ws/ws-test-5`)
+    const ws = new WebSocket(`${wsUrl}/sessions/ws-test-5/live`)
 
     await new Promise<void>((resolve) => {
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
+        if (msg.type === 'session.connected') {
           ws.send('not valid json {{{')
         }
         if (msg.type === 'error') {
@@ -753,7 +753,7 @@ describe('Business Flow: WebSocket Chat', () => {
 
   it('should reject invalid session ID in WebSocket URL', async () => {
     // Path traversal gets resolved by URL parser, so test with special chars
-    const res = await fetch(`${baseUrl}/ws/invalid session!@#`, {
+    const res = await fetch(`${baseUrl}/sessions/invalid/live session!@#`, {
       headers: { 'Upgrade': 'websocket', 'Connection': 'Upgrade' },
     })
     // URL with special chars either returns 400 (invalid ID) or 404 (path resolution)

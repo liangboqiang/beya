@@ -55,7 +55,7 @@ async function request<T>(method: string, path: string, body?: unknown, options?
       method,
       path: normalizeResourcePath(path),
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body,
       timeoutMs,
     })
 
@@ -72,16 +72,11 @@ async function request<T>(method: string, path: string, body?: unknown, options?
 }
 
 function normalizeResourcePath(path: string) {
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`
-  if (normalizedPath === '/api') return '/'
-  if (normalizedPath.startsWith('/api/')) {
-    return normalizedPath.slice('/api'.length)
-  }
-  return normalizedPath
+  return path.startsWith('/') ? path : `/${path}`
 }
 
 function reportApiFailure(method: string, path: string, error: unknown) {
-  if (path.startsWith('/api/diagnostics')) return
+  if (path.startsWith('/diagnostics')) return
 
   const details: Record<string, unknown> = {
     method,
@@ -114,7 +109,7 @@ export function rawRecordDiagnosticEvent(event: {
     method: 'POST',
     path: DIAGNOSTICS_PATH,
     headers: buildHeaders(),
-    body: JSON.stringify(event),
+    body: event,
     timeoutMs: 5_000,
   }).catch(() => undefined)
 }

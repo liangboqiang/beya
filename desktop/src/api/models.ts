@@ -7,22 +7,22 @@ type EffortResponse = { level: EffortLevel; available: EffortLevel[] }
 
 export const modelsApi = {
   list() {
-    return api.get<ModelsResponse>('/api/models')
+    return api.get<ModelsResponse>('/models')
   },
 
   getCurrent() {
-    return api.get<CurrentModelResponse>('/api/models/current')
+    return api.get<CurrentModelResponse>('/models/current')
   },
 
   setCurrent(modelId: string) {
-    return api.put<{ ok: true; model: string }>('/api/models/current', { modelId })
+    return api.put<{ ok: true; model: string }>('/models/current', { modelId })
   },
 
   getEffort() {
-    return api.get<EffortResponse>('/api/effort')
+    return api.get<EffortResponse>('/effort')
   },
 
   setEffort(level: EffortLevel) {
-    return api.put<{ ok: true; level: EffortLevel }>('/api/effort', { level })
+    return api.put<{ ok: true; level: EffortLevel }>('/effort', { level })
   },
 }

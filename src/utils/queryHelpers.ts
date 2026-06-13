@@ -4,7 +4,7 @@ import {
   getSessionId,
   isSessionPersistenceDisabled,
 } from 'src/bootstrap/state.js'
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import { runTools } from '../services/tools/toolOrchestration.js'
 import { findToolByName, type Tool, type Tools } from '../Tool.js'
@@ -99,7 +99,7 @@ const MAX_TOOL_PROGRESS_TRACKING_ENTRIES = 100
 const TOOL_PROGRESS_THROTTLE_MS = 30000
 const toolProgressLastSentTime = new Map<string, number>()
 
-export function* normalizeMessage(message: Message): Generator<SDKMessage> {
+export function* normalizeMessage(message: Message): Generator<RuntimeMessage> {
   switch (message.type) {
     case 'assistant':
       for (const _ of normalizeMessages([message])) {
@@ -226,7 +226,7 @@ export async function* handleOrphanedPermission(
   tools: Tools,
   mutableMessages: Message[],
   processUserInputContext: ProcessUserInputContext,
-): AsyncGenerator<SDKMessage, void, unknown> {
+): AsyncGenerator<RuntimeMessage, void, unknown> {
   const persistSession = !isSessionPersistenceDisabled()
   const { permissionResult, assistantMessage } = orphanedPermission
   const { toolUseID } = permissionResult
@@ -311,11 +311,11 @@ export async function* handleOrphanedPermission(
     }
   }
 
-  const sdkAssistantMessage: SDKMessage = {
+  const sdkAssistantMessage: RuntimeMessage = {
     ...assistantMessage,
     session_id: getSessionId(),
     parent_tool_use_id: null,
-  } as SDKMessage
+  } as RuntimeMessage
   yield sdkAssistantMessage
 
   // Execute the tool - errors are handled internally by runToolUse
@@ -331,11 +331,11 @@ export async function* handleOrphanedPermission(
         await recordTranscript(mutableMessages)
       }
 
-      const sdkMessage: SDKMessage = {
+      const sdkMessage: RuntimeMessage = {
         ...update.message,
         session_id: getSessionId(),
         parent_tool_use_id: null,
-      } as SDKMessage
+      } as RuntimeMessage
 
       yield sdkMessage
     }

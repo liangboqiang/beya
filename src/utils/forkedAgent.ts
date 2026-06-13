@@ -491,7 +491,7 @@ export function createSubagentContext(
     addNotification: undefined,
     setToolJSX: undefined,
     setStreamMode: undefined,
-    setSDKStatus: undefined,
+    setRuntimeStatus: undefined,
     openMessageSelector: undefined,
 
     // Fields that can be overridden or copied from parent

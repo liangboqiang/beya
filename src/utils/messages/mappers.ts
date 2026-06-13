@@ -6,11 +6,11 @@ import {
   LOCAL_COMMAND_STDOUT_TAG,
 } from 'src/constants/xml.js'
 import type {
-  SDKAssistantMessage,
-  SDKCompactBoundaryMessage,
-  SDKMessage,
-  SDKRateLimitInfo,
-} from 'src/types/sdkProtocol.js'
+  RuntimeAssistantMessage,
+  RuntimeCompactBoundaryMessage,
+  RuntimeMessage,
+  RuntimeRateLimitInfo,
+} from 'src/types/runtimeProtocol.js'
 import type { ClaudeAILimits } from 'src/services/claudeAiLimits.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from 'src/tools/ExitPlanModeTool/constants.js'
 import type {
@@ -24,7 +24,7 @@ import { createAssistantMessage } from '../messages.js'
 import { getPlan } from '../plans.js'
 
 export function toInternalMessages(
-  messages: readonly DeepImmutable<SDKMessage>[],
+  messages: readonly DeepImmutable<RuntimeMessage>[],
 ): Message[] {
   return messages.flatMap(message => {
     switch (message.type) {
@@ -58,7 +58,7 @@ export function toInternalMessages(
               content: 'Conversation compacted',
               level: 'info',
               subtype: 'compact_boundary',
-              compactMetadata: fromSDKCompactMetadata(
+              compactMetadata: fromRuntimeCompactMetadata(
                 compactMsg.compact_metadata,
               ),
               uuid: message.uuid,
@@ -73,11 +73,11 @@ export function toInternalMessages(
   })
 }
 
-type SDKCompactMetadata = SDKCompactBoundaryMessage['compact_metadata']
+type RuntimeCompactMetadata = RuntimeCompactBoundaryMessage['compact_metadata']
 
-export function toSDKCompactMetadata(
+export function toRuntimeCompactMetadata(
   meta: CompactMetadata,
-): SDKCompactMetadata {
+): RuntimeCompactMetadata {
   const seg = meta.preservedSegment
   return {
     trigger: meta.trigger,
@@ -95,8 +95,8 @@ export function toSDKCompactMetadata(
 /**
  * Shared SDK→internal compact_metadata converter.
  */
-export function fromSDKCompactMetadata(
-  meta: SDKCompactMetadata,
+export function fromRuntimeCompactMetadata(
+  meta: RuntimeCompactMetadata,
 ): CompactMetadata {
   const seg = meta.preserved_segment
   return {
@@ -112,8 +112,8 @@ export function fromSDKCompactMetadata(
   }
 }
 
-export function toSDKMessages(messages: Message[]): SDKMessage[] {
-  return messages.flatMap((message): SDKMessage[] => {
+export function toRuntimeMessages(messages: Message[]): RuntimeMessage[] {
+  return messages.flatMap((message): RuntimeMessage[] => {
     switch (message.type) {
       case 'assistant':
         return [
@@ -153,7 +153,7 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
               subtype: 'compact_boundary' as const,
               session_id: getSessionId(),
               uuid: message.uuid,
-              compact_metadata: toSDKCompactMetadata(message.compactMetadata),
+              compact_metadata: toRuntimeCompactMetadata(message.compactMetadata),
             },
           ]
         }
@@ -167,7 +167,7 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
             message.content.includes(`<${LOCAL_COMMAND_STDERR_TAG}>`))
         ) {
           return [
-            localCommandOutputToSDKAssistantMessage(
+            localCommandOutputToRuntimeAssistantMessage(
               message.content,
               message.uuid,
             ),
@@ -182,21 +182,21 @@ export function toSDKMessages(messages: Message[]): SDKMessage[] {
 
 /**
  * Converts local command output (e.g. /voice, /cost) to a well-formed
- * SDKAssistantMessage so downstream consumers (mobile apps, session-ingress
+ * RuntimeAssistantMessage so downstream consumers (mobile apps, session-ingress
  * v1alpha→v1beta converter) can parse it without schema changes.
  *
- * Emitted as assistant instead of the dedicated SDKLocalCommandOutputMessage
+ * Emitted as assistant instead of the dedicated RuntimeLocalCommandOutputMessage
  * because the system/local_command_output subtype is unknown to:
- *   - mobile-apps Android SdkMessageTypes.kt (no local_command_output handler)
+ *   - mobile-apps Android RuntimeMessageTypes.kt (no local_command_output handler)
  *   - api-go session-ingress convertSystemEvent (only init/compact_boundary)
  * See: https://anthropic.sentry.io/issues/7266299248/ (Android)
  *
  * Strips ANSI (e.g. chalk.dim() in /cost) then unwraps the XML wrapper tags.
  */
-export function localCommandOutputToSDKAssistantMessage(
+export function localCommandOutputToRuntimeAssistantMessage(
   rawContent: string,
   uuid: UUID,
-): SDKAssistantMessage {
+): RuntimeAssistantMessage {
   const cleanContent = stripAnsi(rawContent)
     .replace(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/, '$1')
     .replace(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/, '$1')
@@ -215,12 +215,12 @@ export function localCommandOutputToSDKAssistantMessage(
 }
 
 /**
- * Maps internal ClaudeAILimits to the SDK-facing SDKRateLimitInfo type,
+ * Maps internal ClaudeAILimits to the SDK-facing RuntimeRateLimitInfo type,
  * stripping internal-only fields like unifiedRateLimitFallbackAvailable.
  */
-export function toSDKRateLimitInfo(
+export function toRuntimeRateLimitInfo(
   limits: ClaudeAILimits | undefined,
-): SDKRateLimitInfo | undefined {
+): RuntimeRateLimitInfo | undefined {
   if (!limits) {
     return undefined
   }

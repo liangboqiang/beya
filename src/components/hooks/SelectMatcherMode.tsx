@@ -6,7 +6,7 @@ import { c as _c } from "react/compiler-runtime";
  * and simply lets the user drill into each matcher to see its hooks.
  */
 import * as React from 'react';
-import type { HookEvent } from 'src/types/sdkProtocol.js';
+import type { HookEvent } from 'src/types/runtimeProtocol.js';
 import { Box, Text } from '../../ink.js';
 import { type HookSource, hookSourceInlineDisplayString, type IndividualHookConfig } from '../../utils/hooks/hooksSettings.js';
 import { plural } from '../../utils/stringUtils.js';

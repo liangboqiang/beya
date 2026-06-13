@@ -1,0 +1,25 @@
+name: runtime.bridge
+version: v1
+domain: runtime
+stability: stable
+description: Internal Agent runtime bridge. This is not the product SDK entrypoint.
+transport:
+  kind: websocket
+  path: /sessions/{sessionId}/runtime
+messages:
+  - name: runtime.ready
+    direction: runtime-to-server
+  - name: runtime.event
+    direction: runtime-to-server
+  - name: runtime.control.request
+    direction: runtime-to-server
+  - name: runtime.control.response
+    direction: runtime-to-server
+  - name: runtime.input.send
+    direction: server-to-runtime
+  - name: runtime.control.send
+    direction: server-to-runtime
+  - name: runtime.interrupt
+    direction: server-to-runtime
+  - name: runtime.shutdown
+    direction: server-to-runtime

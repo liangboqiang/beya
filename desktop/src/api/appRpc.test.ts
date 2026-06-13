@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildAppWebSocketUrl, sendAppRpcRequest } from './appRpc'
+import { buildResourceRpcWebSocketUrl, sendAppRpcRequest } from './appRpc'
 import { getDefaultBaseUrl, setAuthToken, setBaseUrl } from './clientState'
 
 type SocketHandler = (() => void) | ((event: { data: string }) => void)
@@ -42,7 +42,7 @@ class FakeWebSocket {
   }
 }
 
-describe('app WebSocket RPC transport', () => {
+describe('resource WebSocket RPC transport', () => {
   const originalWebSocket = globalThis.WebSocket
 
   beforeEach(() => {
@@ -59,16 +59,16 @@ describe('app WebSocket RPC transport', () => {
     vi.restoreAllMocks()
   })
 
-  it('builds the app control WebSocket URL with token query params', () => {
+  it('builds the resource RPC WebSocket URL with token query params', () => {
     setBaseUrl('https://public.example.com/app')
     setAuthToken('h5 token/with?chars')
 
-    expect(buildAppWebSocketUrl()).toBe(
-      'wss://public.example.com/app/ws/app?token=h5+token%2Fwith%3Fchars',
+    expect(buildResourceRpcWebSocketUrl()).toBe(
+      'wss://public.example.com/app/rpc?token=h5+token%2Fwith%3Fchars',
     )
   })
 
-  it('sends resource paths through app WebSocket without an /api prefix', async () => {
+  it('sends contract RPC methods through the resource WebSocket', async () => {
     const result = sendAppRpcRequest({
       method: 'GET',
       path: '/status',
@@ -77,25 +77,28 @@ describe('app WebSocket RPC transport', () => {
     })
 
     const ws = FakeWebSocket.instances[0]
-    expect(ws?.url).toBe('ws://127.0.0.1:3456/ws/app')
+    expect(ws?.url).toBe('ws://127.0.0.1:3456/rpc')
 
     ws!.open()
     const payload = JSON.parse(ws!.sent[0]!)
-    expect(payload.request).toMatchObject({
-      method: 'GET',
-      path: '/status',
+    expect(payload).toMatchObject({
+      type: 'rpc.request',
+      method: 'status.read',
+      params: {
+        headers: { 'Content-Type': 'application/json' },
+      },
     })
 
     ws!.receive({
-      type: 'connected',
-      scope: 'app',
+      type: 'rpc.connected',
+      schemaHash: 'test-hash',
     })
     ws!.receive({
-      type: 'api_response',
+      type: 'rpc.response',
       id: payload.id,
       status: 200,
       headers: {},
-      body: { ok: true },
+      result: { ok: true },
     })
 
     await expect(result).resolves.toEqual({

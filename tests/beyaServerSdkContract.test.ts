@@ -2,21 +2,24 @@ import { describe, expect, it } from 'bun:test'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { handleApiRequest } from '../src/server/router.js'
+import { handleResourceRequest } from '../src/server/router.js'
 import {
-  APP_WS_PATH,
-  SESSION_WS_CANONICAL_PATH,
-  isAppWebSocketPath,
-  sessionWebSocketIdFromPath,
+  RPC_WS_PATH,
+  SESSION_LIVE_WS_PATH_TEMPLATE,
+  SESSION_RUNTIME_WS_PATH_TEMPLATE,
+  buildSessionRuntimeWebSocketUrl,
+  isRpcWebSocketPath,
+  sessionLiveIdFromPath,
+  sessionRuntimeIdFromPath,
 } from '../src/server/ws/paths.js'
 import { toolDefinitionToBeyaTool, isExecutableToolDefinition } from '../src/server/services/beyaToolDefinitions.js'
 import { loadInstalledBeyaPlugins } from '../src/server/services/beyaPluginRuntime.js'
 
 describe('Beya Server SDK contract', () => {
   it('keeps health and readiness available through the internal resource router', async () => {
-    const health = await handleApiRequest(
-      new Request('http://127.0.0.1/api/health'),
-      new URL('http://127.0.0.1/api/health'),
+    const health = await handleResourceRequest(
+      new Request('http://127.0.0.1/health'),
+      new URL('http://127.0.0.1/health'),
     )
     expect(health.status).toBe(200)
     expect(await health.json()).toMatchObject({
@@ -24,9 +27,9 @@ describe('Beya Server SDK contract', () => {
       service: 'beya-server',
     })
 
-    const readiness = await handleApiRequest(
-      new Request('http://127.0.0.1/api/readiness'),
-      new URL('http://127.0.0.1/api/readiness'),
+    const readiness = await handleResourceRequest(
+      new Request('http://127.0.0.1/ready'),
+      new URL('http://127.0.0.1/ready'),
     )
     expect(readiness.status).toBe(200)
     expect(await readiness.json()).toMatchObject({
@@ -36,70 +39,82 @@ describe('Beya Server SDK contract', () => {
   })
 
   it('keeps the internal resource router isolated from legacy external paths', async () => {
-    const canonical = await handleApiRequest(
-      new Request('http://127.0.0.1/api/tools'),
-      new URL('http://127.0.0.1/api/tools'),
+    const canonical = await handleResourceRequest(
+      new Request('http://127.0.0.1/tools'),
+      new URL('http://127.0.0.1/tools'),
     )
     expect(canonical.status).toBe(200)
 
-    const versioned = await handleApiRequest(
-      new Request('http://127.0.0.1/api/v1/tools'),
-      new URL('http://127.0.0.1/api/v1/tools'),
+    const versioned = await handleResourceRequest(
+      new Request('http://127.0.0.1/v1/tools'),
+      new URL('http://127.0.0.1/v1/tools'),
     )
     expect(versioned.status).toBe(404)
 
-    const topHealth = await handleApiRequest(
-      new Request('http://127.0.0.1/health'),
-      new URL('http://127.0.0.1/health'),
+    const oldApiHealth = await handleResourceRequest(
+      new Request('http://127.0.0.1/api/health'),
+      new URL('http://127.0.0.1/api/health'),
     )
-    expect(topHealth.status).toBe(404)
+    expect(oldApiHealth.status).toBe(404)
 
-    const openaiHelper = await handleApiRequest(
+    const openaiHelper = await handleResourceRequest(
       new Request('http://127.0.0.1/api/openai/chat/completions', { method: 'POST' }),
       new URL('http://127.0.0.1/api/openai/chat/completions'),
     )
     expect(openaiHelper.status).toBe(404)
   })
 
-  it('uses the concise session WebSocket path and rejects REST-style WebSocket residue', () => {
-    expect(SESSION_WS_CANONICAL_PATH).toBe('/ws/{sessionId}')
-    expect(sessionWebSocketIdFromPath('/ws/session-1')).toBe('session-1')
-    expect(APP_WS_PATH).toBe('/ws/app')
-    expect(isAppWebSocketPath('/ws/app')).toBe(true)
-    expect(sessionWebSocketIdFromPath('/ws/app')).toBeNull()
-    expect(sessionWebSocketIdFromPath('/api/sessions/session-1/ws')).toBeNull()
-    expect(sessionWebSocketIdFromPath('/api/sessions/session-1/chat')).toBeNull()
-    expect(sessionWebSocketIdFromPath('/ws/session-1/extra')).toBeNull()
+  it('uses the public RPC, session live, and runtime bridge WebSocket paths', () => {
+    expect(RPC_WS_PATH).toBe('/rpc')
+    expect(isRpcWebSocketPath('/rpc')).toBe(true)
+    expect(isRpcWebSocketPath('/ws/app')).toBe(false)
+
+    expect(SESSION_LIVE_WS_PATH_TEMPLATE).toBe('/sessions/{sessionId}/live')
+    expect(sessionLiveIdFromPath('/sessions/session-1/live')).toBe('session-1')
+    expect(sessionLiveIdFromPath('/ws/session-1')).toBeNull()
+    expect(sessionLiveIdFromPath('/api/sessions/session-1/ws')).toBeNull()
+    expect(sessionLiveIdFromPath('/api/sessions/session-1/chat')).toBeNull()
+
+    expect(SESSION_RUNTIME_WS_PATH_TEMPLATE).toBe('/sessions/{sessionId}/runtime')
+    expect(sessionRuntimeIdFromPath('/sessions/session-1/runtime')).toBe('session-1')
+    expect(sessionRuntimeIdFromPath('/sdk/session-1')).toBeNull()
+    expect(sessionRuntimeIdFromPath('/sessions/session-1/live')).toBeNull()
+    expect(buildSessionRuntimeWebSocketUrl({
+      host: '127.0.0.1',
+      port: 3456,
+      sessionId: 'session 1',
+      token: 'runtime token',
+    })).toBe('ws://127.0.0.1:3456/sessions/session%201/runtime?token=runtime%20token')
   })
 
   it('keeps task resources limited to Desktop/CLI task-list semantics', async () => {
-    const postRun = await handleApiRequest(
-      new Request('http://127.0.0.1/api/tasks', {
+    const postRun = await handleResourceRequest(
+      new Request('http://127.0.0.1/tasks', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ query: 'hello' }),
       }),
-      new URL('http://127.0.0.1/api/tasks'),
+      new URL('http://127.0.0.1/tasks'),
     )
     expect(postRun.status).toBe(405)
 
-    const stream = await handleApiRequest(
-      new Request('http://127.0.0.1/api/tasks/task-1/stream'),
-      new URL('http://127.0.0.1/api/tasks/task-1/stream'),
+    const stream = await handleResourceRequest(
+      new Request('http://127.0.0.1/tasks/task-1/stream'),
+      new URL('http://127.0.0.1/tasks/task-1/stream'),
     )
     expect(stream.status).toBe(404)
 
-    const sse = await handleApiRequest(
-      new Request('http://127.0.0.1/api/stream/sse?task_id=task-1'),
-      new URL('http://127.0.0.1/api/stream/sse?task_id=task-1'),
+    const sse = await handleResourceRequest(
+      new Request('http://127.0.0.1/stream/sse?task_id=task-1'),
+      new URL('http://127.0.0.1/stream/sse?task_id=task-1'),
     )
     expect(sse.status).toBe(404)
   })
 
-  it('lists the server tool surface through /api/tools', async () => {
-    const response = await handleApiRequest(
-      new Request('http://127.0.0.1/api/tools'),
-      new URL('http://127.0.0.1/api/tools'),
+  it('lists the server tool surface through /tools', async () => {
+    const response = await handleResourceRequest(
+      new Request('http://127.0.0.1/tools'),
+      new URL('http://127.0.0.1/tools'),
     )
     expect(response.status).toBe(200)
     const body = await response.json() as { tools: Array<{ name: string }> }
@@ -107,12 +122,12 @@ describe('Beya Server SDK contract', () => {
   })
 
   it('returns stable errors for direct tool execution when no tool is installed', async () => {
-    const request = new Request('http://127.0.0.1/api/tools/missing_tool/execute', {
+    const request = new Request('http://127.0.0.1/tools/missing_tool/execute', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ input: {} }),
     })
-    const response = await handleApiRequest(request, new URL(request.url))
+    const response = await handleResourceRequest(request, new URL(request.url))
     expect(response.status).toBe(404)
   })
 
@@ -206,7 +221,7 @@ describe('Beya Server SDK contract', () => {
       },
     })
     try {
-      const request = new Request('http://127.0.0.1/api/plugins', {
+      const request = new Request('http://127.0.0.1/plugins', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -240,7 +255,7 @@ describe('Beya Server SDK contract', () => {
         }),
       })
 
-      const response = await handleApiRequest(request, new URL(request.url))
+      const response = await handleResourceRequest(request, new URL(request.url))
       expect(response.status).toBe(200)
       const body = await response.json() as {
         ok: boolean

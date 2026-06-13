@@ -182,7 +182,7 @@ MCP Channel 系统设计用于 CLI 交互模式（React/Ink 渲染），需要�
 
 // 权限请求
 {
-  type: 'permission_request';
+  type: 'session.permission.requested';
   chatId: string;
   sessionId: string;
   requestId: string;
@@ -300,7 +300,7 @@ ws.on('message', (data) => {
     case 'text':
       bot.telegram.sendMessage(msg.chatId, msg.content, { parse_mode: 'Markdown' })
       break
-    case 'permission_request':
+    case 'session.permission.requested':
       bot.telegram.sendMessage(msg.chatId,
         `需要权限: ${msg.toolName}\n${msg.inputPreview}`,
         { reply_markup: {

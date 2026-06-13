@@ -43,7 +43,9 @@ describe('feature quality contract', () => {
 
     expect(packageJson.scripts?.verify).toBe('bun run quality:pr')
     expect(packageJson.scripts?.['quality:verify']).toBe('bun run quality:pr')
-    expect(packageJson.scripts?.['quality:push']).toBe('bun run quality:gate --mode pr --skip coverage')
+    expect(packageJson.scripts?.['verify:fast']).toBe('bun run quality:gate --mode pr --skip coverage --fast')
+    expect(packageJson.scripts?.['verify:full']).toBe('bun run quality:pr')
+    expect(packageJson.scripts?.['quality:push']).toBe('bun run quality:gate --mode pr --skip coverage --fast')
     expect(packageJson.scripts?.['check:persistence-upgrade']).toBe('bun run scripts/quality-gate/persistence-upgrade.ts')
     expect(prePushHook).toContain('bun run quality:push')
     expect(prePushHook).not.toContain('\nbun run quality:pr\n')

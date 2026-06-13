@@ -243,7 +243,7 @@ export class StreamingCard {
     }
 
     // 卡片可写之后若已有 buffered 内容（text / reasoning / tools），
-    // 立刻触发一次 flush —— 否则 content_start{tool_use} 或 thinking 在
+    // 立刻触发一次 flush —— 否则 session.message.started{tool_use} 或 thinking 在
     // ensureCreated 期间到达的状态会一直卡在节流 gate 上，用户看不到。
     if (this.hasAnyContent()) {
       void this.flushController.throttledUpdate(this.currentThrottle())
@@ -492,7 +492,7 @@ export class StreamingCard {
   /** 终态文本: 只渲染最终答复正文，丢弃 reasoning 和 toolSteps。
    *
    *  推理过程和工具调用是"过程态"信息，已经在流式中展示给用户看过；
-   *  message_complete 之后用户应该看到一张干净的答复卡（与 Desktop UI 对齐）。
+   *  session.completed 之后用户应该看到一张干净的答复卡（与 Desktop UI 对齐）。
    *  这个方法专供 finalize 调用，不要在中间帧用。
    *
    *  边界情况: 如果完全没有 accumulatedText（比如纯 thinking 没产出答案

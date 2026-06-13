@@ -17,18 +17,14 @@ import { ProviderService } from '../services/providerService.js'
 import { sessionService } from '../services/sessionService.js'
 import { SettingsService } from '../services/settingsService.js'
 
-function makeClientSocket(
-  sessionId: string,
-  purpose: WebSocketData['purpose'] = 'chat',
-) {
+function makeClientSocket(sessionId: string) {
   const sent: string[] = []
   return {
     data: {
       sessionId,
       connectedAt: Date.now(),
       channel: 'client',
-      purpose,
-      sdkToken: null,
+      runtimeToken: null,
       serverPort: 0,
       serverHost: '127.0.0.1',
     },
@@ -81,10 +77,33 @@ async function waitForCall(spy: { mock: { calls: unknown[] } }): Promise<void> {
   }
 }
 
-async function waitForCall(fn: { mock: { calls: unknown[] } }): Promise<void> {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    if (fn.mock.calls.length > 0) return
-    await new Promise((resolve) => setTimeout(resolve, 0))
+async function waitForSentMessage(
+  ws: { sent: string[] },
+  predicate: (message: unknown) => boolean,
+): Promise<unknown> {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const message = sentMessages(ws).find(predicate)
+    if (message) return message
+    await waitForAsyncHandlers()
+  }
+  return undefined
+}
+
+async function rmWithRetry(targetPath: string): Promise<void> {
+  const attempts = process.platform === 'win32' ? 5 : 1
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await fs.rm(targetPath, { recursive: true, force: true })
+      return
+    } catch (error) {
+      if (
+        attempt === attempts - 1 ||
+        !['EBUSY', 'EPERM', 'ENOTEMPTY'].includes((error as NodeJS.ErrnoException).code || '')
+      ) {
+        throw error
+      }
+      await Bun.sleep(100 * (attempt + 1))
+    }
   }
 }
 
@@ -156,7 +175,7 @@ describe('WebSocket handler session isolation', () => {
     handleWebSocket.open(ws)
 
     expect(ws.sent.map((payload) => JSON.parse(payload))).toContainEqual({
-      type: 'permission_request',
+      type: 'session.permission.requested',
       requestId: 'request-ask-1',
       toolName: 'AskUserQuestion',
       toolUseId: 'tool-ask-1',
@@ -173,66 +192,20 @@ describe('WebSocket handler session isolation', () => {
     })
   })
 
-  it('does not replay pending permission requests on interaction response connections', () => {
-    const sessionId = `permission-response-${crypto.randomUUID()}`
-    const ws = makeClientSocket(sessionId, 'interaction_response')
-    spyOn(conversationService, 'hasSession').mockReturnValue(true)
-    spyOn(conversationService, 'onOutput').mockImplementation(() => {})
-    spyOn(conversationService, 'removeOutputCallback').mockImplementation(() => {})
-    spyOn(conversationService, 'getPendingPermissionRequests').mockReturnValue([
-      {
-        requestId: 'request-ask-1',
-        toolName: 'AskUserQuestion',
-        toolUseId: 'tool-ask-1',
-        input: { questions: [] },
-        description: 'Answer questions?',
-      },
-    ])
-
-    handleWebSocket.open(ws)
-
-    expect(ws.sent.map((payload) => JSON.parse(payload))).toEqual([
-      { type: 'connected', sessionId },
-    ])
-  })
-
-  it('does not replay pending permission requests on SDK chat connections', () => {
-    const sessionId = `sdk-chat-${crypto.randomUUID()}`
-    const ws = makeClientSocket(sessionId, 'sdk_chat')
-    spyOn(conversationService, 'hasSession').mockReturnValue(true)
-    spyOn(conversationService, 'onOutput').mockImplementation(() => {})
-    spyOn(conversationService, 'removeOutputCallback').mockImplementation(() => {})
-    spyOn(conversationService, 'getPendingPermissionRequests').mockReturnValue([
-      {
-        requestId: 'request-ask-1',
-        toolName: 'AskUserQuestion',
-        toolUseId: 'tool-ask-1',
-        input: { questions: [] },
-        description: 'Answer questions?',
-      },
-    ])
-
-    handleWebSocket.open(ws)
-
-    expect(ws.sent.map((payload) => JSON.parse(payload))).toEqual([
-      { type: 'connected', sessionId },
-    ])
-  })
-
   it('reports an error when a permission response has no pending request', () => {
     const sessionId = `permission-missing-${crypto.randomUUID()}`
-    const ws = makeClientSocket(sessionId, 'interaction_response')
+    const ws = makeClientSocket(sessionId)
     spyOn(conversationService, 'respondToPermission').mockReturnValue(false)
 
     handleWebSocket.message(ws, JSON.stringify({
-      type: 'permission_response',
+      type: 'session.permission.respond',
       requestId: 'missing-request',
       allowed: true,
       updatedInput: {},
     }))
 
     expect(ws.sent.map((payload) => JSON.parse(payload))).toContainEqual({
-      type: 'error',
+      type: 'session.failed',
       code: 'PERMISSION_RESPONSE_NOT_PENDING',
       message: `No pending permission request missing-request is active for session ${sessionId}`,
       retryable: false,
@@ -244,18 +217,18 @@ describe('WebSocket handler session isolation', () => {
     const ws = makeClientSocket(sessionId)
 
     handleWebSocket.message(ws, JSON.stringify({
-      type: 'set_runtime_config',
+      type: 'session.runtime.select',
       providerId: 'provider-a',
       modelId: '   ',
     }))
     handleWebSocket.message(ws, JSON.stringify({
-      type: 'set_runtime_config',
+      type: 'session.runtime.select',
       providerId: 'provider-a',
       modelId: 'model-a',
       effortLevel: 'too-much',
     }))
     handleWebSocket.message(ws, JSON.stringify({
-      type: 'set_runtime_config',
+      type: 'session.runtime.select',
       kind: 'local_cli',
       providerId: null,
       modelId: 'model-a',
@@ -264,17 +237,17 @@ describe('WebSocket handler session isolation', () => {
 
     expect(sentMessages(ws)).toEqual([
       {
-        type: 'error',
+        type: 'session.failed',
         message: 'Runtime model selection is invalid.',
         code: 'RUNTIME_CONFIG_INVALID',
       },
       {
-        type: 'error',
+        type: 'session.failed',
         message: 'Runtime effort selection is invalid.',
         code: 'RUNTIME_CONFIG_INVALID',
       },
       {
-        type: 'error',
+        type: 'session.failed',
         message: 'Local CLI runtime selection is invalid.',
         code: 'RUNTIME_CONFIG_INVALID',
       },
@@ -313,7 +286,7 @@ describe('WebSocket handler session isolation', () => {
     })
 
     handleWebSocket.message(ws, JSON.stringify({
-      type: 'set_runtime_config',
+      type: 'session.runtime.select',
       kind: 'local_cli',
       providerId: null,
       localCliId: 'codex',
@@ -322,7 +295,7 @@ describe('WebSocket handler session isolation', () => {
     await waitForAsyncHandlers()
 
     expect(sentMessages(ws)).toContainEqual({
-      type: 'error',
+      type: 'session.failed',
       message: 'Selected local CLI is no longer available.',
       code: 'RUNTIME_CONFIG_INVALID',
     })
@@ -359,7 +332,7 @@ describe('WebSocket handler session isolation', () => {
     const appendMetadata = spyOn(sessionService, 'appendSessionMetadata').mockResolvedValue()
 
     handleWebSocket.message(ws, JSON.stringify({
-      type: 'set_runtime_config',
+      type: 'session.runtime.select',
       kind: 'provider',
       providerId: 'provider-a',
       modelId: 'provider-main',
@@ -414,7 +387,7 @@ describe('WebSocket handler session isolation', () => {
     const appendMetadata = spyOn(sessionService, 'appendSessionMetadata').mockResolvedValue()
 
     const message = {
-      type: 'set_runtime_config',
+      type: 'session.runtime.select',
       kind: 'local_cli',
       providerId: null,
       localCliId: 'codex',
@@ -441,7 +414,7 @@ describe('WebSocket handler session isolation', () => {
     const workDir = 'F:\\workspace'
     spyOn(conversationService, 'hasSession').mockReturnValue(false)
     spyOn(conversationService, 'onOutput').mockImplementation(() => {})
-    spyOn(conversationService, 'getRecentSdkMessages').mockReturnValue([])
+    spyOn(conversationService, 'getRecentRuntimeMessages').mockReturnValue([])
     spyOn(sessionService, 'getSessionWorkDir').mockResolvedValue(workDir)
     spyOn(sessionService, 'getSessionLaunchInfo').mockResolvedValue(null)
     spyOn(sessionService, 'getCustomTitle').mockResolvedValue(null)
@@ -486,7 +459,7 @@ describe('WebSocket handler session isolation', () => {
     spyOn(conversationService, 'sendMessage').mockResolvedValue(true)
 
     handleWebSocket.message(ws, JSON.stringify({
-      type: 'user_message',
+      type: 'session.message.send',
       content: '',
       metadata: { source: 'runtime-test' },
     }))
@@ -495,7 +468,7 @@ describe('WebSocket handler session isolation', () => {
     expect(startSession).toHaveBeenCalledWith(
       sessionId,
       workDir,
-      expect.stringContaining(`/sdk/${sessionId}`),
+      expect.stringContaining(`/sessions/${sessionId}/runtime`),
       expect.objectContaining({
         permissionMode: 'acceptEdits',
         model: 'gpt-5-codex',
@@ -530,7 +503,7 @@ describe('WebSocket handler session isolation', () => {
     spyOn(conversationService, 'sendMessage').mockResolvedValue(true)
 
     handleWebSocket.message(ws, JSON.stringify({
-      type: 'user_message',
+      type: 'session.message.send',
       content: '',
     }))
     await waitForCall(startSession)
@@ -570,21 +543,30 @@ describe('WebSocket handler session isolation', () => {
       spyOn(conversationService, 'sendMessage').mockResolvedValue(true)
 
       handleWebSocket.message(ws, JSON.stringify({
-        type: 'user_message',
+        type: 'session.message.send',
         content: '',
       }))
-      await waitForAsyncHandlers()
+      const errorMessage = await waitForSentMessage(ws, (message) => {
+        return (
+          typeof message === 'object' &&
+          message !== null &&
+          'type' in message &&
+          'code' in message &&
+          message.type === 'session.failed' &&
+          message.code === 'CLI_START_FAILED'
+        )
+      })
 
       expect(startSession).not.toHaveBeenCalled()
-      expect(sentMessages(ws)).toContainEqual(expect.objectContaining({
-        type: 'error',
+      expect(errorMessage).toEqual(expect.objectContaining({
+        type: 'session.failed',
         code: 'CLI_START_FAILED',
         message: expect.stringContaining('no active provider is configured'),
       }))
     } finally {
       if (originalConfigDir === undefined) delete process.env.BEYA_CONFIG_DIR
       else process.env.BEYA_CONFIG_DIR = originalConfigDir
-      await fs.rm(tmpDir, { recursive: true, force: true })
+      await rmWithRetry(tmpDir)
     }
   })
 
@@ -612,7 +594,7 @@ describe('WebSocket handler session isolation', () => {
       spyOn(conversationService, 'sendMessage').mockResolvedValue(true)
 
       handleWebSocket.message(ws, JSON.stringify({
-        type: 'user_message',
+        type: 'session.message.send',
         content: '',
       }))
       await waitForCall(startSession)
@@ -627,7 +609,7 @@ describe('WebSocket handler session isolation', () => {
     } finally {
       if (originalConfigDir === undefined) delete process.env.BEYA_CONFIG_DIR
       else process.env.BEYA_CONFIG_DIR = originalConfigDir
-      await fs.rm(tmpDir, { recursive: true, force: true })
+      await rmWithRetry(tmpDir)
     }
   })
 
@@ -653,37 +635,4 @@ describe('WebSocket handler session isolation', () => {
     expect(setTimeoutSpy.mock.calls[0]?.[1]).toBeGreaterThan(30_000)
   })
 
-  it('does not stop runtimes when an SDK chat websocket disconnects', () => {
-    const sessionId = `sdk-chat-disconnect-${crypto.randomUUID()}`
-    const ws = makeClientSocket(sessionId, 'sdk_chat')
-    const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(() => 0 as any)
-    const stopSession = spyOn(conversationService, 'stopSession').mockImplementation(() => {})
-    const cancelComputerUse = spyOn(computerUseApprovalService, 'cancelSession').mockImplementation(() => {})
-
-    handleWebSocket.open(ws)
-    setTimeoutSpy.mockClear()
-
-    handleWebSocket.close(ws, 1000, 'sdk stream completed')
-
-    expect(setTimeoutSpy).not.toHaveBeenCalled()
-    expect(stopSession).not.toHaveBeenCalled()
-    expect(cancelComputerUse).not.toHaveBeenCalled()
-  })
-
-  it('does not stop runtimes when an SDK interaction response websocket disconnects', () => {
-    const sessionId = `sdk-response-disconnect-${crypto.randomUUID()}`
-    const ws = makeClientSocket(sessionId, 'interaction_response')
-    const setTimeoutSpy = spyOn(globalThis, 'setTimeout').mockImplementation(() => 0 as any)
-    const stopSession = spyOn(conversationService, 'stopSession').mockImplementation(() => {})
-    const cancelComputerUse = spyOn(computerUseApprovalService, 'cancelSession').mockImplementation(() => {})
-
-    handleWebSocket.open(ws)
-    setTimeoutSpy.mockClear()
-
-    handleWebSocket.close(ws, 1000, 'interaction response completed')
-
-    expect(setTimeoutSpy).not.toHaveBeenCalled()
-    expect(stopSession).not.toHaveBeenCalled()
-    expect(cancelComputerUse).not.toHaveBeenCalled()
-  })
 })

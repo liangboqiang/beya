@@ -6,6 +6,12 @@ from urllib.parse import quote, urlencode, urlsplit, urlunsplit
 
 from . import errors
 from ._websocket import WebSocketClient, WebSocketProtocolError
+from .generated import (
+    RPC_PATH,
+    build_rpc_resource_call,
+    build_session_live_command,
+    build_session_live_path,
+)
 from .models import ChatResult, RunEvent
 
 
@@ -15,8 +21,8 @@ JsonObject = Dict[str, Any]
 class BeyaClient:
     """Product client for Beya Server resources.
 
-    The SDK exposes Beya product resources over the app WebSocket control
-    plane. HTTP /api/* is not a public transport.
+    The SDK exposes Beya product resources over the RPC WebSocket control
+    plane. HTTP /* is not a public transport.
     """
 
     def __init__(
@@ -140,7 +146,7 @@ class BeyaClient:
         return self._request("GET", "/health", timeout=timeout)
 
     def readiness(self, timeout=None):
-        return self._request("GET", "/readiness", timeout=timeout)
+        return self._request("GET", "/ready", timeout=timeout)
 
     def export_diagnostics(self, timeout=None):
         return self.diagnostics.export(timeout=timeout)
@@ -165,43 +171,45 @@ class BeyaClient:
 
     def _request(self, method, path, payload=None, timeout=None):
         request_id = "app-rpc-%s" % int(time.time() * 1000)
+        call = build_rpc_resource_call(
+            method,
+            _resource_path(path),
+            headers=self._headers(),
+            body=payload,
+        )
         try:
             with self._open_app_websocket(timeout=timeout) as ws:
                 ws.send_json({
-                    "type": "api_request",
+                    "type": "rpc.request",
                     "id": request_id,
-                    "request": {
-                        "method": method,
-                        "path": _resource_path(path),
-                        "headers": self._headers(),
-                        "body": payload,
-                    },
+                    "method": call["method"],
+                    "params": call["params"],
                 })
                 while True:
                     message = ws.recv_json()
                     if message is None:
                         raise errors.BeyaServerUnavailableError(
-                            "App WebSocket closed before a resource response was received",
-                            code="APP_WS_CLOSED",
+                            "RPC WebSocket closed before a resource response was received",
+                            code="RPC_WS_CLOSED",
                         )
-                    if message.get("type") in ("connected", "pong"):
+                    if message.get("type") in ("rpc.connected", "rpc.pong"):
                         continue
                     if message.get("id") != request_id:
                         continue
-                    if message.get("type") == "app_error":
+                    if message.get("type") == "rpc.error":
                         raise errors.BeyaServerUnavailableError(
-                            str(message.get("message") or "App WebSocket RPC failed"),
-                            code=str(message.get("code") or "APP_WS_ERROR"),
+                            str(message.get("message") or "RPC WebSocket request failed"),
+                            code=str(message.get("code") or "RPC_WS_ERROR"),
                         )
-                    if message.get("type") != "api_response":
+                    if message.get("type") != "rpc.response":
                         continue
                     status = int(message.get("status") or 0)
-                    body = message.get("body")
+                    body = message.get("result")
                     if status >= 400:
                         raise errors.error_from_response(status, body)
                     return body
         except WebSocketProtocolError as exc:
-            raise errors.BeyaServerUnavailableError(str(exc), code="APP_WS_UNAVAILABLE")
+            raise errors.BeyaServerUnavailableError(str(exc), code="RPC_WS_UNAVAILABLE")
 
     def _open_app_websocket(self, timeout=None):
         headers = {}
@@ -216,13 +224,13 @@ class BeyaClient:
                 timeout=timeout or self.default_timeout,
             )
         except WebSocketProtocolError as exc:
-            raise errors.BeyaServerUnavailableError(str(exc), code="APP_WS_UNAVAILABLE")
+            raise errors.BeyaServerUnavailableError(str(exc), code="RPC_WS_UNAVAILABLE")
 
     def _app_websocket_url(self):
         parsed = urlsplit(self.base_url)
         scheme = "wss" if parsed.scheme == "https" else "ws"
         base_path = parsed.path.rstrip("/")
-        path = "%s/ws/app" % base_path
+        path = "%s%s" % (base_path, RPC_PATH)
         query = parsed.query
         token = self.bearer_token or self.api_key
         if token:
@@ -230,7 +238,7 @@ class BeyaClient:
             query = "%s&%s" % (query, extra) if query else extra
         return urlunsplit((scheme, parsed.netloc, path, query, ""))
 
-    def _open_session_websocket(self, session_id, timeout=None, purpose=None):
+    def _open_session_websocket(self, session_id, timeout=None):
         headers = {}
         if self.bearer_token:
             headers["Authorization"] = "Bearer %s" % self.bearer_token
@@ -238,25 +246,22 @@ class BeyaClient:
             headers["X-API-Key"] = self.api_key
         try:
             return WebSocketClient(
-                self._session_websocket_url(session_id, purpose=purpose),
+                self._session_websocket_url(session_id),
                 headers=headers,
                 timeout=timeout or self.default_timeout,
             )
         except WebSocketProtocolError as exc:
             raise errors.BeyaServerUnavailableError(str(exc), code="WEBSOCKET_UNAVAILABLE")
 
-    def _session_websocket_url(self, session_id, purpose=None):
+    def _session_websocket_url(self, session_id):
         parsed = urlsplit(self.base_url)
         scheme = "wss" if parsed.scheme == "https" else "ws"
         base_path = parsed.path.rstrip("/")
-        path = "%s/ws/%s" % (base_path, _path(session_id))
+        path = "%s%s" % (base_path, build_session_live_path(session_id))
         query = parsed.query
         token = self.bearer_token or self.api_key
         if token:
             extra = urlencode({"token": token})
-            query = "%s&%s" % (query, extra) if query else extra
-        if purpose:
-            extra = urlencode({"purpose": purpose})
             query = "%s&%s" % (query, extra) if query else extra
         return urlunsplit((scheme, parsed.netloc, path, query, ""))
 
@@ -266,25 +271,25 @@ class TasksResource:
         self._client = client
 
     def list(self, timeout=None):
-        return self._client._request("GET", "/api/tasks", timeout=timeout)
+        return self._client._request("GET", "/tasks", timeout=timeout)
 
     def lists(self, timeout=None):
-        return self._client._request("GET", "/api/tasks/lists", timeout=timeout)
+        return self._client._request("GET", "/tasks/lists", timeout=timeout)
 
     def get_list(self, task_list_id, timeout=None):
-        return self._client._request("GET", "/api/tasks/lists/%s" % _path(task_list_id), timeout=timeout)
+        return self._client._request("GET", "/tasks/lists/%s" % _path(task_list_id), timeout=timeout)
 
     def get(self, task_list_id, task_id, timeout=None):
         return self._client._request(
             "GET",
-            "/api/tasks/lists/%s/%s" % (_path(task_list_id), _path(task_id)),
+            "/tasks/lists/%s/%s" % (_path(task_list_id), _path(task_id)),
             timeout=timeout,
         )
 
     def reset_list(self, task_list_id, timeout=None):
         return self._client._request(
             "POST",
-            "/api/tasks/lists/%s/reset" % _path(task_list_id),
+            "/tasks/lists/%s/reset" % _path(task_list_id),
             {},
             timeout=timeout,
         )
@@ -340,24 +345,21 @@ class ChatResource:
             with self._client._open_session_websocket(
                 session_id,
                 timeout=timeout,
-                purpose="sdk_chat",
             ) as ws:
                 if permission_mode:
-                    ws.send_json({"type": "set_permission_mode", "mode": permission_mode})
+                    ws.send_json(build_session_live_command("session.permission.mode.set", {"mode": permission_mode}))
                 selected_model = model_override or model
                 if selected_model:
-                    ws.send_json(_drop_none({
-                        "type": "set_runtime_config",
+                    ws.send_json(build_session_live_command("session.runtime.select", _drop_none({
                         "providerId": provider_override if provider_override is not None else provider_id,
                         "modelId": selected_model,
                         "effortLevel": effort_level or effort,
-                    }))
-                ws.send_json(_drop_none({
-                    "type": "user_message",
+                    })))
+                ws.send_json(build_session_live_command("session.message.send", _drop_none({
                     "content": input,
                     "attachments": attachments,
                     "metadata": metadata,
-                }))
+                })))
                 while True:
                     raw = ws.recv_json()
                     if raw is None:
@@ -393,7 +395,6 @@ class ChatResource:
             with self._client._open_session_websocket(
                 session_id,
                 timeout=timeout,
-                purpose="interaction_response",
             ) as ws:
                 ws.send_json(payload)
                 while True:
@@ -444,27 +445,27 @@ class SessionsResource:
     def list(self, limit=50, offset=0, timeout=None):
         return self._client._request(
             "GET",
-            "/api/sessions?limit=%s&offset=%s" % (limit, offset),
+            "/sessions?limit=%s&offset=%s" % (limit, offset),
             timeout=timeout,
         )
 
     def get(self, session_id, timeout=None):
-        return self._client._request("GET", "/api/sessions/%s" % _path(session_id), timeout=timeout)
+        return self._client._request("GET", "/sessions/%s" % _path(session_id), timeout=timeout)
 
     def history(self, session_id, timeout=None):
-        return self._client._request("GET", "/api/sessions/%s/history" % _path(session_id), timeout=timeout)
+        return self._client._request("GET", "/sessions/%s/history" % _path(session_id), timeout=timeout)
 
     def events(self, session_id, last_event_id=None, types=None, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/sessions/%s/events" % _path(session_id), _event_params(last_event_id, types)),
+            _append_query("/sessions/%s/events" % _path(session_id), _event_params(last_event_id, types)),
             timeout=timeout,
         )
 
     def create(self, work_dir=None, repository=None, permission_mode=None, timeout=None):
         return self._client._request(
             "POST",
-            "/api/sessions",
+            "/sessions",
             _drop_none({"workDir": work_dir, "repository": repository, "permissionMode": permission_mode}),
             timeout=timeout,
         )
@@ -473,10 +474,10 @@ class SessionsResource:
         return self.get(session_id, timeout=timeout)
 
     def update_title(self, session_id, title, timeout=None):
-        return self._client._request("PATCH", "/api/sessions/%s" % _path(session_id), {"title": title}, timeout=timeout)
+        return self._client._request("PATCH", "/sessions/%s" % _path(session_id), {"title": title}, timeout=timeout)
 
     def delete(self, session_id, timeout=None):
-        return self._client._request("DELETE", "/api/sessions/%s" % _path(session_id), timeout=timeout)
+        return self._client._request("DELETE", "/sessions/%s" % _path(session_id), timeout=timeout)
 
 
 class ModelsResource:
@@ -484,19 +485,19 @@ class ModelsResource:
         self._client = client
 
     def list(self, timeout=None):
-        return self._client._request("GET", "/api/models", timeout=timeout)
+        return self._client._request("GET", "/models", timeout=timeout)
 
     def current(self, timeout=None):
-        return self._client._request("GET", "/api/models/current", timeout=timeout)
+        return self._client._request("GET", "/models/current", timeout=timeout)
 
     def set_current(self, model_id, timeout=None):
-        return self._client._request("PUT", "/api/models/current", {"modelId": model_id}, timeout=timeout)
+        return self._client._request("PUT", "/models/current", {"modelId": model_id}, timeout=timeout)
 
     def effort(self, timeout=None):
-        return self._client._request("GET", "/api/effort", timeout=timeout)
+        return self._client._request("GET", "/effort", timeout=timeout)
 
     def set_effort(self, level, timeout=None):
-        return self._client._request("PUT", "/api/effort", {"level": level}, timeout=timeout)
+        return self._client._request("PUT", "/effort", {"level": level}, timeout=timeout)
 
 
 class ProvidersResource:
@@ -504,22 +505,22 @@ class ProvidersResource:
         self._client = client
 
     def list(self, timeout=None):
-        return self._client._request("GET", "/api/providers", timeout=timeout)
+        return self._client._request("GET", "/providers", timeout=timeout)
 
     def catalog(self, timeout=None):
-        return self._client._request("GET", "/api/providers/catalog", timeout=timeout)
+        return self._client._request("GET", "/providers/catalog", timeout=timeout)
 
     def auth_status(self, timeout=None):
-        return self._client._request("GET", "/api/providers/auth-status", timeout=timeout)
+        return self._client._request("GET", "/providers/auth-status", timeout=timeout)
 
     def settings(self, timeout=None):
-        return self._client._request("GET", "/api/providers/settings", timeout=timeout)
+        return self._client._request("GET", "/providers/settings", timeout=timeout)
 
     def update_settings(self, settings, timeout=None):
-        return self._client._request("PUT", "/api/providers/settings", settings, timeout=timeout)
+        return self._client._request("PUT", "/providers/settings", settings, timeout=timeout)
 
     def create(self, payload, timeout=None):
-        return self._client._request("POST", "/api/providers", payload, timeout=timeout)
+        return self._client._request("POST", "/providers", payload, timeout=timeout)
 
     def upsert(self, payload, timeout=None):
         provider_id = str(payload.get("providerId") or payload.get("id") or "").strip() if isinstance(payload, dict) else ""
@@ -537,19 +538,19 @@ class ProvidersResource:
         return self.create(payload, timeout=timeout)
 
     def update(self, provider_id, payload, timeout=None):
-        return self._client._request("PATCH", "/api/providers/%s" % _path(provider_id), payload, timeout=timeout)
+        return self._client._request("PATCH", "/providers/%s" % _path(provider_id), payload, timeout=timeout)
 
     def delete(self, provider_id, timeout=None):
-        return self._client._request("DELETE", "/api/providers/%s" % _path(provider_id), timeout=timeout)
+        return self._client._request("DELETE", "/providers/%s" % _path(provider_id), timeout=timeout)
 
     def activate(self, provider_id, timeout=None):
-        return self._client._request("POST", "/api/providers/%s/activate" % _path(provider_id), {}, timeout=timeout)
+        return self._client._request("POST", "/providers/%s/activate" % _path(provider_id), {}, timeout=timeout)
 
     def test(self, provider_id, overrides=None, timeout=None):
-        return self._client._request("POST", "/api/providers/%s/test" % _path(provider_id), overrides or {}, timeout=timeout)
+        return self._client._request("POST", "/providers/%s/test" % _path(provider_id), overrides or {}, timeout=timeout)
 
     def test_config(self, payload, timeout=None):
-        return self._client._request("POST", "/api/providers/test", payload, timeout=timeout)
+        return self._client._request("POST", "/providers/test", payload, timeout=timeout)
 
 
 class ToolsResource:
@@ -559,21 +560,21 @@ class ToolsResource:
     def list(self, session_id=None, cwd=None, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/tools", _drop_none({"session_id": session_id, "cwd": cwd})),
+            _append_query("/tools", _drop_none({"session_id": session_id, "cwd": cwd})),
             timeout=timeout,
         )
 
     def get(self, name, session_id=None, cwd=None, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/tools/%s" % _path(name), _drop_none({"session_id": session_id, "cwd": cwd})),
+            _append_query("/tools/%s" % _path(name), _drop_none({"session_id": session_id, "cwd": cwd})),
             timeout=timeout,
         )
 
     def execute(self, name, arguments=None, session_id=None, permission_mode=None, timeout=None):
         return self._client._request(
             "POST",
-            "/api/tools/%s/execute" % _path(name),
+            "/tools/%s/execute" % _path(name),
             _drop_none({
                 "input": arguments or {},
                 "arguments": arguments or {},
@@ -589,12 +590,12 @@ class SkillsResource:
         self._client = client
 
     def list(self, cwd=None, timeout=None):
-        return self._client._request("GET", _append_query("/api/skills", _drop_none({"cwd": cwd})), timeout=timeout)
+        return self._client._request("GET", _append_query("/skills", _drop_none({"cwd": cwd})), timeout=timeout)
 
     def get(self, name, source=None, cwd=None, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/skills/%s" % _path(name), _drop_none({"source": source, "cwd": cwd})),
+            _append_query("/skills/%s" % _path(name), _drop_none({"source": source, "cwd": cwd})),
             timeout=timeout,
         )
 
@@ -609,12 +610,12 @@ class PluginsResource:
         self._client = client
 
     def list(self, cwd=None, timeout=None):
-        return self._client._request("GET", _append_query("/api/plugins", _drop_none({"cwd": cwd})), timeout=timeout)
+        return self._client._request("GET", _append_query("/plugins", _drop_none({"cwd": cwd})), timeout=timeout)
 
     def get(self, plugin_id, cwd=None, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/plugins/%s" % _path(plugin_id), _drop_none({"cwd": cwd})),
+            _append_query("/plugins/%s" % _path(plugin_id), _drop_none({"cwd": cwd})),
             timeout=timeout,
         )
 
@@ -622,11 +623,11 @@ class PluginsResource:
         if hasattr(plugin, "to_server_inline_ref"):
             payload = plugin.to_server_inline_ref()
             payload["id"] = getattr(plugin, "name", None)
-            return self._client._request("POST", "/api/plugins", _drop_none(payload), timeout=timeout)
+            return self._client._request("POST", "/plugins", _drop_none(payload), timeout=timeout)
         if isinstance(plugin, dict):
-            return self._client._request("POST", "/api/plugins", plugin, timeout=timeout)
+            return self._client._request("POST", "/plugins", plugin, timeout=timeout)
         if isinstance(plugin, str) and ("/" in plugin or "\\" in plugin or plugin.startswith(".")):
-            return self._client._request("POST", "/api/plugins", {"path": plugin}, timeout=timeout)
+            return self._client._request("POST", "/plugins", {"path": plugin}, timeout=timeout)
         return self.enable(plugin, scope=scope, cwd=cwd, timeout=timeout)
 
     def install_or_update(self, plugin, scope=None, cwd=None, timeout=None):
@@ -647,7 +648,7 @@ class PluginsResource:
     def reload(self, cwd=None, session_id=None, timeout=None):
         return self._client._request(
             "POST",
-            _append_query("/api/plugins/reload", _drop_none({"cwd": cwd, "sessionId": session_id})),
+            _append_query("/plugins/reload", _drop_none({"cwd": cwd, "sessionId": session_id})),
             {},
             timeout=timeout,
         )
@@ -655,7 +656,7 @@ class PluginsResource:
     def _plugin_action(self, action, plugin_id, timeout=None, **payload):
         body = _drop_none({"id": plugin_id})
         body.update(_drop_none(payload))
-        return self._client._request("POST", "/api/plugins/%s" % action, body, timeout=timeout)
+        return self._client._request("POST", "/plugins/%s" % action, body, timeout=timeout)
 
 
 class McpResource:
@@ -663,12 +664,12 @@ class McpResource:
         self._client = client
 
     def list(self, cwd=None, timeout=None):
-        return self._client._request("GET", _append_query("/api/mcp", _drop_none({"cwd": cwd})), timeout=timeout)
+        return self._client._request("GET", _append_query("/mcp", _drop_none({"cwd": cwd})), timeout=timeout)
 
     def status(self, name, cwd=None, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/mcp/%s/status" % _path(name), _drop_none({"cwd": cwd})),
+            _append_query("/mcp/%s/status" % _path(name), _drop_none({"cwd": cwd})),
             timeout=timeout,
         )
 
@@ -677,7 +678,7 @@ class McpResource:
         body["name"] = name
         if cwd:
             body["cwd"] = cwd
-        return self._client._request("POST", "/api/mcp", body, timeout=timeout)
+        return self._client._request("POST", "/mcp", body, timeout=timeout)
 
     def update(self, name, payload, cwd=None, previous_cwd=None, timeout=None):
         body = dict(payload)
@@ -685,25 +686,25 @@ class McpResource:
             body["cwd"] = cwd
         if previous_cwd:
             body["previousCwd"] = previous_cwd
-        return self._client._request("PUT", "/api/mcp/%s" % _path(name), body, timeout=timeout)
+        return self._client._request("PUT", "/mcp/%s" % _path(name), body, timeout=timeout)
 
     def remove(self, name, scope, cwd=None, timeout=None):
         return self._client._request(
             "DELETE",
-            _append_query("/api/mcp/%s" % _path(name), _drop_none({"scope": scope, "cwd": cwd})),
+            _append_query("/mcp/%s" % _path(name), _drop_none({"scope": scope, "cwd": cwd})),
             timeout=timeout,
         )
 
     def toggle(self, name, cwd=None, session_id=None, timeout=None):
         return self._client._request(
             "POST",
-            "/api/mcp/%s/toggle" % _path(name),
+            "/mcp/%s/toggle" % _path(name),
             _drop_none({"cwd": cwd, "sessionId": session_id}),
             timeout=timeout,
         )
 
     def reconnect(self, name, cwd=None, timeout=None):
-        return self._client._request("POST", "/api/mcp/%s/reconnect" % _path(name), _drop_none({"cwd": cwd}), timeout=timeout)
+        return self._client._request("POST", "/mcp/%s/reconnect" % _path(name), _drop_none({"cwd": cwd}), timeout=timeout)
 
 
 class WorkspaceResource:
@@ -711,26 +712,26 @@ class WorkspaceResource:
         self._client = client
 
     def status(self, session_id, timeout=None):
-        return self._client._request("GET", "/api/sessions/%s/workspace/status" % _path(session_id), timeout=timeout)
+        return self._client._request("GET", "/sessions/%s/workspace/status" % _path(session_id), timeout=timeout)
 
     def list(self, session_id, path="", timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/sessions/%s/workspace/tree" % _path(session_id), _drop_none({"path": path})),
+            _append_query("/sessions/%s/workspace/tree" % _path(session_id), _drop_none({"path": path})),
             timeout=timeout,
         )
 
     def read(self, session_id, path, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/sessions/%s/workspace/file" % _path(session_id), {"path": path}),
+            _append_query("/sessions/%s/workspace/file" % _path(session_id), {"path": path}),
             timeout=timeout,
         )
 
     def diff(self, session_id, path, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/sessions/%s/workspace/diff" % _path(session_id), {"path": path}),
+            _append_query("/sessions/%s/workspace/diff" % _path(session_id), {"path": path}),
             timeout=timeout,
         )
 
@@ -745,7 +746,7 @@ class WorkspaceResource:
     def search(self, root_path, query, include_files=True, max_results=50, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/filesystem/browse", {
+            _append_query("/filesystem/browse", {
                 "path": root_path,
                 "search": query,
                 "includeFiles": _bool_query(include_files),
@@ -760,13 +761,13 @@ class MemoryResource:
         self._client = client
 
     def files(self, project_id, timeout=None):
-        return self._client._request("GET", _append_query("/api/memory/files", {"projectId": project_id}), timeout=timeout)
+        return self._client._request("GET", _append_query("/memory/files", {"projectId": project_id}), timeout=timeout)
 
     def get(self, project_id, path, timeout=None):
-        return self._client._request("GET", _append_query("/api/memory/file", {"projectId": project_id, "path": path}), timeout=timeout)
+        return self._client._request("GET", _append_query("/memory/file", {"projectId": project_id, "path": path}), timeout=timeout)
 
     def update(self, project_id, path, content, timeout=None):
-        return self._client._request("PUT", "/api/memory/file", {"projectId": project_id, "path": path, "content": content}, timeout=timeout)
+        return self._client._request("PUT", "/memory/file", {"projectId": project_id, "path": path, "content": content}, timeout=timeout)
 
 
 class AgentsResource:
@@ -774,13 +775,13 @@ class AgentsResource:
         self._client = client
 
     def list(self, timeout=None):
-        return self._client._request("GET", "/api/agents", timeout=timeout)
+        return self._client._request("GET", "/agents", timeout=timeout)
 
     def get(self, agent_id, timeout=None):
-        return self._client._request("GET", "/api/agents/%s" % _path(agent_id), timeout=timeout)
+        return self._client._request("GET", "/agents/%s" % _path(agent_id), timeout=timeout)
 
     def execute(self, agent_id, input=None, session_id=None, timeout=None):
-        return self._client._request("POST", "/api/agents/%s" % _path(agent_id), _drop_none({"input": input or {}, "session_id": session_id}), timeout=timeout)
+        return self._client._request("POST", "/agents/%s" % _path(agent_id), _drop_none({"input": input or {}, "session_id": session_id}), timeout=timeout)
 
 
 class TeamsResource:
@@ -788,14 +789,14 @@ class TeamsResource:
         self._client = client
 
     def list(self, timeout=None):
-        return self._client._request("GET", "/api/teams", timeout=timeout)
+        return self._client._request("GET", "/teams", timeout=timeout)
 
     def get(self, team_id, timeout=None):
-        return self._client._request("GET", "/api/teams/%s" % _path(team_id), timeout=timeout)
+        return self._client._request("GET", "/teams/%s" % _path(team_id), timeout=timeout)
 
     def request(self, method, path="", payload=None, timeout=None):
         suffix = "/%s" % path.strip("/") if path else ""
-        return self._client._request(method, "/api/teams%s" % suffix, payload, timeout=timeout)
+        return self._client._request(method, "/teams%s" % suffix, payload, timeout=timeout)
 
 
 class SchedulesResource:
@@ -803,27 +804,27 @@ class SchedulesResource:
         self._client = client
 
     def list(self, timeout=None):
-        return self._client._request("GET", "/api/scheduled-tasks", timeout=timeout)
+        return self._client._request("GET", "/scheduled-tasks", timeout=timeout)
 
     def create(self, payload, timeout=None):
-        return self._client._request("POST", "/api/scheduled-tasks", payload, timeout=timeout)
+        return self._client._request("POST", "/scheduled-tasks", payload, timeout=timeout)
 
     def get(self, schedule_id, timeout=None):
-        return self._client._request("GET", "/api/scheduled-tasks/%s" % _path(schedule_id), timeout=timeout)
+        return self._client._request("GET", "/scheduled-tasks/%s" % _path(schedule_id), timeout=timeout)
 
     def update(self, schedule_id, payload, timeout=None):
-        return self._client._request("PUT", "/api/scheduled-tasks/%s" % _path(schedule_id), payload, timeout=timeout)
+        return self._client._request("PUT", "/scheduled-tasks/%s" % _path(schedule_id), payload, timeout=timeout)
 
     def delete(self, schedule_id, timeout=None):
-        return self._client._request("DELETE", "/api/scheduled-tasks/%s" % _path(schedule_id), timeout=timeout)
+        return self._client._request("DELETE", "/scheduled-tasks/%s" % _path(schedule_id), timeout=timeout)
 
     def run(self, schedule_id, timeout=None):
-        return self._client._request("POST", "/api/scheduled-tasks/%s/run" % _path(schedule_id), {}, timeout=timeout)
+        return self._client._request("POST", "/scheduled-tasks/%s/run" % _path(schedule_id), {}, timeout=timeout)
 
     def runs(self, schedule_id=None, limit=50, timeout=None):
         if schedule_id:
-            return self._client._request("GET", "/api/scheduled-tasks/%s/runs" % _path(schedule_id), timeout=timeout)
-        return self._client._request("GET", "/api/scheduled-tasks/runs?limit=%s" % limit, timeout=timeout)
+            return self._client._request("GET", "/scheduled-tasks/%s/runs" % _path(schedule_id), timeout=timeout)
+        return self._client._request("GET", "/scheduled-tasks/runs?limit=%s" % limit, timeout=timeout)
 
 
 class DiagnosticsResource:
@@ -831,13 +832,13 @@ class DiagnosticsResource:
         self._client = client
 
     def status(self, timeout=None):
-        return self._client._request("GET", "/api/diagnostics/status", timeout=timeout)
+        return self._client._request("GET", "/diagnostics/status", timeout=timeout)
 
     def events(self, timeout=None):
-        return self._client._request("GET", "/api/diagnostics/events", timeout=timeout)
+        return self._client._request("GET", "/diagnostics/events", timeout=timeout)
 
     def export(self, timeout=None):
-        return self._client._request("POST", "/api/diagnostics/export", {}, timeout=timeout)
+        return self._client._request("POST", "/diagnostics/export", {}, timeout=timeout)
 
 
 class SettingsResource:
@@ -845,16 +846,16 @@ class SettingsResource:
         self._client = client
 
     def user(self, timeout=None):
-        return self._client._request("GET", "/api/settings/user", timeout=timeout)
+        return self._client._request("GET", "/settings/user", timeout=timeout)
 
     def update_user(self, payload, timeout=None):
-        return self._client._request("PUT", "/api/settings/user", payload, timeout=timeout)
+        return self._client._request("PUT", "/settings/user", payload, timeout=timeout)
 
     def permission_mode(self, timeout=None):
-        return self._client._request("GET", "/api/permissions/mode", timeout=timeout)
+        return self._client._request("GET", "/permissions/mode", timeout=timeout)
 
     def set_permission_mode(self, mode, timeout=None):
-        return self._client._request("PUT", "/api/permissions/mode", {"mode": mode}, timeout=timeout)
+        return self._client._request("PUT", "/permissions/mode", {"mode": mode}, timeout=timeout)
 
 
 class LocalResource:
@@ -864,7 +865,7 @@ class LocalResource:
     def browse(self, path=None, search=None, include_files=False, max_results=200, timeout=None):
         return self._client._request(
             "GET",
-            _append_query("/api/filesystem/browse", _drop_none({
+            _append_query("/filesystem/browse", _drop_none({
                 "path": path,
                 "search": search,
                 "includeFiles": _bool_query(include_files) if include_files is not None else None,
@@ -874,19 +875,19 @@ class LocalResource:
         )
 
     def open_file(self, target_id, path, timeout=None):
-        return self._client._request("POST", "/api/open-targets/open", {"targetId": target_id, "path": path}, timeout=timeout)
+        return self._client._request("POST", "/open-targets/open", {"targetId": target_id, "path": path}, timeout=timeout)
 
     def open_targets(self, timeout=None):
-        return self._client._request("GET", "/api/open-targets", timeout=timeout)
+        return self._client._request("GET", "/open-targets", timeout=timeout)
 
     def run_command(self, command, session_id=None, timeout=None):
         return self._client.tools.execute("Bash", arguments={"command": command}, session_id=session_id, timeout=timeout)
 
     def computer_use_status(self, timeout=None):
-        return self._client._request("GET", "/api/computer-use/status", timeout=timeout)
+        return self._client._request("GET", "/computer-use/status", timeout=timeout)
 
     def setup_computer_use(self, timeout=None):
-        return self._client._request("POST", "/api/computer-use/setup", {}, timeout=timeout or 300)
+        return self._client._request("POST", "/computer-use/setup", {}, timeout=timeout or 300)
 
 
 class AsyncBeyaClient:
@@ -974,10 +975,6 @@ def _append_query(path, params):
 
 def _resource_path(path):
     normalized = path if path.startswith("/") else "/%s" % path
-    if normalized == "/api":
-        return "/"
-    if normalized.startswith("/api/"):
-        return normalized[len("/api"):]
     return normalized
 
 
@@ -993,10 +990,10 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
     typ = str(raw.get("type") or "")
     timestamp = _now_iso()
 
-    if typ in ("connected", "pong", "content_start"):
+    if typ in ("session.connected", "session.pong", "session.message.started"):
         return None
 
-    if typ == "content_delta":
+    if typ == "session.message.delta":
         text = str(raw.get("text") or "")
         if text:
             accumulated.append(text)
@@ -1020,7 +1017,7 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
             )
         return None
 
-    if typ == "thinking":
+    if typ == "session.thinking.delta":
         return RunEvent(
             type="AGENT_THINKING",
             session_id=session_id,
@@ -1030,7 +1027,7 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
             raw=raw,
         )
 
-    if typ == "tool_use_complete":
+    if typ == "session.tool.completed":
         payload = {
             "tool_call_id": raw.get("toolUseId"),
             "name": raw.get("toolName"),
@@ -1047,7 +1044,7 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
             raw=raw,
         )
 
-    if typ == "tool_result":
+    if typ == "session.tool.result":
         payload = {
             "tool_call_id": raw.get("toolUseId"),
             "result": raw.get("content"),
@@ -1064,7 +1061,7 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
             raw=raw,
         )
 
-    if typ == "permission_request":
+    if typ == "session.permission.requested":
         tool_name = str(raw.get("toolName") or "")
         event_type = _permission_request_event_type(tool_name)
         interaction_type = _permission_request_interaction_type(event_type)
@@ -1105,7 +1102,7 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
             reason=str(raw.get("description") or "") or None,
         )
 
-    if typ == "message_complete":
+    if typ == "session.completed":
         result = "".join(accumulated)
         return RunEvent(
             type="WORKFLOW_COMPLETED",
@@ -1118,7 +1115,7 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
             raw=raw,
         )
 
-    if typ == "error":
+    if typ == "session.failed":
         message = str(raw.get("message") or "Beya Server chat failed")
         return RunEvent(
             type="WORKFLOW_FAILED",
@@ -1131,7 +1128,7 @@ def _chat_frame_to_event(raw, session_id, seq, accumulated):
             raw=raw,
         )
 
-    if typ == "status":
+    if typ == "session.status.changed":
         return RunEvent(
             type="STATUS",
             session_id=session_id,
@@ -1188,7 +1185,6 @@ def _permission_response_payload(request_id, response=None, original_input=None,
         updated_input["answers"] = answers
 
     payload = {
-        "type": "permission_response",
         "requestId": request_id,
         "allowed": bool(data.get("allowed", True)),
     }
@@ -1203,7 +1199,7 @@ def _permission_response_payload(request_id, response=None, original_input=None,
         content_blocks = data.get("content_blocks")
     if content_blocks is not None:
         payload["contentBlocks"] = content_blocks
-    return payload
+    return build_session_live_command("session.permission.respond", payload)
 
 
 def _normalize_permission_response(response):

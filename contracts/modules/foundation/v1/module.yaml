@@ -1,0 +1,84 @@
+id: foundation
+version: v1
+name: Foundation
+layer: foundation
+layerOrder: 7
+stability: stable
+description: Settings, persistence, diagnostics, filesystem, health, memory, and local desktop utilities.
+paths:
+  server:
+    - src/modules/foundation
+    - src/server/services
+    - src/utils
+  desktop:
+    - desktop/src/modules/settings
+  contracts:
+    - contracts/modules/foundation/v1/module.yaml
+owns:
+  - Local settings and persistence ownership.
+  - Diagnostics and doctor resources.
+  - Filesystem browsing and open-target resources.
+  - Memory files and activity statistics.
+resourceMethods:
+  - health.check
+  - ready.check
+  - status.read
+  - settings.read
+  - settings.update
+  - permissions.moderead
+  - permissions.modeupdate
+  - filesystem.browse
+  - filesystem.pickdirectory
+  - filesystem.registerdirectory
+  - diagnostics.export
+  - diagnostics.status
+  - diagnostics.eventslist
+  - diagnostics.eventsrecord
+  - diagnostics.openlogdir
+  - diagnostics.clear
+  - memory.projects
+  - memory.files
+  - memory.fileread
+  - memory.fileupdate
+  - desktopui.preferencesread
+  - desktopui.profileupdate
+  - desktopui.avatarupdate
+  - desktopui.avatardelete
+  - opentargets.list
+  - opentargets.open
+  - computeruse.status
+  - computeruse.setup
+  - computeruse.apps
+  - computeruse.authorizedappsread
+  - computeruse.authorizedappsupdate
+  - computeruse.opensettings
+  - h5access.read
+  - h5access.verify
+  - h5access.enable
+  - h5access.disable
+  - h5access.regenerate
+  - h5access.update
+  - doctor.report
+  - doctor.repair
+  - activitystats.read
+allowedDependencies: []
+forbiddenDependencies:
+  - access-surfaces
+  - gateway
+  - session-host
+  - agent-core
+  - capability-registry
+  - model-runtime
+persistence:
+  - id: user-settings
+    owner: foundation
+    path: ~/.beya/beya/settings.json
+    migrationRequired: true
+  - id: provider-settings
+    owner: model-runtime
+    path: ~/.beya/beya/providers.json
+    migrationRequired: true
+implementationRoots:
+  - src/modules/foundation
+  - src/server/services
+  - src/utils

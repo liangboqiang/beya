@@ -17,9 +17,9 @@ import {
   createToolStub,
 } from '../remote/remotePermissionBridge.js'
 import {
-  convertSDKMessage,
+  convertRuntimeMessage,
   isSessionEndMessage,
-} from '../remote/sdkMessageAdapter.js'
+} from '../remote/runtimeMessageAdapter.js'
 import type { SSHSession } from '../ssh/createSSHSession.js'
 import type { SSHSessionManager } from '../ssh/SSHSessionManager.js'
 import type { Tool } from '../Tool.js'
@@ -81,7 +81,7 @@ export function useSSHSession({
           hasReceivedInitRef.current = true
         }
 
-        const converted = convertSDKMessage(sdkMessage, {
+        const converted = convertRuntimeMessage(sdkMessage, {
           convertToolResults: true,
         })
         if (converted.type === 'message') {

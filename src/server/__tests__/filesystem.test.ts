@@ -14,7 +14,7 @@ import {
   pickSystemDirectory,
   runDirectoryPickerCommand,
 } from '../api/filesystem.js'
-import { handleApiRequest } from '../router.js'
+import { handleResourceRequest } from '../router.js'
 import { clearFilesystemAccessRootsForTests } from '../services/filesystemAccessRoots.js'
 import { getRepositoryContext } from '../services/repositoryLaunchService.js'
 import { enableConfigs } from '../../utils/config.js'
@@ -203,9 +203,9 @@ describe('filesystem API', () => {
 
   it('rejects non-POST directory picker requests', async () => {
     const res = await handleFilesystemRoute(
-      '/api/filesystem/pick-directory',
-      makeUrl('/api/filesystem/pick-directory', {}),
-      new Request('http://localhost/api/filesystem/pick-directory', { method: 'GET' }),
+      '/filesystem/pick-directory',
+      makeUrl('/filesystem/pick-directory', {}),
+      new Request('http://localhost/filesystem/pick-directory', { method: 'GET' }),
       { pickDirectory: async () => null },
     )
 
@@ -215,9 +215,9 @@ describe('filesystem API', () => {
 
   it('returns a null directory selection when the native picker is canceled', async () => {
     const res = await handleFilesystemRoute(
-      '/api/filesystem/pick-directory',
-      makeUrl('/api/filesystem/pick-directory', {}),
-      new Request('http://localhost/api/filesystem/pick-directory', {
+      '/filesystem/pick-directory',
+      makeUrl('/filesystem/pick-directory', {}),
+      new Request('http://localhost/filesystem/pick-directory', {
         method: 'POST',
         body: '{not-json',
       }),
@@ -238,9 +238,9 @@ describe('filesystem API', () => {
     cleanupDirs.add(fixtureDir)
 
     const res = await handleFilesystemRoute(
-      '/api/filesystem/pick-directory',
-      makeUrl('/api/filesystem/pick-directory', {}),
-      new Request('http://localhost/api/filesystem/pick-directory', {
+      '/filesystem/pick-directory',
+      makeUrl('/filesystem/pick-directory', {}),
+      new Request('http://localhost/filesystem/pick-directory', {
         method: 'POST',
         body: JSON.stringify({ initialPath: fixtureDir }),
       }),
@@ -265,9 +265,9 @@ describe('filesystem API', () => {
     await fsp.writeFile(filePath, 'hello')
 
     const fileRes = await handleFilesystemRoute(
-      '/api/filesystem/pick-directory',
-      makeUrl('/api/filesystem/pick-directory', {}),
-      new Request('http://localhost/api/filesystem/pick-directory', {
+      '/filesystem/pick-directory',
+      makeUrl('/filesystem/pick-directory', {}),
+      new Request('http://localhost/filesystem/pick-directory', {
         method: 'POST',
         body: JSON.stringify({}),
       }),
@@ -281,9 +281,9 @@ describe('filesystem API', () => {
 
     const missingPath = path.join(fixtureDir, 'missing')
     const missingRes = await handleFilesystemRoute(
-      '/api/filesystem/pick-directory',
-      makeUrl('/api/filesystem/pick-directory', {}),
-      new Request('http://localhost/api/filesystem/pick-directory', {
+      '/filesystem/pick-directory',
+      makeUrl('/filesystem/pick-directory', {}),
+      new Request('http://localhost/filesystem/pick-directory', {
         method: 'POST',
         body: JSON.stringify({}),
       }),
@@ -298,16 +298,16 @@ describe('filesystem API', () => {
 
   it('validates desktop directory registration requests', async () => {
     const getRes = await handleFilesystemRoute(
-      '/api/filesystem/register-directory',
-      makeUrl('/api/filesystem/register-directory', {}),
-      new Request('http://localhost/api/filesystem/register-directory', { method: 'GET' }),
+      '/filesystem/register-directory',
+      makeUrl('/filesystem/register-directory', {}),
+      new Request('http://localhost/filesystem/register-directory', { method: 'GET' }),
     )
     expect(getRes.status).toBe(405)
 
     const missingRes = await handleFilesystemRoute(
-      '/api/filesystem/register-directory',
-      makeUrl('/api/filesystem/register-directory', {}),
-      new Request('http://localhost/api/filesystem/register-directory', {
+      '/filesystem/register-directory',
+      makeUrl('/filesystem/register-directory', {}),
+      new Request('http://localhost/filesystem/register-directory', {
         method: 'POST',
         body: JSON.stringify({}),
       }),
@@ -316,9 +316,9 @@ describe('filesystem API', () => {
     await expect(missingRes.json()).resolves.toEqual({ error: 'path is required' })
 
     const invalidJsonRes = await handleFilesystemRoute(
-      '/api/filesystem/register-directory',
-      makeUrl('/api/filesystem/register-directory', {}),
-      new Request('http://localhost/api/filesystem/register-directory', {
+      '/filesystem/register-directory',
+      makeUrl('/filesystem/register-directory', {}),
+      new Request('http://localhost/filesystem/register-directory', {
         method: 'POST',
         body: '[',
       }),
@@ -334,9 +334,9 @@ describe('filesystem API', () => {
     await fsp.writeFile(filePath, 'hello')
 
     const fileRes = await handleFilesystemRoute(
-      '/api/filesystem/register-directory',
-      makeUrl('/api/filesystem/register-directory', {}),
-      new Request('http://localhost/api/filesystem/register-directory', {
+      '/filesystem/register-directory',
+      makeUrl('/filesystem/register-directory', {}),
+      new Request('http://localhost/filesystem/register-directory', {
         method: 'POST',
         body: JSON.stringify({ path: filePath }),
       }),
@@ -344,9 +344,9 @@ describe('filesystem API', () => {
     expect(fileRes.status).toBe(400)
 
     const res = await handleFilesystemRoute(
-      '/api/filesystem/register-directory',
-      makeUrl('/api/filesystem/register-directory', {}),
-      new Request('http://localhost/api/filesystem/register-directory', {
+      '/filesystem/register-directory',
+      makeUrl('/filesystem/register-directory', {}),
+      new Request('http://localhost/filesystem/register-directory', {
         method: 'POST',
         body: JSON.stringify({ path: fixtureDir }),
       }),
@@ -367,8 +367,8 @@ describe('filesystem API', () => {
     await fsp.writeFile(path.join(homeFixtureDir, '.env.local'), 'SECRET=example')
 
     const res = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: homeFixtureDir,
         includeFiles: 'true',
       }),
@@ -390,8 +390,8 @@ describe('filesystem API', () => {
     await fsp.writeFile(path.join(externalFixtureDir, 'note.txt'), 'hello')
 
     const deniedRes = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: externalFixtureDir,
         includeFiles: 'true',
       }),
@@ -401,8 +401,8 @@ describe('filesystem API', () => {
     await getRepositoryContext(externalFixtureDir)
 
     const res = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: externalFixtureDir,
         includeFiles: 'true',
       }),
@@ -421,8 +421,8 @@ describe('filesystem API', () => {
     await fsp.writeFile(path.join(externalFixtureDir, 'note.txt'), 'hello')
 
     const deniedRes = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: externalFixtureDir,
         includeFiles: 'true',
       }),
@@ -430,9 +430,9 @@ describe('filesystem API', () => {
     expect(deniedRes.status).toBe(403)
 
     const pickRes = await handleFilesystemRoute(
-      '/api/filesystem/pick-directory',
-      makeUrl('/api/filesystem/pick-directory', {}),
-      new Request('http://localhost/api/filesystem/pick-directory', {
+      '/filesystem/pick-directory',
+      makeUrl('/filesystem/pick-directory', {}),
+      new Request('http://localhost/filesystem/pick-directory', {
         method: 'POST',
         body: JSON.stringify({ initialPath: externalFixtureDir }),
       }),
@@ -449,8 +449,8 @@ describe('filesystem API', () => {
     })
 
     const browseRes = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: externalFixtureDir,
         includeFiles: 'true',
       }),
@@ -463,12 +463,12 @@ describe('filesystem API', () => {
     if (!externalFixtureDir) return
 
     cleanupDirs.add(externalFixtureDir)
-    const req = new Request('http://localhost/api/filesystem/pick-directory', {
+    const req = new Request('http://localhost/filesystem/pick-directory', {
       method: 'POST',
       body: JSON.stringify({ initialPath: externalFixtureDir }),
     })
 
-    const res = await handleApiRequest(req, new URL(req.url), {
+    const res = await handleResourceRequest(req, new URL(req.url), {
       filesystem: {
         pickDirectory: async (initialPath) => {
           expect(initialPath).toBe(externalFixtureDir)
@@ -491,19 +491,19 @@ describe('filesystem API', () => {
     await fsp.writeFile(path.join(externalFixtureDir, 'note.txt'), 'hello')
 
     const deniedRes = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: externalFixtureDir,
         includeFiles: 'true',
       }),
     )
     expect(deniedRes.status).toBe(403)
 
-    const req = new Request('http://localhost/api/filesystem/register-directory', {
+    const req = new Request('http://localhost/filesystem/register-directory', {
       method: 'POST',
       body: JSON.stringify({ path: externalFixtureDir }),
     })
-    const registerRes = await handleApiRequest(req, new URL(req.url))
+    const registerRes = await handleResourceRequest(req, new URL(req.url))
 
     expect(registerRes.status).toBe(200)
     await expect(registerRes.json()).resolves.toEqual({
@@ -511,8 +511,8 @@ describe('filesystem API', () => {
     })
 
     const browseRes = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: externalFixtureDir,
         includeFiles: 'true',
       }),
@@ -548,8 +548,8 @@ describe('filesystem API', () => {
     await fsp.writeFile(path.join(homeFixtureDir, 'tmp-ignore', 'files.tmp'), '')
 
     const res = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: homeFixtureDir,
         search: 'files',
         includeFiles: 'true',
@@ -573,8 +573,8 @@ describe('filesystem API', () => {
     expect(body.entries.some((entry) => entry.relativePath === 'tmp-ignore/files.tmp')).toBe(false)
 
     const srcRes = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: homeFixtureDir,
         search: 'src',
         includeFiles: 'true',
@@ -602,8 +602,8 @@ describe('filesystem API', () => {
     await fsp.writeFile(path.join(homeFixtureDir, 'node_modules', 'pkg', 'cache-result.js'), '')
 
     const res = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: homeFixtureDir,
         search: 'cache',
         includeFiles: 'true',
@@ -634,8 +634,8 @@ describe('filesystem API', () => {
     )
 
     const browseRes = await handleFilesystemRoute(
-      '/api/filesystem/browse',
-      makeUrl('/api/filesystem/browse', {
+      '/filesystem/browse',
+      makeUrl('/filesystem/browse', {
         path: canonicalTmpDir,
         includeFiles: 'true',
       }),
@@ -645,8 +645,8 @@ describe('filesystem API', () => {
     expect(browseBody.entries.some((entry) => entry.name === 'preview.png')).toBe(true)
 
     const fileRes = await handleFilesystemRoute(
-      '/api/filesystem/file',
-      makeUrl('/api/filesystem/file', {
+      '/filesystem/file',
+      makeUrl('/filesystem/file', {
         path: imagePath,
       }),
     )

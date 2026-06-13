@@ -16,8 +16,8 @@
 import { feature } from 'bun:bundle'
 import { hostname } from 'os'
 import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
-import type { SDKControlResponse } from '../entrypoints/sdk/controlTypes.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
+import type { RuntimeControlResponse } from '../entrypoints/runtime/controlTypes.js'
 import { getFeatureValue_CACHED_WITH_REFRESH } from '../services/analytics/growthbook.js'
 import { getOrganizationUUID } from '../services/oauth/client.js'
 import {
@@ -35,7 +35,7 @@ import { logForDebugging } from '../utils/debug.js'
 import { stripDisplayTagsAllowEmpty } from '../utils/displayTags.js'
 import { errorMessage } from '../utils/errors.js'
 import { getBranch, getRemoteUrl } from '../utils/git.js'
-import { toSDKMessages } from '../utils/messages/mappers.js'
+import { toRuntimeMessages } from '../utils/messages/mappers.js'
 import {
   getContentText,
   getMessagesAfterCompactBoundary,
@@ -73,8 +73,8 @@ import { setCseShimGate } from './sessionIdCompat.js'
 import type { BridgeWorkerType } from './types.js'
 
 export type InitBridgeOptions = {
-  onInboundMessage?: (msg: SDKMessage) => void | Promise<void>
-  onPermissionResponse?: (response: SDKControlResponse) => void
+  onInboundMessage?: (msg: RuntimeMessage) => void | Promise<void>
+  onPermissionResponse?: (response: RuntimeControlResponse) => void
   onInterrupt?: () => void
   onSetModel?: (model: string | undefined) => void
   onSetMaxThinkingTokens?: (maxTokens: number | null) => void
@@ -427,7 +427,7 @@ export async function initReplBridge(
       title,
       getAccessToken: getBridgeAccessToken,
       onAuth401: handleOAuth401Error,
-      toSDKMessages,
+      toRuntimeMessages,
       initialHistoryCap,
       initialMessages,
       // v2 always creates a fresh server session (new cse_* id), so
@@ -525,7 +525,7 @@ export async function initReplBridge(
     // `title` directly —both paths are picked up here.
     getCurrentTitle: () => getCurrentSessionTitle(getSessionId()) ?? title,
     onUserMessage,
-    toSDKMessages,
+    toRuntimeMessages,
     onAuth401: handleOAuth401Error,
     getPollIntervalConfig,
     initialHistoryCap,

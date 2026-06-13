@@ -928,7 +928,7 @@ function getMessageContentWeight(message: UIMessage): number {
       return getShallowStringWeight(message.input) + (message.partialInput?.length ?? 0)
     case 'tool_result':
       return getShallowStringWeight(message.content)
-    case 'permission_request':
+    case 'permission_prompt':
       return getShallowStringWeight(message.input) + (message.description?.length ?? 0)
     case 'error':
       return message.message.length
@@ -998,7 +998,7 @@ function estimateMessageHeight(message: UIMessage): number {
     case 'background_task':
     case 'goal_event':
     case 'memory_event':
-    case 'permission_request':
+    case 'permission_prompt':
     case 'task_summary':
       return 110
     case 'compact_summary':
@@ -1035,7 +1035,7 @@ function getMessageMetricSignature(message: UIMessage): string {
       return `${message.type}:${message.event}:${message.files.length}:${message.message?.length ?? 0}`
     case 'background_task':
       return `${message.type}:${message.task.taskId}:${message.task.status}:${message.task.updatedAt}`
-    case 'permission_request':
+    case 'permission_prompt':
       return `${message.type}:${message.requestId}:${message.toolUseId ?? ''}:${message.description?.length ?? 0}`
     case 'error':
       return `${message.type}:${message.code}:${message.message.length}`
@@ -2004,7 +2004,7 @@ export const MessageBlock = memo(function MessageBlock({
           standalone
         />
       )
-    case 'permission_request':
+    case 'permission_prompt':
       return (
         <PermissionDialog
           sessionId={sessionId}

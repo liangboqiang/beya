@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { wsManager } from '../api/websocket'
+import { buildSessionLiveCommand, type JsonValue } from '../../../src/generated/contracts'
 import { sessionsApi } from '../api/sessions'
 import { useTeamStore } from './teamStore'
 import { useSessionStore } from './sessionStore'
@@ -339,7 +340,7 @@ function upsertToolUseMessage(
   return next
 }
 
-// Streaming throttle for content_delta. Buffers must be per-session because
+// Streaming throttle for session.message.delta. Buffers must be per-session because
 // multiple desktop tabs can stream at the same time.
 const pendingDeltaBySession = new Map<string, string>()
 const flushTimerBySession = new Map<string, ReturnType<typeof setTimeout>>()
@@ -881,7 +882,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     wsManager.clearHandlers(sessionId)
     wsManager.connect(sessionId)
     wsManager.onMessage(sessionId, (msg) => {
-      if (msg.type === 'connected') {
+      if (msg.type === 'session.connected') {
         set((s) => ({ sessions: updateSessionIn(s.sessions, sessionId, () => ({ connectionState: 'connected' })) }))
       }
       get().handleServerMessage(sessionId, msg)
@@ -889,9 +890,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     const runtimeSelection = useSessionRuntimeStore.getState().selections[sessionId]
     if (runtimeSelection) {
-      wsManager.send(sessionId, { type: 'set_runtime_config', ...runtimeSelection })
+      wsManager.send(sessionId, buildSessionLiveCommand(
+        'session.runtime.select',
+        runtimeSelection as Record<string, JsonValue | undefined>,
+      ) as never)
     } else if (!sessionId.startsWith('__') && !useTeamStore.getState().getMemberBySessionId(sessionId)) {
-      wsManager.send(sessionId, { type: 'prewarm_session' })
+      wsManager.send(sessionId, buildSessionLiveCommand('session.prewarm') as never)
     }
 
     get().loadHistory(sessionId)
@@ -1038,26 +1042,27 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return
     }
 
-    wsManager.send(sessionId, { type: 'user_message', content, attachments })
+    wsManager.send(sessionId, buildSessionLiveCommand('session.message.send', {
+      content,
+      attachments: attachments as JsonValue | undefined,
+    }) as never)
   },
 
   respondToPermission: (sessionId, requestId, allowed, options) => {
-    wsManager.send(sessionId, {
-      type: 'permission_response',
+    wsManager.send(sessionId, buildSessionLiveCommand('session.permission.respond', {
       requestId,
       allowed,
       ...(options?.rule ? { rule: options.rule } : {}),
       ...(options?.updatedInput ? { updatedInput: options.updatedInput } : {}),
-    })
+    } as Record<string, JsonValue | undefined>) as never)
     set((s) => ({ sessions: updateSessionIn(s.sessions, sessionId, () => ({ pendingPermission: null, chatState: allowed ? 'tool_executing' : 'idle' })) }))
   },
 
   respondToComputerUsePermission: (sessionId, requestId, response) => {
-    wsManager.send(sessionId, {
-      type: 'computer_use_permission_response',
+    wsManager.send(sessionId, buildSessionLiveCommand('session.computeruse.permission.respond', {
       requestId,
-      response,
-    })
+      response: response as unknown as JsonValue,
+    }) as never)
     set((s) => ({
       sessions: updateSessionIn(s.sessions, sessionId, () => ({
         pendingComputerUsePermission: null,
@@ -1067,20 +1072,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   setSessionRuntime: (sessionId, selection) => {
-    wsManager.send(sessionId, {
-      type: 'set_runtime_config',
-      ...selection,
-    })
+    wsManager.send(sessionId, buildSessionLiveCommand(
+      'session.runtime.select',
+      selection as Record<string, JsonValue | undefined>,
+    ) as never)
   },
 
   setSessionPermissionMode: (sessionId, mode) => {
     if (!get().sessions[sessionId]) return
     useSessionStore.getState().updateSessionPermissionMode(sessionId, mode)
-    wsManager.send(sessionId, { type: 'set_permission_mode', mode })
+    wsManager.send(sessionId, buildSessionLiveCommand('session.permission.mode.set', { mode }) as never)
   },
 
   stopGeneration: (sessionId) => {
-    wsManager.send(sessionId, { type: 'stop_generation' })
+    wsManager.send(sessionId, buildSessionLiveCommand('session.generation.stop') as never)
     if (pendingDeltaBySession.has(sessionId)) {
       const text = consumePendingDelta(sessionId)
       set((s) => ({ sessions: updateSessionIn(s.sessions, sessionId, (sess) => ({ streamingText: sess.streamingText + text })) }))
@@ -1322,10 +1327,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     switch (msg.type) {
-      case 'connected':
+      case 'session.connected':
         break
 
-      case 'status':
+      case 'session.status.changed':
         update((session) => {
           const pendingText = `${session.streamingText}${consumePendingDelta(sessionId)}`
           const hasPendingStreamText =
@@ -1379,7 +1384,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         useTabStore.getState().updateTabStatus(sessionId, msg.state === 'idle' ? 'idle' : 'running')
         break
 
-      case 'content_start': {
+      case 'session.message.started': {
         const session = get().sessions[sessionId]
         if (!session) break
         const pendingText = `${session.streamingText}${consumePendingDelta(sessionId)}`
@@ -1428,7 +1433,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         break
       }
 
-      case 'api_retry': {
+      case 'session.api.retry': {
         const attempt = Math.max(1, Math.trunc(msg.attempt))
         const maxRetries = Math.max(attempt, Math.trunc(msg.maxRetries))
         const retryDelayMs = Math.max(0, Math.trunc(msg.retryDelayMs))
@@ -1450,7 +1455,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         break
       }
 
-      case 'content_delta':
+      case 'session.message.delta':
         if (msg.text !== undefined) {
           if (!get().sessions[sessionId]) break
           appendPendingDelta(sessionId, msg.text)
@@ -1501,7 +1506,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
         break
 
-      case 'thinking':
+      case 'session.thinking.delta':
         update((s) => {
           const pendingText = `${s.streamingText}${consumePendingDelta(sessionId)}`
           const base = pendingText.trim()
@@ -1523,7 +1528,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         })
         break
 
-      case 'tool_use_complete': {
+      case 'session.tool.completed': {
         clearPendingToolInputDelta(sessionId)
         const session = get().sessions[sessionId]
         const toolName = msg.toolName || session?.activeToolName || 'unknown'
@@ -1559,7 +1564,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         break
       }
 
-      case 'tool_result': {
+      case 'session.tool.result': {
         const now = Date.now()
         const pendingParentToolUseId = consumePendingToolParentUseId(sessionId, msg.toolUseId)
         const parentToolUseId = msg.parentToolUseId ?? pendingParentToolUseId
@@ -1592,7 +1597,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         break
       }
 
-      case 'permission_request':
+      case 'session.permission.requested':
         notifyDesktop({
           dedupeKey: `permission:${msg.requestId}`,
           cooldownScope: 'permission-prompt',
@@ -1620,7 +1625,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               ? s.messages
               : [...s.messages, {
                   id: nextId(),
-                  type: 'permission_request',
+                  type: 'permission_prompt',
                   requestId: msg.requestId,
                   toolName: msg.toolName,
                   toolUseId: msg.toolUseId,
@@ -1631,7 +1636,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }))
         break
 
-      case 'computer_use_permission_request':
+      case 'session.computeruse.permission.requested':
         notifyDesktop({
           dedupeKey: `computer-use-permission:${msg.requestId}`,
           cooldownScope: 'permission-prompt',
@@ -1652,7 +1657,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }))
         break
 
-      case 'message_complete': {
+      case 'session.completed': {
         const session = get().sessions[sessionId]
         if (!session) break
         const wasAgentRunning = session.chatState !== 'idle'
@@ -1695,7 +1700,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         break
       }
 
-      case 'error':
+      case 'session.failed':
         update((s) => {
           const pendingText = `${s.streamingText}${consumePendingDelta(sessionId)}`
           let newMessages = s.messages
@@ -1735,22 +1740,22 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
         break
 
-      case 'team_created':
+      case 'session.team.created':
         useTeamStore.getState().handleTeamCreated(msg.teamName)
         break
-      case 'team_update':
+      case 'session.team.updated':
         useTeamStore.getState().handleTeamUpdate(msg.teamName, msg.members)
         break
-      case 'team_deleted':
+      case 'session.team.deleted':
         useTeamStore.getState().handleTeamDeleted(msg.teamName)
         break
-      case 'task_update':
+      case 'session.task.updated':
         break
-      case 'session_title_updated':
+      case 'session.title.updated':
         useSessionStore.getState().updateSessionTitle(msg.sessionId, msg.title)
         useTabStore.getState().updateTabTitle(msg.sessionId, msg.title)
         break
-      case 'system_notification':
+      case 'session.system.notification':
         if (msg.subtype === 'runtime_config') {
           const ack = runtimeConfigAckFromData(msg.data)
           if (ack) {
@@ -1761,7 +1766,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               !sessionId.startsWith('__') &&
               !useTeamStore.getState().getMemberBySessionId(sessionId)
             ) {
-              wsManager.send(sessionId, { type: 'prewarm_session' })
+              wsManager.send(sessionId, buildSessionLiveCommand('session.prewarm') as never)
             }
           }
         }
@@ -1948,7 +1953,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }
         }
         break
-      case 'pong':
+      case 'session.pong':
         break
     }
   },

@@ -16,26 +16,26 @@ type PluginActionPayload = {
 export const pluginsApi = {
   list: (cwd?: string) => {
     const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : ''
-    return api.get<PluginListResponse>(`/api/plugins${query}`)
+    return api.get<PluginListResponse>(`/plugins${query}`)
   },
 
   detail: (id: string, cwd?: string) => {
     const query = new URLSearchParams({ id })
     if (cwd) query.set('cwd', cwd)
-    return api.get<{ detail: PluginDetail }>(`/api/plugins/${encodeURIComponent(id)}?${query.toString()}`)
+    return api.get<{ detail: PluginDetail }>(`/plugins/${encodeURIComponent(id)}?${query.toString()}`)
   },
 
   enable: (payload: PluginActionPayload) =>
-    api.post<{ ok: true; message: string }>('/api/plugins/enable', payload),
+    api.post<{ ok: true; message: string }>('/plugins/enable', payload),
 
   disable: (payload: PluginActionPayload) =>
-    api.post<{ ok: true; message: string }>('/api/plugins/disable', payload),
+    api.post<{ ok: true; message: string }>('/plugins/disable', payload),
 
   update: (payload: PluginActionPayload) =>
-    api.post<{ ok: true; message: string }>('/api/plugins/update', payload),
+    api.post<{ ok: true; message: string }>('/plugins/update', payload),
 
   uninstall: (payload: PluginActionPayload) =>
-    api.post<{ ok: true; message: string }>('/api/plugins/uninstall', payload),
+    api.post<{ ok: true; message: string }>('/plugins/uninstall', payload),
 
   reload: (cwd?: string, sessionId?: string) => {
     const query = new URLSearchParams()
@@ -47,7 +47,7 @@ export const pluginsApi = {
       summary: PluginReloadSummary
       session?: PluginSessionReloadSummary
     }>(
-      `/api/plugins/reload${suffix}`,
+      `/plugins/reload${suffix}`,
       undefined,
       { timeout: 120_000 },
     )

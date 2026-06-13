@@ -9,7 +9,8 @@ import type { LaneDefinition, QualityGateReport } from './types'
 
 describe('quality gate modes', () => {
   test('pr mode includes existing path-aware PR checks', () => {
-    const lanes = lanesForMode('pr').map((lane) => lane.id)
+    const prLanes = lanesForMode('pr')
+    const lanes = prLanes.map((lane) => lane.id)
     expect(lanes).toContain('impact-report')
     expect(lanes).toContain('policy-checks')
     expect(lanes).toContain('desktop-checks')
@@ -20,6 +21,7 @@ describe('quality gate modes', () => {
     expect(lanes).toContain('persistence-upgrade')
     expect(lanes).toContain('quarantine')
     expect(lanes).toContain('coverage')
+    expect(prLanes.find((lane) => lane.id === 'coverage')?.impactRequiredCheck).toBe('bun run check:coverage')
     expect(lanes.some((lane) => lane.startsWith('baseline:'))).toBe(false)
   })
 
@@ -61,6 +63,13 @@ describe('quality gate modes', () => {
     expect(lanes).toContain('provider-smoke:provider-b-model-b')
     expect(lanes).toContain('desktop-smoke:agent-browser-chat:provider-a-model-a')
     expect(lanes).toContain('desktop-smoke:agent-browser-chat:provider-b-model-b')
+  })
+
+  test('fast mode uses the fast server test profile', () => {
+    const serverLane = lanesForMode('pr', [], { fast: true }).find((lane) => lane.id === 'server-checks')
+
+    expect(serverLane?.command).toEqual(['bun', 'run', 'check:server:fast'])
+    expect(serverLane?.impactRequiredCheck).toBe('bun run check:server')
   })
 })
 

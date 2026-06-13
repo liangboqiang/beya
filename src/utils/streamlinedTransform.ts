@@ -8,8 +8,8 @@
  * - Strips tool list and model info from init messages
  */
 
-import type { SDKAssistantMessage } from 'src/types/sdkProtocol.js'
-import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
+import type { RuntimeAssistantMessage } from 'src/types/runtimeProtocol.js'
+import type { StdoutMessage } from 'src/entrypoints/runtime/controlTypes.js'
 import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from 'src/tools/FileReadTool/prompt.js'
 import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
@@ -107,7 +107,7 @@ function getToolSummaryText(counts: ToolCounts): string | undefined {
  * Count tool uses in an assistant message and add to existing counts.
  */
 function accumulateToolUses(
-  message: SDKAssistantMessage,
+  message: RuntimeAssistantMessage,
   counts: ToolCounts,
 ): void {
   const content = message.message.content

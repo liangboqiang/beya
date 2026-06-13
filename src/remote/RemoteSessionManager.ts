@@ -1,10 +1,10 @@
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
 import type {
-  SDKControlCancelRequest,
-  SDKControlPermissionRequest,
-  SDKControlRequest,
-  SDKControlResponse,
-} from '../entrypoints/sdk/controlTypes.js'
+  RuntimeControlCancelRequest,
+  RuntimeControlPermissionRequest,
+  RuntimeControlRequest,
+  RuntimeControlResponse,
+} from '../entrypoints/runtime/controlTypes.js'
 import { logForDebugging } from '../utils/debug.js'
 import { logError } from '../utils/log.js'
 import {
@@ -17,15 +17,15 @@ import {
 } from './SessionsWebSocket.js'
 
 /**
- * Type guard to check if a message is an SDKMessage (not a control message)
+ * Type guard to check if a message is an RuntimeMessage (not a control message)
  */
-function isSDKMessage(
+function isRuntimeMessage(
   message:
-    | SDKMessage
-    | SDKControlRequest
-    | SDKControlResponse
-    | SDKControlCancelRequest,
-): message is SDKMessage {
+    | RuntimeMessage
+    | RuntimeControlRequest
+    | RuntimeControlResponse
+    | RuntimeControlCancelRequest,
+): message is RuntimeMessage {
   return (
     message.type !== 'control_request' &&
     message.type !== 'control_response' &&
@@ -62,11 +62,11 @@ export type RemoteSessionConfig = {
 }
 
 export type RemoteSessionCallbacks = {
-  /** Called when an SDKMessage is received from the session */
-  onMessage: (message: SDKMessage) => void
+  /** Called when an RuntimeMessage is received from the session */
+  onMessage: (message: RuntimeMessage) => void
   /** Called when a permission request is received from CCR */
   onPermissionRequest: (
-    request: SDKControlPermissionRequest,
+    request: RuntimeControlPermissionRequest,
     requestId: string,
   ) => void
   /** Called when the server cancels a pending permission request */
@@ -94,7 +94,7 @@ export type RemoteSessionCallbacks = {
  */
 export class RemoteSessionManager {
   private websocket: SessionsWebSocket | null = null
-  private pendingPermissionRequests: Map<string, SDKControlPermissionRequest> =
+  private pendingPermissionRequests: Map<string, RuntimeControlPermissionRequest> =
     new Map()
 
   constructor(
@@ -145,10 +145,10 @@ export class RemoteSessionManager {
    */
   private handleMessage(
     message:
-      | SDKMessage
-      | SDKControlRequest
-      | SDKControlResponse
-      | SDKControlCancelRequest,
+      | RuntimeMessage
+      | RuntimeControlRequest
+      | RuntimeControlResponse
+      | RuntimeControlCancelRequest,
   ): void {
     // Handle control requests (permission prompts from CCR)
     if (message.type === 'control_request') {
@@ -178,7 +178,7 @@ export class RemoteSessionManager {
     }
 
     // Forward SDK messages to callback (type guard ensures proper narrowing)
-    if (isSDKMessage(message)) {
+    if (isRuntimeMessage(message)) {
       this.callbacks.onMessage(message)
     }
   }
@@ -186,7 +186,7 @@ export class RemoteSessionManager {
   /**
    * Handle control requests from CCR (e.g., permission requests)
    */
-  private handleControlRequest(request: SDKControlRequest): void {
+  private handleControlRequest(request: RuntimeControlRequest): void {
     const { request_id, request: inner } = request
 
     if (inner.subtype === 'can_use_tool') {
@@ -201,7 +201,7 @@ export class RemoteSessionManager {
       logForDebugging(
         `[RemoteSessionManager] Unsupported control request subtype: ${inner.subtype}`,
       )
-      const response: SDKControlResponse = {
+      const response: RuntimeControlResponse = {
         type: 'control_response',
         response: {
           subtype: 'error',
@@ -260,7 +260,7 @@ export class RemoteSessionManager {
 
     this.pendingPermissionRequests.delete(requestId)
 
-    const response: SDKControlResponse = {
+    const response: RuntimeControlResponse = {
       type: 'control_response',
       response: {
         subtype: 'success',

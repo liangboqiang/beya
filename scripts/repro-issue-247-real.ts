@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { startServer } from '../src/server/index.js'
+import { buildRpcResourceCall } from '../src/generated/contracts/index.js'
 
 type ServerMsg = {
   type: string
@@ -36,10 +37,10 @@ function makeLongPrompt(turn: number): string {
 }
 
 function summarizeMessage(msg: ServerMsg): Record<string, unknown> {
-  if (msg.type === 'content_delta') {
+  if (msg.type === 'session.message.delta') {
     return { type: msg.type, textLength: String(msg.text ?? '').length }
   }
-  if (msg.type === 'error') {
+  if (msg.type === 'session.failed') {
     return {
       type: msg.type,
       code: msg.code,
@@ -47,20 +48,20 @@ function summarizeMessage(msg: ServerMsg): Record<string, unknown> {
       message: String(msg.message ?? '').slice(0, 1200),
     }
   }
-  if (msg.type === 'message_complete') {
+  if (msg.type === 'session.completed') {
     return { type: msg.type, usage: msg.usage }
   }
-  if (msg.type === 'status') {
+  if (msg.type === 'session.status.changed') {
     return { type: msg.type, state: msg.state, verb: msg.verb }
   }
-  if (msg.type === 'system_notification') {
+  if (msg.type === 'session.system.notification') {
     return { type: msg.type, subtype: msg.subtype, message: msg.message }
   }
   return { type: msg.type }
 }
 
 async function createSession(workDir: string): Promise<string> {
-  const res = await fetch(`${baseUrl}/api/sessions`, {
+  const res = await rpcFetch('/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workDir }),
@@ -73,7 +74,7 @@ async function createSession(workDir: string): Promise<string> {
 }
 
 async function fetchDiagnostics(sessionId: string) {
-  const res = await fetch(`${baseUrl}/api/diagnostics/events?limit=200`)
+  const res = await rpcFetch('/diagnostics/events?limit=200')
   if (!res.ok) return []
   const body = await res.json() as { events?: Array<Record<string, unknown>> }
   return (body.events ?? []).filter((event) => event.sessionId === sessionId)
@@ -82,7 +83,7 @@ async function fetchDiagnostics(sessionId: string) {
 async function resolveProviderId(): Promise<string> {
   if (process.env.REPRO_PROVIDER_ID) return process.env.REPRO_PROVIDER_ID
 
-  const res = await fetch(`${baseUrl}/api/providers`)
+  const res = await rpcFetch('/providers')
   if (!res.ok) {
     throw new Error(`list providers failed: ${res.status} ${await res.text()}`)
   }
@@ -98,6 +99,66 @@ async function resolveProviderId(): Promise<string> {
     throw new Error('MiniMax provider not found. Set REPRO_PROVIDER_ID to a configured provider id.')
   }
   return provider.id
+}
+
+async function rpcFetch(resourcePath: string, init: RequestInit = {}): Promise<Response> {
+  const url = new URL(resourcePath, baseUrl)
+  const bodyText = typeof init.body === 'string'
+    ? init.body
+    : init.body === undefined
+      ? undefined
+      : JSON.stringify(init.body)
+  const call = buildRpcResourceCall({
+    httpMethod: init.method || 'GET',
+    path: `${url.pathname}${url.search}`,
+    headers: Object.fromEntries(new Headers(init.headers).entries()),
+    body: bodyText === undefined ? undefined : JSON.parse(bodyText),
+  })
+  const requestId = `repro-rpc-${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${wsUrl}/rpc`)
+    const timer = setTimeout(() => {
+      ws.close()
+      reject(new Error(`Timed out waiting for RPC response for ${resourcePath}`))
+    }, 10_000)
+
+    function finish(callback: () => void) {
+      clearTimeout(timer)
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close()
+      }
+      callback()
+    }
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        type: 'rpc.request',
+        id: requestId,
+        method: call.method,
+        params: call.params,
+      }))
+    }
+    ws.onerror = () => finish(() => reject(new Error(`RPC WebSocket failed for ${resourcePath}`)))
+    ws.onmessage = (event) => {
+      const message = JSON.parse(String(event.data)) as {
+        type: string
+        id?: string
+        status?: number
+        result?: unknown
+        message?: string
+      }
+      if (message.type === 'rpc.connected') return
+      if (message.id !== requestId) return
+      if (message.type === 'rpc.error') {
+        finish(() => reject(new Error(message.message || `RPC failed for ${resourcePath}`)))
+        return
+      }
+      finish(() => {
+        resolve(Response.json(message.result ?? null, { status: message.status || 200 }))
+      })
+    }
+  })
 }
 
 async function connect(sessionId: string): Promise<{
@@ -116,15 +177,15 @@ async function connect(sessionId: string): Promise<{
   let turnStartIndex = 0
   let turnTimer: ReturnType<typeof setTimeout> | null = null
 
-  const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+  const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
   ws.onmessage = (event) => {
     const msg = JSON.parse(String(event.data)) as ServerMsg
     messages.push(msg)
-    if (msg.type === 'connected') {
+    if (msg.type === 'session.connected') {
       connectedResolve?.()
       connectedResolve = null
     }
-    if (turnResolve && (msg.type === 'message_complete' || msg.type === 'error')) {
+    if (turnResolve && (msg.type === 'session.completed' || msg.type === 'session.failed')) {
       if (turnTimer) clearTimeout(turnTimer)
       const batch = messages.slice(turnStartIndex)
       const resolve = turnResolve
@@ -153,7 +214,7 @@ async function connect(sessionId: string): Promise<{
     ws,
     messages,
     waitForConnected() {
-      if (messages.some((msg) => msg.type === 'connected')) return Promise.resolve()
+      if (messages.some((msg) => msg.type === 'session.connected')) return Promise.resolve()
       return new Promise<void>((resolve, reject) => {
         connectedResolve = resolve
         connectedReject = reject
@@ -163,7 +224,7 @@ async function connect(sessionId: string): Promise<{
     sendTurn(content: string) {
       if (turnResolve) throw new Error('turn already in flight')
       turnStartIndex = messages.length
-      ws.send(JSON.stringify({ type: 'user_message', content }))
+      ws.send(JSON.stringify({ type: 'session.message.send', content }))
       return new Promise<ServerMsg[]>((resolve, reject) => {
         turnResolve = resolve
         turnReject = reject
@@ -208,12 +269,12 @@ async function main() {
 
     const client = await connect(sessionId)
     await client.waitForConnected()
-    client.ws.send(JSON.stringify({ type: 'set_runtime_config', providerId, modelId }))
+    client.ws.send(JSON.stringify({ type: 'session.runtime.select', providerId, modelId }))
     await sleep(250)
 
     if (runPrewarm) {
       const startIndex = client.messages.length
-      client.ws.send(JSON.stringify({ type: 'prewarm_session' }))
+      client.ws.send(JSON.stringify({ type: 'session.prewarm' }))
       const batch = await client.collectSince(startIndex, 5000)
       console.log(JSON.stringify({
         event: 'prewarm',
@@ -225,8 +286,8 @@ async function main() {
     for (let turn = 1; !runPrewarm && turn <= turnCount; turn++) {
       const startedAt = Date.now()
       const batch = await client.sendTurn(makeLongPrompt(turn))
-      const errors = batch.filter((msg) => msg.type === 'error')
-      const completions = batch.filter((msg) => msg.type === 'message_complete')
+      const errors = batch.filter((msg) => msg.type === 'session.failed')
+      const completions = batch.filter((msg) => msg.type === 'session.completed')
       console.log(JSON.stringify({
         event: 'turn',
         turn,
@@ -251,7 +312,7 @@ async function main() {
 
     const resumeClient = await connect(sessionId)
     await resumeClient.waitForConnected()
-    resumeClient.ws.send(JSON.stringify({ type: 'set_runtime_config', providerId, modelId }))
+    resumeClient.ws.send(JSON.stringify({ type: 'session.runtime.select', providerId, modelId }))
     await sleep(250)
     try {
       const batch = await resumeClient.sendTurn('Continue with exactly "OK".')
@@ -259,8 +320,8 @@ async function main() {
       console.log(JSON.stringify({
         event: 'resume_turn',
         messageTypes: resumeClient.messages.slice(1).map((msg) => msg.type),
-        errors: resumeClient.messages.filter((msg) => msg.type === 'error').map(summarizeMessage),
-        completions: resumeClient.messages.filter((msg) => msg.type === 'message_complete').map(summarizeMessage),
+        errors: resumeClient.messages.filter((msg) => msg.type === 'session.failed').map(summarizeMessage),
+        completions: resumeClient.messages.filter((msg) => msg.type === 'session.completed').map(summarizeMessage),
         recent: resumeClient.messages.slice(-12).map(summarizeMessage),
       }))
     } finally {

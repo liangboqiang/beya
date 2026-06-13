@@ -279,7 +279,7 @@ describe('E2E: Full Flow', () => {
   // =============================================
 
   it('should connect via WebSocket', async () => {
-    const wsUrl = baseUrl.replace('http://', 'ws://') + '/ws/test-ws-session'
+    const wsUrl = baseUrl.replace('http://', 'ws://') + '/sessions/test-ws-session/live'
 
     const messages: any[] = []
     const ws = new WebSocket(wsUrl)
@@ -291,9 +291,9 @@ describe('E2E: Full Flow', () => {
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data as string)
         messages.push(msg)
-        if (msg.type === 'connected') {
+        if (msg.type === 'session.connected') {
           // Send a test message
-          ws.send(JSON.stringify({ type: 'user_message', content: 'Hello' }))
+          ws.send(JSON.stringify({ type: 'session.message.send', content: 'Hello' }))
         }
         if (msg.type === 'status' && msg.state === 'idle' && messages.length > 2) {
           ws.close()
@@ -307,7 +307,7 @@ describe('E2E: Full Flow', () => {
       }, 3000)
     })
 
-    expect(messages[0].type).toBe('connected')
+    expect(messages[0].type).toBe('session.connected')
     expect(messages[0].sessionId).toBe('test-ws-session')
   })
 

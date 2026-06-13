@@ -28,7 +28,7 @@ beforeEach(async () => {
   clearInstalledPluginsCache()
   clearPluginCache('mc-design-desktop-test-setup')
   resetSettingsCache()
-})
+}, 60_000)
 
 afterEach(async () => {
   clearInstalledPluginsCache()
@@ -38,8 +38,8 @@ afterEach(async () => {
   restoreEnv('USERPROFILE', originalUserProfile)
   restoreEnv('BEYA_CONFIG_DIR', originalBeyaConfigDir)
   setCwdState(originalCwdState)
-  await fs.rm(tmpHome, { recursive: true, force: true })
-})
+  await rmWithRetry(tmpHome)
+}, 60_000)
 
 describe('mc-design desktop runtime tool surface', () => {
   it('lists and executes the local design-agent tools through /api/tools', async () => {
@@ -85,7 +85,7 @@ describe('mc-design desktop runtime tool surface', () => {
     await expect(fs.stat(String(report.report_path))).resolves.toEqual(
       expect.objectContaining({ size: expect.any(Number) }),
     )
-  })
+  }, 60_000)
 })
 
 async function executeTool(
@@ -146,4 +146,20 @@ function restoreEnv(name: string, value: string | undefined): void {
   } else {
     process.env[name] = value
   }
+}
+
+async function rmWithRetry(targetPath: string): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await fs.rm(targetPath, { recursive: true, force: true })
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (!['EBUSY', 'ENOTEMPTY', 'EPERM'].includes(code ?? '')) {
+        throw error
+      }
+      await Bun.sleep(100 * (attempt + 1))
+    }
+  }
+  await fs.rm(targetPath, { recursive: true, force: true })
 }

@@ -17,7 +17,7 @@ export type SessionStartOptions = {
 }
 
 export type SessionProcess = {
-  runtimeKind: 'sdk' | 'local_cli'
+  runtimeKind: 'provider' | 'local_cli'
   proc?: ReturnType<typeof Bun.spawn>
   activeLocalCliTurn?: LocalCliTurnHandle
   localCliRuntime?: SelectedLocalCliRuntime
@@ -26,15 +26,15 @@ export type SessionProcess = {
   outputCallbacks: Array<(msg: any) => void>
   workDir: string
   permissionMode: string
-  sdkToken: string
-  sdkSocket: { send(data: string): void } | null
+  runtimeToken: string
+  runtimeSocket: { send(data: string): void } | null
   pendingOutbound: string[]
   startupPending: boolean
   startupExitCode: number | null
   stdoutLines: string[]
   stderrLines: string[]
   outputDrain: Promise<void>
-  sdkMessages: any[]
+  runtimeMessages: any[]
   initMessage: any | null
   pendingPermissionRequests: Map<
     string,
@@ -59,7 +59,7 @@ export type PreparedExecutionSessionStart = {
   sessionId: string
   requestedWorkDir: string
   launchWorkDir: string
-  sdkUrl: string
+  runtimeUrl: string
   options?: SessionStartOptions
   launchInfo: ExecutionSessionLaunchInfo | null
   launchRepository: PreparedSessionWorkspace['repository'] | undefined
@@ -92,17 +92,17 @@ export type ExecutionBackendHost = {
   deleteSession(sessionId: string): void
   buildProviderCliArgs(
     sessionId: string,
-    sdkUrl: string,
+    runtimeUrl: string,
     shouldResume: boolean,
     options: SessionStartOptions | undefined,
     repository: PreparedSessionWorkspace['repository'] | undefined,
   ): string[]
   buildChildEnv(
     workDir: string,
-    sdkUrl: string | undefined,
+    runtimeUrl: string | undefined,
     options: SessionStartOptions | undefined,
   ): Promise<Record<string, string>>
-  getSdkTokenFromUrl(sdkUrl: string): string
+  getRuntimeTokenFromUrl(runtimeUrl: string): string
   readProcessOutputStream(
     sessionId: string,
     stream: ReadableStream | null | undefined,
@@ -119,11 +119,11 @@ export type ExecutionBackendHost = {
   restartSession(
     sessionId: string,
     workDir: string,
-    sdkUrl: string,
+    runtimeUrl: string,
     options: SessionStartOptions | undefined,
   ): Promise<void>
   buildCapturedProcessOutputDetail(session: SessionProcess | undefined): string
-  summarizeSdkMessages(messages: any[]): unknown[]
+  summarizeRuntimeMessages(messages: any[]): unknown[]
 }
 
 export type ExecutionBackend = {

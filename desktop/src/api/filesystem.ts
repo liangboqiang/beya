@@ -28,18 +28,18 @@ export const filesystemApi = {
     if (path) q.set('path', path)
     if (options?.includeFiles) q.set('includeFiles', 'true')
     const qs = q.toString()
-    return api.get<BrowseResult>(`/api/filesystem/browse${qs ? `?${qs}` : ''}`)
+    return api.get<BrowseResult>(`/filesystem/browse${qs ? `?${qs}` : ''}`)
   },
 
   search(query: string, cwd?: string) {
     const q = new URLSearchParams({ search: query, maxResults: '200', includeFiles: 'true' })
     if (cwd) q.set('path', cwd)
-    return api.get<BrowseResult>(`/api/filesystem/browse?${q}`)
+    return api.get<BrowseResult>(`/filesystem/browse?${q}`)
   },
 
   pickDirectory(initialPath?: string) {
     return api.post<PickDirectoryResult>(
-      '/api/filesystem/pick-directory',
+      '/filesystem/pick-directory',
       { initialPath },
       { timeout: 10 * 60_000 },
     )
@@ -47,7 +47,7 @@ export const filesystemApi = {
 
   registerDirectory(path: string) {
     return api.post<RegisterDirectoryResult>(
-      '/api/filesystem/register-directory',
+      '/filesystem/register-directory',
       { path },
     )
   },

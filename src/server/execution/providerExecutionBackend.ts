@@ -25,7 +25,7 @@ export class ProviderExecutionBackend implements ExecutionBackend {
 
     const args = host.buildProviderCliArgs(
       input.sessionId,
-      input.sdkUrl,
+      input.runtimeUrl,
       input.shouldResume,
       input.options,
       input.launchRepository,
@@ -35,7 +35,7 @@ export class ProviderExecutionBackend implements ExecutionBackend {
       `[ProviderExecutionBackend] Starting agent runtime for ${input.sessionId}, cwd: ${input.launchWorkDir} (process.cwd()=${process.cwd()}, CALLER_DIR will be pinned to workDir)`,
     )
 
-    const childEnv = await host.buildChildEnv(input.launchWorkDir, input.sdkUrl, input.options)
+    const childEnv = await host.buildChildEnv(input.launchWorkDir, input.runtimeUrl, input.options)
 
     let proc: ReturnType<typeof Bun.spawn>
     try {
@@ -69,21 +69,21 @@ export class ProviderExecutionBackend implements ExecutionBackend {
     }
 
     const session: SessionProcess = {
-      runtimeKind: 'sdk',
+      runtimeKind: 'provider',
       runtimeProfile: input.options?.runtimeProfile,
       proc,
       outputCallbacks: [],
       workDir: input.launchWorkDir,
       permissionMode: input.options?.permissionMode || 'default',
-      sdkToken: host.getSdkTokenFromUrl(input.sdkUrl),
-      sdkSocket: null,
+      runtimeToken: host.getRuntimeTokenFromUrl(input.runtimeUrl),
+      runtimeSocket: null,
       pendingOutbound: [],
       startupPending: true,
       startupExitCode: null,
       stdoutLines: [],
       stderrLines: [],
       outputDrain: Promise.resolve(),
-      sdkMessages: [],
+      runtimeMessages: [],
       initMessage: null,
       pendingPermissionRequests: new Map(),
     }
@@ -118,7 +118,7 @@ export class ProviderExecutionBackend implements ExecutionBackend {
         return host.restartSession(
           input.sessionId,
           input.requestedWorkDir,
-          input.sdkUrl,
+          input.runtimeUrl,
           input.options,
         )
       }
@@ -140,7 +140,7 @@ export class ProviderExecutionBackend implements ExecutionBackend {
           providerId: input.options?.providerId ?? null,
           model: input.options?.model ?? null,
           capturedOutput: host.buildCapturedProcessOutputDetail(session),
-          sdkMessages: host.summarizeSdkMessages(session.sdkMessages),
+          runtimeMessages: host.summarizeRuntimeMessages(session.runtimeMessages),
         },
       })
       throw startupError

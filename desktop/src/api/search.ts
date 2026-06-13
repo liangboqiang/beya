@@ -20,10 +20,10 @@ type SessionSearchResponse = { results: SessionSearchResult[] }
 
 export const searchApi = {
   search(params: { query: string; cwd?: string; maxResults?: number; glob?: string }) {
-    return api.post<SearchResponse>('/api/search', params)
+    return api.post<SearchResponse>('/search', params)
   },
 
   searchSessions(query: string) {
-    return api.post<SessionSearchResponse>('/api/search/sessions', { query })
+    return api.post<SessionSearchResponse>('/search/sessions', { query })
   },
 }

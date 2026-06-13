@@ -92,7 +92,7 @@ describe('AskUserQuestion', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit/i }))
 
     expect(sendMock).toHaveBeenCalledWith(ACTIVE_TAB, {
-      type: 'permission_response',
+      type: 'session.permission.respond',
       requestId: 'perm-1',
       allowed: true,
       updatedInput: {
@@ -134,7 +134,7 @@ describe('AskUserQuestion', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit/i }))
 
     expect(sendMock).toHaveBeenCalledWith(ACTIVE_TAB, {
-      type: 'permission_response',
+      type: 'session.permission.respond',
       requestId: 'perm-1',
       allowed: true,
       updatedInput: {
@@ -177,7 +177,7 @@ describe('AskUserQuestion', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit/i }))
 
     expect(sendMock).toHaveBeenCalledWith(ACTIVE_TAB, {
-      type: 'permission_response',
+      type: 'session.permission.respond',
       requestId: 'perm-1',
       allowed: true,
       updatedInput: {
@@ -244,7 +244,7 @@ describe('AskUserQuestion', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit/i }))
 
     expect(sendMock).toHaveBeenCalledWith('target-tab', {
-      type: 'permission_response',
+      type: 'session.permission.respond',
       requestId: 'perm-target',
       allowed: true,
       updatedInput: {
@@ -306,7 +306,7 @@ describe('AskUserQuestion', () => {
     fireEvent.click(screen.getByRole('button', { name: /submit/i }))
 
     expect(sendMock).toHaveBeenCalledWith(ACTIVE_TAB, {
-      type: 'permission_response',
+      type: 'session.permission.respond',
       requestId: 'perm-1',
       allowed: true,
       updatedInput: {
@@ -347,7 +347,7 @@ describe('AskUserQuestion', () => {
     fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true })
 
     expect(sendMock).toHaveBeenCalledWith(ACTIVE_TAB, {
-      type: 'permission_response',
+      type: 'session.permission.respond',
       requestId: 'perm-1',
       allowed: true,
       updatedInput: {

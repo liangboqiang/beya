@@ -1,0 +1,21 @@
+id: agent.runtime
+version: v1
+kind: agent
+owner: agent-core
+stability: stable
+description: Runtime executor binding for agent turns. The contract owns binding and schemas; TypeScript owns the algorithm.
+input:
+  type: object
+output:
+  type: object
+implementation:
+  module: src/modules/agent-core/executors/agentRuntime.js
+  export: runAgentRuntimeExecutor
+emits:
+  - session.message.delta
+  - session.tool.started
+  - session.tool.completed
+  - session.completed
+consumes:
+  - session.message.send
+  - runtime.input.send

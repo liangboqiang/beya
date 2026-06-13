@@ -413,7 +413,7 @@ export async function compactConversation(
     })
 
     // Execute PreCompact hooks
-    context.setSDKStatus?.('compacting')
+    context.setRuntimeStatus?.('compacting')
     const hookResult = await executePreCompactHooks(
       {
         trigger: isAutoCompact ? 'auto' : 'manual',
@@ -762,7 +762,7 @@ export async function compactConversation(
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_end' })
-    context.setSDKStatus?.(null)
+    context.setRuntimeStatus?.(null)
   }
 }
 
@@ -818,7 +818,7 @@ export async function partialCompactConversation(
       hookType: 'pre_compact',
     })
 
-    context.setSDKStatus?.('compacting')
+    context.setRuntimeStatus?.('compacting')
     const hookResult = await executePreCompactHooks(
       {
         trigger: 'manual',
@@ -1105,7 +1105,7 @@ export async function partialCompactConversation(
     context.setStreamMode?.('requesting')
     context.setResponseLength?.(() => 0)
     context.onCompactProgress?.({ type: 'compact_end' })
-    context.setSDKStatus?.(null)
+    context.setRuntimeStatus?.(null)
   }
 }
 
@@ -1175,7 +1175,7 @@ async function streamCompactSummary({
           statusSetter?.('compacting')
         },
         30_000,
-        context.setSDKStatus,
+        context.setRuntimeStatus,
       )
     : undefined
 

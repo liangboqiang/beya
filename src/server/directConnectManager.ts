@@ -1,10 +1,10 @@
 /* eslint-disable eslint-plugin-n/no-unsupported-features/node-builtins */
 
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
 import type {
-  SDKControlPermissionRequest,
+  RuntimeControlPermissionRequest,
   StdoutMessage,
-} from '../entrypoints/sdk/controlTypes.js'
+} from '../entrypoints/runtime/controlTypes.js'
 import type { RemotePermissionResponse } from '../remote/RemoteSessionManager.js'
 import { logForDebugging } from '../utils/debug.js'
 import { jsonParse, jsonStringify } from '../utils/slowOperations.js'
@@ -18,9 +18,9 @@ export type DirectConnectConfig = {
 }
 
 export type DirectConnectCallbacks = {
-  onMessage: (message: SDKMessage) => void
+  onMessage: (message: RuntimeMessage) => void
   onPermissionRequest: (
-    request: SDKControlPermissionRequest,
+    request: RuntimeControlPermissionRequest,
     requestId: string,
   ) => void
   onConnected?: () => void
@@ -127,7 +127,7 @@ export class DirectConnectSessionManager {
       return false
     }
 
-    // Must match SDKUserMessage format expected by `--input-format stream-json`
+    // Must match RuntimeUserMessage format expected by `--input-format stream-json`
     const message = jsonStringify({
       type: 'user',
       message: {
@@ -149,7 +149,7 @@ export class DirectConnectSessionManager {
       return
     }
 
-    // Must match SDKControlResponse format expected by StructuredIO
+    // Must match RuntimeControlResponse format expected by StructuredIO
     const response = jsonStringify({
       type: 'control_response',
       response: {
@@ -174,7 +174,7 @@ export class DirectConnectSessionManager {
       return
     }
 
-    // Must match SDKControlRequest format expected by StructuredIO
+    // Must match RuntimeControlRequest format expected by StructuredIO
     const request = jsonStringify({
       type: 'control_request',
       request_id: crypto.randomUUID(),

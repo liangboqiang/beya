@@ -10,8 +10,8 @@ import type { Command } from '../commands.js';
 import { getSlashCommandToolSkills, isBridgeSafeCommand } from '../commands.js';
 import { getRemoteSessionUrl } from '../constants/product.js';
 import { useNotifications } from '../context/notifications.js';
-import type { PermissionMode, SDKMessage } from 'src/types/sdkProtocol.js';
-import type { SDKControlResponse } from '../entrypoints/sdk/controlTypes.js';
+import type { PermissionMode, RuntimeMessage } from 'src/types/runtimeProtocol.js';
+import type { RuntimeControlResponse } from '../entrypoints/runtime/controlTypes.js';
 import { Text } from '../ink.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js';
 import { useAppState, useAppStateStore, useSetAppState } from '../state/AppState.js';
@@ -176,7 +176,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
           // disk write before we enqueue with the @path prefix. Caller doesn't
           // await —messages with attachments just land in the queue slightly
           // later, which is fine (web messages aren't rapid-fire).
-          async function handleInboundMessage(msg: SDKMessage): Promise<void> {
+          async function handleInboundMessage(msg: RuntimeMessage): Promise<void> {
             try {
               const fields = extractInboundMessageFields(msg);
               if (!fields) return;
@@ -282,7 +282,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
                   });
                   // Send system/init so remote clients (web/iOS/Android) get
                   // session metadata. REPL uses query() directly —never hits
-                  // QueryEngine's SDKMessage layer —so this is the only path
+                  // QueryEngine's RuntimeMessage layer —so this is the only path
                   // to put system/init on the REPL-bridge wire. Skills load is
                   // async (memoized, cheap after REPL startup); fire-and-forget
                   // so the connected-state transition isn't blocked.
@@ -366,7 +366,7 @@ export function useReplBridge(messages: Message[], setMessages: (action: React.S
           const pendingPermissionHandlers = new Map<string, (response: BridgePermissionResponse) => void>();
 
           // Dispatch incoming control_response messages to registered handlers
-          function handlePermissionResponse(msg_0: SDKControlResponse): void {
+          function handlePermissionResponse(msg_0: RuntimeControlResponse): void {
             const requestId = msg_0.response?.request_id;
             if (!requestId) return;
             const handler = pendingPermissionHandlers.get(requestId);

@@ -15,25 +15,25 @@ export type H5AccessTokenResult = {
 
 export const h5AccessApi = {
   get() {
-    return api.get<H5AccessStatus>('/api/h5-access')
+    return api.get<H5AccessStatus>('/h5-access')
   },
 
   enable() {
-    return api.post<H5AccessTokenResult>('/api/h5-access/enable')
+    return api.post<H5AccessTokenResult>('/h5-access/enable')
   },
 
   disable() {
-    return api.post<H5AccessStatus>('/api/h5-access/disable')
+    return api.post<H5AccessStatus>('/h5-access/disable')
   },
 
   regenerate() {
-    return api.post<H5AccessTokenResult>('/api/h5-access/regenerate')
+    return api.post<H5AccessTokenResult>('/h5-access/regenerate')
   },
 
   update(input: {
     allowedOrigins?: string[]
     publicBaseUrl?: string | null
   }) {
-    return api.put<H5AccessStatus>('/api/h5-access', input)
+    return api.put<H5AccessStatus>('/h5-access', input)
   },
 }

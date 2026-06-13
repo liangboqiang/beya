@@ -1,0 +1,41 @@
+id: access-surfaces
+version: v1
+name: Access Surfaces
+layer: access
+layerOrder: 1
+stability: stable
+description: Desktop, H5, adapter, and product SDK boundary helpers.
+paths:
+  server:
+    - src/modules/access-surfaces
+    - adapters
+    - packages/sdk-python/src/beya
+  desktop:
+    - desktop/src/modules/resources
+    - desktop/src/modules/session-live
+  contracts:
+    - contracts/modules/access-surfaces/v1/module.yaml
+owns:
+  - Desktop/H5/product SDK/adapter entry boundaries.
+  - Boundary-only HTTP/WebSocket transport helpers.
+resourceMethods:
+  - adapters.configread
+  - adapters.configupdate
+  - adapters.wechatloginstart
+  - adapters.wechatloginpoll
+  - adapters.wechatunbind
+  - adapters.dingtalkunbind
+  - adapters.dingtalkregistrationbegin
+  - adapters.dingtalkregistrationpoll
+allowedDependencies:
+  - gateway
+  - session-host
+  - foundation
+forbiddenDependencies:
+  - agent-core
+  - model-runtime
+implementationRoots:
+  - src/modules/access-surfaces
+  - desktop/src/modules/resources
+  - adapters
+  - packages/sdk-python/src/beya

@@ -1,0 +1,65 @@
+name: session.live
+version: v1
+domain: session
+stability: stable
+description: User-facing realtime session stream for Desktop, H5, product SDKs, and adapters.
+transport:
+  kind: websocket
+  path: /sessions/{sessionId}/live
+messages:
+  - name: session.message.send
+    direction: client-to-server
+  - name: session.permission.respond
+    direction: client-to-server
+  - name: session.computeruse.permission.respond
+    direction: client-to-server
+  - name: session.permission.mode.set
+    direction: client-to-server
+  - name: session.runtime.select
+    direction: client-to-server
+  - name: session.generation.stop
+    direction: client-to-server
+  - name: session.prewarm
+    direction: client-to-server
+  - name: session.ping
+    direction: client-to-server
+  - name: session.connected
+    direction: server-to-client
+  - name: session.pong
+    direction: server-to-client
+  - name: session.status.changed
+    direction: server-to-client
+  - name: session.message.started
+    direction: server-to-client
+  - name: session.message.delta
+    direction: server-to-client
+  - name: session.thinking.delta
+    direction: server-to-client
+  - name: session.tool.started
+    direction: server-to-client
+  - name: session.tool.completed
+    direction: server-to-client
+  - name: session.tool.result
+    direction: server-to-client
+  - name: session.permission.requested
+    direction: server-to-client
+  - name: session.computeruse.permission.requested
+    direction: server-to-client
+  - name: session.completed
+    direction: server-to-client
+  - name: session.failed
+    direction: server-to-client
+  - name: session.api.retry
+    direction: server-to-client
+  - name: session.system.notification
+    direction: server-to-client
+  - name: session.title.updated
+    direction: server-to-client
+  - name: session.task.updated
+    direction: server-to-client
+  - name: session.team.updated
+    direction: server-to-client
+  - name: session.team.created
+    direction: server-to-client
+  - name: session.team.deleted
+    direction: server-to-client

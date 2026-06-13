@@ -17,22 +17,22 @@ export type CliLauncherStatus = {
 
 export const settingsApi = {
   getUser() {
-    return api.get<UserSettings>('/api/settings/user')
+    return api.get<UserSettings>('/settings/user')
   },
 
   updateUser(settings: Partial<UserSettings>) {
-    return api.put<{ ok: true }>('/api/settings/user', settings)
+    return api.put<{ ok: true }>('/settings/user', settings)
   },
 
   getPermissionMode() {
-    return api.get<{ mode: PermissionMode }>('/api/permissions/mode')
+    return api.get<{ mode: PermissionMode }>('/permissions/mode')
   },
 
   setPermissionMode(mode: PermissionMode) {
-    return api.put<{ ok: true; mode: PermissionMode }>('/api/permissions/mode', { mode })
+    return api.put<{ ok: true; mode: PermissionMode }>('/permissions/mode', { mode })
   },
 
   getCliLauncherStatus() {
-    return api.get<CliLauncherStatus>('/api/settings/cli-launcher')
+    return api.get<CliLauncherStatus>('/settings/cli-launcher')
   },
 }

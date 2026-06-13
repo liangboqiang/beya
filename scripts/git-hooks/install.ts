@@ -197,7 +197,7 @@ if (import.meta.main) {
 
     console.log(`Installed pre-push quality gate: ${result.hookPath}`)
     console.log('Every git push now runs: bun run quality:push')
-    console.log('Coverage remains in bun run verify, quality:pr, and CI.')
+    console.log('Coverage and slow server integration remain in bun run verify, quality:pr, and CI.')
 
     if (args.liveProviderModels.length > 0) {
       console.log(`Live ${args.liveMode ?? 'smoke'} gate is enabled for ${args.liveProviderModels.length} provider selector(s).`)

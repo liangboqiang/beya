@@ -306,7 +306,7 @@ import type { MCPServerConnection } from '../services/mcp/types.js'
 import type {
   HookEvent,
   SyncHookJSONOutput,
-} from 'src/types/sdkProtocol.js'
+} from 'src/types/runtimeProtocol.js'
 import {
   checkForAsyncHookResponses,
   removeDeliveredAsyncHooks,

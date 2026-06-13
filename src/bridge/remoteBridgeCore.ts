@@ -64,11 +64,11 @@ import {
 } from '../services/analytics/index.js'
 import type { ReplBridgeHandle, BridgeState } from './replBridge.js'
 import type { Message } from '../types/message.js'
-import type { SDKMessage } from 'src/types/sdkProtocol.js'
+import type { RuntimeMessage } from 'src/types/runtimeProtocol.js'
 import type {
-  SDKControlRequest,
-  SDKControlResponse,
-} from '../entrypoints/sdk/controlTypes.js'
+  RuntimeControlRequest,
+  RuntimeControlResponse,
+} from '../entrypoints/runtime/controlTypes.js'
 import type { PermissionMode } from '../utils/permissions/PermissionMode.js'
 
 const ANTHROPIC_VERSION = '2023-06-01'
@@ -93,15 +93,15 @@ export type EnvLessBridgeParams = {
   getAccessToken: () => string | undefined
   onAuth401?: (staleAccessToken: string) => Promise<boolean>
   /**
-   * Converts internal Message[] →SDKMessage[] for writeMessages() and the
+   * Converts internal Message[] →RuntimeMessage[] for writeMessages() and the
    * initial-flush/drain paths. Injected rather than imported —mappers.ts
    * transitively pulls in src/commands.ts (entire command registry + React
    * tree) which would bloat bundles that don't already have it.
    */
-  toSDKMessages: (messages: Message[]) => SDKMessage[]
+  toRuntimeMessages: (messages: Message[]) => RuntimeMessage[]
   initialHistoryCap: number
   initialMessages?: Message[]
-  onInboundMessage?: (msg: SDKMessage) => void | Promise<void>
+  onInboundMessage?: (msg: RuntimeMessage) => void | Promise<void>
   /**
    * Fired on each title-worthy user message seen in writeMessages() until
    * the callback returns true (done). Mirrors replBridge.ts's onUserMessage —   * caller derives a title and PATCHes /v1/sessions/{id} so auto-started
@@ -111,7 +111,7 @@ export type EnvLessBridgeParams = {
    * retags internally.
    */
   onUserMessage?: (text: string, sessionId: string) => boolean
-  onPermissionResponse?: (response: SDKControlResponse) => void
+  onPermissionResponse?: (response: RuntimeControlResponse) => void
   onInterrupt?: () => void
   onSetModel?: (model: string | undefined) => void
   onSetMaxThinkingTokens?: (maxTokens: number | null) => void
@@ -145,7 +145,7 @@ export async function initEnvLessBridgeCore(
     title,
     getAccessToken,
     onAuth401,
-    toSDKMessages,
+    toRuntimeMessages,
     initialHistoryCap,
     initialMessages,
     onInboundMessage,
@@ -605,7 +605,7 @@ export async function initEnvLessBridgeCore(
     const msgs = flushGate.end()
     if (msgs.length === 0) return
     for (const msg of msgs) recentPostedUUIDs.add(msg.uuid)
-    const events = toSDKMessages(msgs).map(m => ({
+    const events = toRuntimeMessages(msgs).map(m => ({
       ...m,
       session_id: sessionId,
     }))
@@ -633,7 +633,7 @@ export async function initEnvLessBridgeCore(
         `[remote-bridge] Capped initial flush: ${eligible.length} -> ${capped.length} (cap=${initialHistoryCap})`,
       )
     }
-    const events = toSDKMessages(capped).map(m => ({
+    const events = toRuntimeMessages(capped).map(m => ({
       ...m,
       session_id: sessionId,
     }))
@@ -792,7 +792,7 @@ export async function initEnvLessBridgeCore(
       }
 
       for (const msg of filtered) recentPostedUUIDs.add(msg.uuid)
-      const events = toSDKMessages(filtered).map(m => ({
+      const events = toRuntimeMessages(filtered).map(m => ({
         ...m,
         session_id: sessionId,
       }))
@@ -807,7 +807,7 @@ export async function initEnvLessBridgeCore(
       logForDebugging(`[remote-bridge] Sending ${filtered.length} message(s)`)
       void transport.writeBatch(events)
     },
-    writeSdkMessages(messages: SDKMessage[]) {
+    writeSdkMessages(messages: RuntimeMessage[]) {
       const filtered = messages.filter(
         m => !m.uuid || !recentPostedUUIDs.has(m.uuid),
       )
@@ -818,7 +818,7 @@ export async function initEnvLessBridgeCore(
       const events = filtered.map(m => ({ ...m, session_id: sessionId }))
       void transport.writeBatch(events)
     },
-    sendControlRequest(request: SDKControlRequest) {
+    sendControlRequest(request: RuntimeControlRequest) {
       if (authRecoveryInFlight) {
         logForDebugging(
           `[remote-bridge] Dropping control_request during 401 recovery: ${request.request_id}`,
@@ -834,7 +834,7 @@ export async function initEnvLessBridgeCore(
         `[remote-bridge] Sent control_request request_id=${request.request_id}`,
       )
     },
-    sendControlResponse(response: SDKControlResponse) {
+    sendControlResponse(response: RuntimeControlResponse) {
       if (authRecoveryInFlight) {
         logForDebugging(
           '[remote-bridge] Dropping control_response during 401 recovery',

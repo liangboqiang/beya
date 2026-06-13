@@ -3,13 +3,13 @@ import { isAllowedFilesystemPath } from './filesystem.js'
 import { serveFileWithRange } from './previewFs.js'
 import { normalizeDriveRootPathForPlatform } from '../services/windowsDrivePath.js'
 
-const PREFIX = '/local-file/'
+const PREFIX = '/files/local/'
 
 /**
- * Reconstruct the absolute filesystem path encoded in a `/local-file/...`
+ * Reconstruct the absolute filesystem path encoded in a `/files/local/...`
  * request pathname.
  *
- * The request path *after* the `/local-file/` prefix IS the target's absolute
+ * The request path *after* the `/files/local/` prefix IS the target's absolute
  * path with its leading separator dropped by the prefix slice. We URL-decode
  * each segment (so spaces / unicode names survive) and re-add the root:
  *
@@ -19,8 +19,8 @@ const PREFIX = '/local-file/'
  *       `C:/me/page.html` arrives the same way once the prefix is sliced.
  *
  * The WHATWG URL parser collapses `..` segments before this handler runs, so a
- * traversal such as `/local-file/../../etc/passwd` arrives with its pathname
- * normalized to `/etc/passwd` — i.e. the `/local-file/` prefix is gone. We
+ * traversal such as `/files/local/../../etc/passwd` arrives with its pathname
+ * normalized to `/etc/passwd` — i.e. the `/files/local/` prefix is gone. We
  * treat any request that lost the prefix as a sandbox escape (handled by the
  * caller returning 403); here we only reconstruct, the sandbox check is the
  * `isAllowedFilesystemPath` gate in {@link handleLocalFile}.
@@ -48,7 +48,7 @@ export function reconstructAbsolutePath(rest: string): string | null {
     return decoded
   }
 
-  // POSIX: the leading `/` was consumed by the `/local-file/` prefix slice.
+  // POSIX: the leading `/` was consumed by the `/files/local/` prefix slice.
   return `/${decoded}`
 }
 
@@ -56,17 +56,17 @@ export function reconstructAbsolutePath(rest: string): string | null {
  * Serve a single ABSOLUTE local file by path so `file://` links and AI-emitted
  * absolute paths can open in the in-app browser.
  *
- * URL shape: `/local-file/<absolute-path>` where the path after the prefix is
+ * URL shape: `/files/local/<absolute-path>` where the path after the prefix is
  * the on-disk absolute path (its leading separator dropped by the prefix, or a
  * `C:/...` drive form on Windows). This is PATH-based, not query-param based,
  * so relative asset URLs (`./app.css`, `img/logo.png`) inside served HTML
- * resolve against the same `/local-file/...` directory.
+ * resolve against the same `/files/local/...` directory.
  *
  * Security: the resolved path is gated by {@link isAllowedFilesystemPath} — the
  * same `$HOME` / `/tmp` / `/private/tmp` / registered-roots allow-list used by
  * the filesystem image endpoint. Anything outside is rejected with 403, so
  * `/etc/passwd` and friends stay denied. Streaming + byte-range handling is
- * shared with `/preview-fs` via {@link serveFileWithRange}, so HTML, CSS, JS,
+ * shared with `/files/preview` via {@link serveFileWithRange}, so HTML, CSS, JS,
  * images, fonts, video, and text all serve with the correct `Content-Type`,
  * `Accept-Ranges`, and 206 partial responses.
  */

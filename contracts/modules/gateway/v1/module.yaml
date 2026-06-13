@@ -1,0 +1,36 @@
+id: gateway
+version: v1
+name: Protocol Gateway
+layer: gateway
+layerOrder: 2
+stability: stable
+description: Public HTTP/WebSocket transport decoding and generated RPC dispatch.
+paths:
+  server:
+    - src/modules/gateway
+    - src/server/ws
+    - src/server/router.ts
+  contracts:
+    - contracts/gateway/v1/rpc.yaml
+    - contracts/session/v1/live.yaml
+    - contracts/runtime/v1/bridge.yaml
+owns:
+  - /rpc resource RPC transport.
+  - /sessions/{sessionId}/live session live transport.
+  - /sessions/{sessionId}/runtime runtime bridge transport.
+  - Transport-level schema hash checks.
+events:
+  - rpc.connected
+  - session.connected
+  - runtime.ready
+allowedDependencies:
+  - session-host
+  - foundation
+forbiddenDependencies:
+  - access-surfaces
+  - agent-core
+  - capability-registry
+  - model-runtime
+implementationRoots:
+  - src/modules/gateway
+  - src/server/ws

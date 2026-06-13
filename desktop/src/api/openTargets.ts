@@ -37,9 +37,9 @@ function normalizeOpenTargetList(result: OpenTargetList): OpenTargetList {
 
 export const openTargetsApi = {
   async list() {
-    return normalizeOpenTargetList(await api.get<OpenTargetList>('/api/open-targets'))
+    return normalizeOpenTargetList(await api.get<OpenTargetList>('/open-targets'))
   },
   open(targetId: string, path: string) {
-    return api.post<OpenTargetOpenResponse>('/api/open-targets/open', { targetId, path })
+    return api.post<OpenTargetOpenResponse>('/open-targets/open', { targetId, path })
   },
 }

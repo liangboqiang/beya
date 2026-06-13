@@ -1,0 +1,56 @@
+id: model-runtime
+version: v1
+name: Model Runtime
+layer: runtime
+layerOrder: 6
+stability: stable
+description: Provider/local CLI runtime profiles, model catalogs, proxy transforms, and usage telemetry.
+paths:
+  server:
+    - src/modules/model-runtime
+    - src/server/runtime
+    - src/server/services/providerService.ts
+    - src/server/services/localCliRuntimeService.ts
+    - src/services/api
+  contracts:
+    - contracts/modules/model-runtime/v1/module.yaml
+owns:
+  - Provider and local CLI runtime profiles.
+  - Model catalog and model selection validation.
+  - Upstream provider proxy transforms.
+  - Token/context usage interpretation.
+resourceMethods:
+  - providers.list
+  - providers.catalog
+  - providers.authstatus
+  - providers.settingsread
+  - providers.settingsupdate
+  - providers.create
+  - providers.rescan
+  - providers.update
+  - providers.delete
+  - providers.activate
+  - providers.test
+  - providers.testadhoc
+  - models.list
+  - models.current
+  - models.setcurrent
+  - effort.get
+  - effort.set
+  - localcli.list
+  - localcli.rescan
+  - localcli.active
+  - localcli.config
+  - localcli.test
+allowedDependencies:
+  - foundation
+forbiddenDependencies:
+  - access-surfaces
+  - gateway
+  - session-host
+  - agent-core
+  - capability-registry
+implementationRoots:
+  - src/modules/model-runtime
+  - src/server/runtime
+  - src/services/api

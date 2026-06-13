@@ -124,7 +124,7 @@ describe('ComputerUsePermissionModal', () => {
 
     expect(sendMock).toHaveBeenCalledTimes(1)
     expect(sendMock).toHaveBeenCalledWith('session-1', {
-      type: 'computer_use_permission_response',
+      type: 'session.computeruse.permission.respond',
       requestId: 'cu-1',
       response: {
         granted: [

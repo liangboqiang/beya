@@ -1,7 +1,7 @@
 /**
  * 飞书 (Feishu/Lark) Adapter for Beya Desktop
  *
- * 基于 @larksuiteoapi/node-sdk 的轻量飞书 Bot，直连服务端 /ws/:sessionId。
+ * 基于 @larksuiteoapi/node-sdk 的轻量飞书 Bot，直连服务端 /sessions/:sessionId/live。
  * 使用 WebSocket 长连接接收事件，无需公网地址。
  *
  * 启动：FEISHU_APP_ID=xxx FEISHU_APP_SECRET=xxx bun run feishu/index.ts
@@ -763,25 +763,25 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
   const runtime = getRuntimeState(chatId)
 
   switch (msg.type) {
-    case 'connected':
+    case 'session.connected':
       break
 
-    case 'status': {
+    case 'session.status.changed': {
       runtime.state = msg.state
       runtime.verb = typeof msg.verb === 'string' ? msg.verb : undefined
       // 注意: 故意不在 thinking 时创建卡片。/clear、/compact 这类命令
-      // 不产生文本输出，但 CLI 仍会发 thinking → message_complete 事件。
+      // 不产生文本输出，但 CLI 仍会发 session.thinking.delta → session.completed 事件。
       // 如果在 thinking 就建卡，这些命令会留下一张空卡片。
-      // 真正的创建时机是 content_start{text} 或第一次 content_delta。
+      // 真正的创建时机是 session.message.started{text} 或第一次 session.message.delta。
       break
     }
 
-    case 'content_start': {
+    case 'session.message.started': {
       if (msg.blockType === 'text') {
-        // 幂等: 预建卡或上一次 content_delta 已经创建了卡片则复用，否则现在创建
+        // 幂等: 预建卡或上一次 session.message.delta 已经创建了卡片则复用，否则现在创建
         const card = getOrCreateStreamingCard(chatId)
         await card.ensureCreated().catch((err) => {
-          console.error('[Feishu] ensureCreated on content_start failed:', err)
+          console.error('[Feishu] ensureCreated on session.message.started failed:', err)
         })
       } else if (msg.blockType === 'tool_use') {
         // 把工具调用起点登记到已存在的卡 —— 让用户看到 "⚙️ 运行中..." 指示。
@@ -798,10 +798,10 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       break
     }
 
-    case 'content_delta': {
+    case 'session.message.delta': {
       if (typeof msg.text === 'string' && msg.text) {
-        // 正常情况 content_start{text} 已经创建了卡片，这里直接 appendText。
-        // 极端情况（上游跳过了 content_start）也要能容错 —— getOrCreate + async ensureCreated。
+        // 正常情况 session.message.started{text} 已经创建了卡片，这里直接 appendText。
+        // 极端情况（上游跳过了 session.message.started）也要能容错 —— getOrCreate + async ensureCreated。
         const card = getOrCreateStreamingCard(chatId)
         // ensureCreated 幂等，已 streaming 时是 no-op
         void card.ensureCreated().catch((err) => {
@@ -822,7 +822,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       break
     }
 
-    case 'thinking': {
+    case 'session.thinking.delta': {
       // 推理文本（reasoning）—— 作为卡片顶部的 blockquote 预览持续更新，
       // 让用户在工具执行期间也能看到模型的思考过程（对齐 Telegram 的行为）。
       // 同样不 auto-create: 没有预建卡的命令路径不应该被 thinking 事件撑出一张空卡。
@@ -833,7 +833,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       break
     }
 
-    case 'tool_use_complete': {
+    case 'session.tool.completed': {
       // 把对应 tool step 从 "⚙️ running" 切到 "✅ done"，让用户看到进度推进。
       const card = streamingCards.get(chatId)
       if (card) {
@@ -842,11 +842,11 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       break
     }
 
-    case 'tool_result':
+    case 'session.tool.result':
       // Tool errors are handled internally by the AI (retries etc.)
       break
 
-    case 'permission_request': {
+    case 'session.permission.requested': {
       runtime.pendingPermissionCount += 1
       runtime.state = 'permission_pending'
       const pending = pendingPermissions.get(chatId) ?? new Set<string>()
@@ -869,13 +869,13 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       break
     }
 
-    case 'message_complete':
+    case 'session.completed':
       runtime.state = 'idle'
       runtime.verb = undefined
       await finalizeStreamingCard(chatId)
       break
 
-    case 'error':
+    case 'session.failed':
       runtime.state = 'idle'
       runtime.verb = undefined
       // Auto-recover from stale thinking block signatures by creating a fresh session.
@@ -911,7 +911,7 @@ async function handleServerMessage(chatId: string, msg: ServerMessage): Promise<
       }
       break
 
-    case 'system_notification':
+    case 'session.system.notification':
       if (msg.subtype === 'init' && msg.data && typeof msg.data === 'object') {
         const model = (msg.data as Record<string, unknown>).model
         if (typeof model === 'string' && model.trim()) {
@@ -1136,7 +1136,7 @@ async function handleMessage(data: any): Promise<void> {
 
     // Pre-create the streaming card immediately so the user sees a
     // "☁️ 正在思考中..." indicator while the backend is still thinking
-    // (before the first content_delta arrives). We intentionally do NOT
+    // (before the first session.message.delta arrives). We intentionally do NOT
     // create a card for /clear-style commands (which go through the
     // earlier branches), so they won't leave an empty card behind.
     const card = getOrCreateStreamingCard(chatId)

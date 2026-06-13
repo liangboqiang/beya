@@ -9,16 +9,16 @@ import type {
   HookInput,
   HookJSONOutput,
   PermissionUpdate,
-  SDKMessage,
-  SDKUserMessage,
-} from 'src/types/sdkProtocol.js'
-import { SDKControlElicitationResponseSchema } from 'src/entrypoints/sdk/controlSchemas.js'
+  RuntimeMessage,
+  RuntimeUserMessage,
+} from 'src/types/runtimeProtocol.js'
+import { RuntimeControlElicitationResponseSchema } from 'src/entrypoints/runtime/controlSchemas.js'
 import type {
-  SDKControlRequest,
-  SDKControlResponse,
+  RuntimeControlRequest,
+  RuntimeControlResponse,
   StdinMessage,
   StdoutMessage,
-} from 'src/entrypoints/sdk/controlTypes.js'
+} from 'src/entrypoints/runtime/controlTypes.js'
 import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js'
 import type { Tool, ToolUseContext } from 'src/Tool.js'
 import { type HookCallback, hookJSONOutputSchema } from 'src/types/hooks.js'
@@ -120,7 +120,7 @@ type PendingRequest<T> = {
   resolve: (result: T) => void
   reject: (error: unknown) => void
   schema?: z.Schema
-  request: SDKControlRequest
+  request: RuntimeControlRequest
 }
 
 /**
@@ -133,7 +133,7 @@ type PendingRequest<T> = {
 const MAX_RESOLVED_TOOL_USE_IDS = 1000
 
 export class StructuredIO {
-  readonly structuredInput: AsyncGenerator<StdinMessage | SDKMessage>
+  readonly structuredInput: AsyncGenerator<StdinMessage | RuntimeMessage>
   private readonly pendingRequests = new Map<string, PendingRequest<unknown>>()
 
   // CCR external_metadata read back on worker start; null when the
@@ -143,7 +143,7 @@ export class StructuredIO {
 
   private inputClosed = false
   private unexpectedResponseCallback?: (
-    response: SDKControlResponse,
+    response: RuntimeControlResponse,
   ) => Promise<void>
 
   // Tracks tool_use IDs that have been resolved through the normal permission
@@ -154,7 +154,7 @@ export class StructuredIO {
   // error from the API.
   private readonly resolvedToolUseIds = new Set<string>()
   private prependedLines: string[] = []
-  private onControlRequestSent?: (request: SDKControlRequest) => void
+  private onControlRequestSent?: (request: RuntimeControlRequest) => void
   private onControlRequestResolved?: (requestId: string) => void
 
   // sendRequest() and print.ts both enqueue here; the drain loop is the
@@ -173,7 +173,7 @@ export class StructuredIO {
    * Records a tool_use ID as resolved so that late/duplicate control_response
    * messages for the same tool are ignored by the orphan handler.
    */
-  private trackResolvedToolUseId(request: SDKControlRequest): void {
+  private trackResolvedToolUseId(request: RuntimeControlRequest): void {
     if (request.request.subtype === 'can_use_tool') {
       this.resolvedToolUseIds.add(request.request.tool_use_id)
       if (this.resolvedToolUseIds.size > MAX_RESOLVED_TOOL_USE_IDS) {
@@ -208,7 +208,7 @@ export class StructuredIO {
         session_id: '',
         message: { role: 'user', content },
         parent_tool_use_id: null,
-      } satisfies SDKUserMessage) + '\n',
+      } satisfies RuntimeUserMessage) + '\n',
     )
   }
 
@@ -267,7 +267,7 @@ export class StructuredIO {
   }
 
   setUnexpectedResponseCallback(
-    callback: (response: SDKControlResponse) => Promise<void>,
+    callback: (response: RuntimeControlResponse) => Promise<void>,
   ): void {
     this.unexpectedResponseCallback = callback
   }
@@ -280,7 +280,7 @@ export class StructuredIO {
    * Also sends a control_cancel_request to the SDK consumer so its canUseTool
    * callback is aborted via the signal —otherwise the callback hangs.
    */
-  injectControlResponse(response: SDKControlResponse): void {
+  injectControlResponse(response: RuntimeControlResponse): void {
     const requestId = response.response?.request_id
     if (!requestId) return
     const request = this.pendingRequests.get(requestId)
@@ -314,7 +314,7 @@ export class StructuredIO {
    * requests to claude.ai.
    */
   setOnControlRequestSent(
-    callback: ((request: SDKControlRequest) => void) | undefined,
+    callback: ((request: RuntimeControlRequest) => void) | undefined,
   ): void {
     this.onControlRequestSent = callback
   }
@@ -332,7 +332,7 @@ export class StructuredIO {
 
   private async processLine(
     line: string,
-  ): Promise<StdinMessage | SDKMessage | undefined> {
+  ): Promise<StdinMessage | RuntimeMessage | undefined> {
     // Skip empty lines (e.g. from double newlines in piped stdin)
     if (!line) {
       return undefined
@@ -340,7 +340,7 @@ export class StructuredIO {
     try {
       const message = normalizeControlMessageKeys(jsonParse(line)) as
         | StdinMessage
-        | SDKMessage
+        | RuntimeMessage
       if (message.type === 'keep_alive') {
         // Silently ignore keep-alive messages
         return undefined
@@ -467,12 +467,12 @@ export class StructuredIO {
   }
 
   private async sendRequest<Response>(
-    request: SDKControlRequest['request'],
+    request: RuntimeControlRequest['request'],
     schema: z.Schema,
     signal?: AbortSignal,
     requestId: string = randomUUID(),
   ): Promise<Response> {
-    const message: SDKControlRequest = {
+    const message: RuntimeControlRequest = {
       type: 'control_request',
       request_id: requestId,
       request,
@@ -711,7 +711,7 @@ export class StructuredIO {
           elicitation_id: elicitationId,
           requested_schema: requestedSchema,
         },
-        SDKControlElicitationResponseSchema(),
+        RuntimeControlElicitationResponseSchema(),
         signal,
       )
       return result

@@ -6,24 +6,24 @@ import type { RuntimeSelection } from './runtime'
 // ─── Client → Server ──────────────────────────────────────────────
 
 export type ClientMessage =
-  | { type: 'prewarm_session' }
-  | { type: 'user_message'; content: string; attachments?: AttachmentRef[] }
+  | { type: 'session.prewarm' }
+  | { type: 'session.message.send'; content: string; attachments?: AttachmentRef[] }
   | {
-      type: 'permission_response'
+      type: 'session.permission.respond'
       requestId: string
       allowed: boolean
       rule?: string
       updatedInput?: Record<string, unknown>
     }
   | {
-      type: 'computer_use_permission_response'
+      type: 'session.computeruse.permission.respond'
       requestId: string
       response: ComputerUsePermissionResponse
     }
-  | { type: 'set_permission_mode'; mode: PermissionMode }
-  | ({ type: 'set_runtime_config' } & RuntimeSelection)
-  | { type: 'stop_generation' }
-  | { type: 'ping' }
+  | { type: 'session.permission.mode.set'; mode: PermissionMode }
+  | ({ type: 'session.runtime.select' } & RuntimeSelection)
+  | { type: 'session.generation.stop' }
+  | { type: 'session.ping' }
 
 export type AttachmentRef = {
   type: 'file' | 'image'
@@ -54,13 +54,13 @@ export type UIAttachment = {
 // ─── Server → Client ──────────────────────────────────────────────
 
 export type ServerMessage =
-  | { type: 'connected'; sessionId: string }
-  | { type: 'content_start'; blockType: 'text' | 'tool_use'; toolName?: string; toolUseId?: string; parentToolUseId?: string }
-  | { type: 'content_delta'; text?: string; toolInput?: string }
-  | { type: 'tool_use_complete'; toolName: string; toolUseId: string; input: unknown; parentToolUseId?: string }
-  | { type: 'tool_result'; toolUseId: string; content: unknown; isError: boolean; parentToolUseId?: string }
+  | { type: 'session.connected'; sessionId: string }
+  | { type: 'session.message.started'; blockType: 'text' | 'tool_use'; toolName?: string; toolUseId?: string; parentToolUseId?: string }
+  | { type: 'session.message.delta'; text?: string; toolInput?: string }
+  | { type: 'session.tool.completed'; toolName: string; toolUseId: string; input: unknown; parentToolUseId?: string }
+  | { type: 'session.tool.result'; toolUseId: string; content: unknown; isError: boolean; parentToolUseId?: string }
   | {
-      type: 'permission_request'
+      type: 'session.permission.requested'
       requestId: string
       toolName: string
       toolUseId?: string
@@ -68,15 +68,15 @@ export type ServerMessage =
       description?: string
     }
   | {
-      type: 'computer_use_permission_request'
+      type: 'session.computeruse.permission.requested'
       requestId: string
       request: ComputerUsePermissionRequest
     }
-  | { type: 'message_complete'; usage: TokenUsage }
-  | { type: 'thinking'; text: string }
-  | { type: 'status'; state: ChatState; verb?: string; elapsed?: number; tokens?: number }
+  | { type: 'session.completed'; usage: TokenUsage }
+  | { type: 'session.thinking.delta'; text: string }
+  | { type: 'session.status.changed'; state: ChatState; verb?: string; elapsed?: number; tokens?: number }
   | {
-      type: 'api_retry'
+      type: 'session.api.retry'
       attempt: number
       maxRetries: number
       retryDelayMs: number
@@ -84,14 +84,14 @@ export type ServerMessage =
       errorType?: string
       errorMessage?: string
     }
-  | { type: 'error'; message: string; code: string; retryable?: boolean; businessErrorCode?: string }
-  | { type: 'system_notification'; subtype: string; message?: string; data?: unknown }
-  | { type: 'pong' }
-  | { type: 'team_update'; teamName: string; members: TeamMemberStatus[] }
-  | { type: 'team_created'; teamName: string }
-  | { type: 'team_deleted'; teamName: string }
-  | { type: 'task_update'; taskId: string; status: string; progress?: string }
-  | { type: 'session_title_updated'; sessionId: string; title: string }
+  | { type: 'session.failed'; message: string; code: string; retryable?: boolean; businessErrorCode?: string }
+  | { type: 'session.system.notification'; subtype: string; message?: string; data?: unknown }
+  | { type: 'session.pong' }
+  | { type: 'session.team.updated'; teamName: string; members: TeamMemberStatus[] }
+  | { type: 'session.team.created'; teamName: string }
+  | { type: 'session.team.deleted'; teamName: string }
+  | { type: 'session.task.updated'; taskId: string; status: string; progress?: string }
+  | { type: 'session.title.updated'; sessionId: string; title: string }
 
 export type TokenUsage = {
   status?: 'actual' | 'estimated' | 'unavailable'
@@ -284,7 +284,7 @@ export type UIMessage =
     }
   | {
       id: string
-      type: 'permission_request'
+      type: 'permission_prompt'
       requestId: string
       toolName: string
       toolUseId?: string

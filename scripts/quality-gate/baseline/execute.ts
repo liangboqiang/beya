@@ -161,7 +161,7 @@ async function runPromptOverWebSocket(
   target?: BaselineTarget,
 ) {
   const wsUrl = baseUrl.replace(/^http/, 'ws')
-  const ws = new WebSocket(`${wsUrl}/ws/${sessionId}`)
+  const ws = new WebSocket(`${wsUrl}/sessions/${sessionId}/live`)
   const messages: ServerMessage[] = []
 
   try {
@@ -176,21 +176,21 @@ async function runPromptOverWebSocket(
         const message = JSON.parse(String(event.data)) as ServerMessage
         messages.push(message)
 
-        if (message.type === 'connected') {
+        if (message.type === 'session.connected') {
           if (target && target.modelId !== 'current') {
             ws.send(JSON.stringify({
-              type: 'set_runtime_config',
+              type: 'session.runtime.select',
               providerId: target.providerId,
               modelId: target.modelId,
             }))
           }
-          ws.send(JSON.stringify({ type: 'user_message', content: prompt }))
+          ws.send(JSON.stringify({ type: 'session.message.send', content: prompt }))
           return
         }
 
-        if (message.type === 'permission_request' && typeof message.requestId === 'string') {
+        if (message.type === 'session.permission.requested' && typeof message.requestId === 'string') {
           ws.send(JSON.stringify({
-            type: 'permission_response',
+            type: 'session.permission.respond',
             requestId: message.requestId,
             allowed: true,
             rule: 'baseline-run',
@@ -198,7 +198,7 @@ async function runPromptOverWebSocket(
           return
         }
 
-        if (message.type === 'message_complete') {
+        if (message.type === 'session.completed') {
           clearTimeout(timer)
           resolve()
           return

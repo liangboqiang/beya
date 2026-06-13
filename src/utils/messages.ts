@@ -131,8 +131,8 @@ import type {
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type {
   HookEvent,
-  SDKAssistantMessageError,
-} from 'src/types/sdkProtocol.js'
+  RuntimeAssistantMessageError,
+} from 'src/types/runtimeProtocol.js'
 import { EXPLORE_AGENT } from 'src/tools/AgentTool/built-in/exploreAgent.js'
 import { PLAN_AGENT } from 'src/tools/AgentTool/built-in/planAgent.js'
 import { areExplorePlanAgentsEnabled } from 'src/tools/AgentTool/builtInAgents.js'
@@ -406,7 +406,7 @@ function baseCreateAssistantMessage({
   content: BetaContentBlock[]
   isApiErrorMessage?: boolean
   apiError?: AssistantMessage['apiError']
-  error?: SDKAssistantMessageError
+  error?: RuntimeAssistantMessageError
   errorDetails?: string
   businessErrorCode?: BusinessErrorCode
   isVirtual?: true
@@ -471,7 +471,7 @@ export function createAssistantAPIErrorMessage({
 }: {
   content: string
   apiError?: AssistantMessage['apiError']
-  error?: SDKAssistantMessageError
+  error?: RuntimeAssistantMessageError
   errorDetails?: string
   businessErrorCode?: BusinessErrorCode
 }): AssistantMessage {

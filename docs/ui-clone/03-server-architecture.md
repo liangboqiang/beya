@@ -15,7 +15,7 @@
 | WebSocket | Bun 原生 WebSocket | 已有 `ws` 依赖，Bun 原生更高效 |
 | 验证 | Zod v4 | 已在依赖中 |
 | 测试 | bun:test | Bun 内置，无需额外依赖 |
-| API 风格 | REST + WebSocket | REST 用于 CRUD，WS 用于流式传输 |
+| API 风格 | HTTP + WebSocket | HTTP 用于健康检查/文件/代理边界，`/rpc` 用于资源 RPC，session live WS 用于流式传输 |
 
 ## 三、目录结构
 
@@ -59,18 +59,20 @@ src/server/
         └── full-flow.test.ts
 ```
 
-## 四、API 设计
+## 四、Resource RPC 设计
+
+资源访问统一通过 `/rpc` typed RPC 进入；本节路径是 contract resource path，不是公开 HTTP `/api/*` 入口。
 
 ### 4.1 会话管理 (Sessions)
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/sessions` | 获取会话列表（支持分页、项目过滤） |
-| GET | `/api/sessions/:id` | 获取会话详情（标题、消息数、时间） |
-| POST | `/api/sessions` | 创建新会话 |
-| DELETE | `/api/sessions/:id` | 删除会话 |
-| PATCH | `/api/sessions/:id` | 更新会话（重命名） |
-| GET | `/api/sessions/:id/messages` | 获取会话消息历史 |
+| GET | `/sessions` | 获取会话列表（支持分页、项目过滤） |
+| GET | `/sessions/:id` | 获取会话详情（标题、消息数、时间） |
+| POST | `/sessions` | 创建新会话 |
+| DELETE | `/sessions/:id` | 删除会话 |
+| PATCH | `/sessions/:id` | 更新会话（重命名） |
+| GET | `/sessions/:id/messages` | 获取会话消息历史 |
 
 **数据来源**: `~/.beya/projects/{proj}/{sid}.jsonl` (JSONL 格式)
 
@@ -84,11 +86,11 @@ src/server/
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/sessions/:id/chat` | 发送消息（返回任务 ID） |
-| GET | `/api/sessions/:id/chat/status` | 获取对话状态 |
-| POST | `/api/sessions/:id/chat/stop` | 停止生成 |
+| POST | `/sessions/:id/chat` | 发送消息（返回任务 ID） |
+| GET | `/sessions/:id/chat/status` | 获取对话状态 |
+| POST | `/sessions/:id/chat/stop` | 停止生成 |
 
-**WebSocket**: `ws://host:port/ws/:sessionId`
+**WebSocket**: `ws://host:port/sessions/{sessionId}/live`
 - 发送消息 → 流式接收 AI 回复
 - 实时推送工具调用进度
 - 权限请求转发给前端
@@ -97,33 +99,33 @@ src/server/
 ```typescript
 // 客户端 → 服务器
 type ClientMessage =
-  | { type: 'user_message'; content: string; attachments?: Attachment[] }
-  | { type: 'permission_response'; requestId: string; allowed: boolean }
-  | { type: 'stop_generation' }
+  | { type: 'session.message.send'; content: string; attachments?: Attachment[] } // session.message.send
+  | { type: 'session.permission.respond'; requestId: string; allowed: boolean } // session.permission.respond
+  | { type: 'session.generation.stop' } // session.generation.stop
 
 // 服务器 → 客户端
 type ServerMessage =
-  | { type: 'content_start'; blockType: 'text' | 'tool_use' }
-  | { type: 'content_delta'; text?: string; toolInput?: string }
-  | { type: 'tool_use_complete'; toolName: string; toolUseId: string }
-  | { type: 'tool_result'; toolUseId: string; content: any; isError: boolean }
-  | { type: 'permission_request'; requestId: string; toolName: string; input: any }
-  | { type: 'message_complete'; usage: Usage }
-  | { type: 'error'; message: string; code: string }
-  | { type: 'status'; state: 'thinking' | 'tool_executing' | 'idle' }
+  | { type: 'session.message.started'; blockType: 'text' | 'tool_use' }
+  | { type: 'session.message.delta'; text?: string; toolInput?: string }
+  | { type: 'session.tool.completed'; toolName: string; toolUseId: string }
+  | { type: 'session.tool.result'; toolUseId: string; content: any; isError: boolean }
+  | { type: 'session.permission.requested'; requestId: string; toolName: string; input: any }
+  | { type: 'session.completed'; usage: Usage }
+  | { type: 'session.failed'; message: string; code: string }
+  | { type: 'session.status.changed'; state: 'thinking' | 'tool_executing' | 'idle' }
 ```
 
 ### 4.3 设置 (Settings)
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/settings` | 获取合并后的设置 |
-| GET | `/api/settings/user` | 获取用户级设置 |
-| GET | `/api/settings/project` | 获取项目级设置 |
-| PUT | `/api/settings/user` | 更新用户级设置 |
-| PUT | `/api/settings/project` | 更新项目级设置 |
-| GET | `/api/permissions/mode` | 获取当前权限模式 |
-| PUT | `/api/permissions/mode` | 切换权限模式 |
+| GET | `/settings` | 获取合并后的设置 |
+| GET | `/settings/user` | 获取用户级设置 |
+| GET | `/settings/project` | 获取项目级设置 |
+| PUT | `/settings/user` | 更新用户级设置 |
+| PUT | `/settings/project` | 更新项目级设置 |
+| GET | `/permissions/mode` | 获取当前权限模式 |
+| PUT | `/permissions/mode` | 切换权限模式 |
 
 **数据来源**: `~/.beya/settings.json` + `.beya/settings.json`
 
@@ -131,20 +133,20 @@ type ServerMessage =
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/models` | 获取可用模型列表 |
-| GET | `/api/models/current` | 获取当前选中模型 |
-| PUT | `/api/models/current` | 切换模型 |
-| GET | `/api/effort` | 获取当前 Effort 等级 |
-| PUT | `/api/effort` | 设置 Effort 等级 |
+| GET | `/models` | 获取可用模型列表 |
+| GET | `/models/current` | 获取当前选中模型 |
+| PUT | `/models/current` | 切换模型 |
+| GET | `/effort` | 获取当前 Effort 等级 |
+| PUT | `/effort` | 设置 Effort 等级 |
 
 ### 4.5 定时任务
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/scheduled-tasks` | 获取定时任务列表 |
-| POST | `/api/scheduled-tasks` | 创建定时任务 |
-| PUT | `/api/scheduled-tasks/:id` | 更新定时任务 |
-| DELETE | `/api/scheduled-tasks/:id` | 删除定时任务 |
+| GET | `/scheduled-tasks` | 获取定时任务列表 |
+| POST | `/scheduled-tasks` | 创建定时任务 |
+| PUT | `/scheduled-tasks/:id` | 更新定时任务 |
+| DELETE | `/scheduled-tasks/:id` | 删除定时任务 |
 
 **数据来源**: `.beya/scheduled_tasks.json`
 
@@ -152,38 +154,38 @@ type ServerMessage =
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| POST | `/api/search` | 全局搜索（ripgrep） |
-| POST | `/api/search/sessions` | 搜索会话历史 |
+| POST | `/search` | 全局搜索（ripgrep） |
+| POST | `/search/sessions` | 搜索会话历史 |
 
 ### 4.7 Agent 管理
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/agents` | 获取 Agent 定义列表 |
-| GET | `/api/agents/:name` | 获取 Agent 详情 |
-| POST | `/api/agents` | 创建 Agent 定义 |
-| PUT | `/api/agents/:name` | 更新 Agent 定义 |
-| DELETE | `/api/agents/:name` | 删除 Agent 定义 |
-| GET | `/api/tasks` | 获取后台任务列表 |
-| GET | `/api/tasks/:id` | 获取任务详情 |
+| GET | `/agents` | 获取 Agent 定义列表 |
+| GET | `/agents/:name` | 获取 Agent 详情 |
+| POST | `/agents` | 创建 Agent 定义 |
+| PUT | `/agents/:name` | 更新 Agent 定义 |
+| DELETE | `/agents/:name` | 删除 Agent 定义 |
+| GET | `/tasks` | 获取后台任务列表 |
+| GET | `/tasks/:id` | 获取任务详情 |
 
 ### 4.8 MCP 服务器管理
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/mcp/servers` | 获取 MCP 服务器列表 |
-| POST | `/api/mcp/servers` | 添加 MCP 服务器 |
-| DELETE | `/api/mcp/servers/:name` | 移除 MCP 服务器 |
-| GET | `/api/mcp/tools` | 获取 MCP 工具列表 |
+| GET | `/mcp/servers` | 获取 MCP 服务器列表 |
+| POST | `/mcp/servers` | 添加 MCP 服务器 |
+| DELETE | `/mcp/servers/:name` | 移除 MCP 服务器 |
+| GET | `/mcp/tools` | 获取 MCP 工具列表 |
 
 ### 4.9 状态与诊断
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/api/status` | 服务器状态（健康检查） |
-| GET | `/api/status/diagnostics` | 系统诊断信息 |
-| GET | `/api/status/usage` | Token 用量统计 |
-| GET | `/api/status/user` | 用户信息 |
+| GET | `/status` | 服务器状态（健康检查） |
+| GET | `/status/diagnostics` | 系统诊断信息 |
+| GET | `/status/usage` | Token 用量统计 |
+| GET | `/status/user` | 用户信息 |
 
 ## 五、服务层设计
 
@@ -221,29 +223,29 @@ class SessionService {
 ### 连接流程
 
 ```
-1. 客户端连接: ws://host:port/ws/{sessionId}
+1. 客户端连接: ws://host:port/sessions/{sessionId}/live
    Headers: Authorization: Bearer {apiKey}
 
-2. 服务器确认: { type: 'connected', sessionId: '...' }
+2. 服务器确认: { type: 'session.connected', sessionId: '...' }
 
-3. 客户端发送消息: { type: 'user_message', content: '...' }
+3. 客户端发送消息: { type: 'session.message.send', content: '...' }
 
 4. 服务器流式响应:
-   { type: 'status', state: 'thinking' }
-   { type: 'content_start', blockType: 'text' }
-   { type: 'content_delta', text: 'Let me...' }
-   { type: 'content_delta', text: ' help you...' }
-   { type: 'content_start', blockType: 'tool_use', toolName: 'Bash' }
-   { type: 'tool_use_complete', toolName: 'Bash', toolUseId: '...' }
-   { type: 'permission_request', requestId: '...', toolName: 'Bash', input: {...} }
+   { type: 'session.status.changed', state: 'thinking' }
+   { type: 'session.message.started', blockType: 'text' }
+   { type: 'session.message.delta', text: 'Let me...' }
+   { type: 'session.message.delta', text: ' help you...' }
+   { type: 'session.message.started', blockType: 'tool_use', toolName: 'Bash' }
+   { type: 'session.tool.completed', toolName: 'Bash', toolUseId: '...' }
+   { type: 'session.permission.requested', requestId: '...', toolName: 'Bash', input: {...} }
    
-5. 客户端批准: { type: 'permission_response', requestId: '...', allowed: true }
+5. 客户端批准: { type: 'session.permission.respond', requestId: '...', allowed: true }
 
 6. 服务器继续:
-   { type: 'tool_result', toolUseId: '...', content: '...', isError: false }
-   { type: 'content_delta', text: 'Done!' }
-   { type: 'message_complete', usage: { input_tokens: 1000, output_tokens: 500 } }
-   { type: 'status', state: 'idle' }
+   { type: 'session.tool.result', toolUseId: '...', content: '...', isError: false }
+   { type: 'session.message.delta', text: 'Done!' }
+   { type: 'session.completed', usage: { input_tokens: 1000, output_tokens: 500 } }
+   { type: 'session.status.changed', state: 'idle' }
 ```
 
 ## 七、鉴权方案

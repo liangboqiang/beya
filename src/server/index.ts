@@ -20,7 +20,7 @@ import { handlePreviewFs } from './api/previewFs.js'
 import { handleLocalFile } from './api/localFile.js'
 import { sessionService } from './services/sessionService.js'
 import { conversationService } from './services/conversationService.js'
-import { OPENAI_CODEX_REDIRECT_PATH } from '../services/openaiAuth/client.js'
+import { BEYA_OPENAI_OAUTH_CALLBACK_PATH } from './services/beyaOpenAIOAuthService.js'
 import { ensureDesktopCliLauncherInstalled } from './services/desktopCliLauncherService.js'
 import { enableConfigs } from '../utils/config.js'
 import { diagnosticsService } from './services/diagnosticsService.js'
@@ -29,7 +29,11 @@ import { handleStaticH5Request } from './staticH5.js'
 import { classifyH5Request, shouldBlockDisabledH5Access, shouldRequireH5Token } from './h5AccessPolicy.js'
 import { H5AccessService } from './services/h5AccessService.js'
 import { runEmbeddedCliIfRequested } from './embeddedCli.js'
-import { isAppWebSocketPath, sessionWebSocketIdFromPath } from './ws/paths.js'
+import {
+  isRpcWebSocketPath,
+  sessionLiveIdFromPath,
+  sessionRuntimeIdFromPath,
+} from './ws/paths.js'
 import { openTargetService } from './services/openTargetService.js'
 
 function readArgValue(flag: string): string | undefined {
@@ -179,9 +183,9 @@ export function startServer(port = PORT, host = HOST) {
           return new Response(null, { status: 204, headers: cors.headers })
         }
 
-        // App WebSocket control plane. It carries application-level RPC and
-        // subscriptions without mixing them into a session realtime stream.
-        if (isAppWebSocketPath(url.pathname)) {
+        // Resource RPC WebSocket. It carries application-level resource calls
+        // without mixing them into a session realtime stream.
+        if (isRpcWebSocketPath(url.pathname)) {
           if (cors.rejected) {
             return corsRejectedResponse(cors)
           }
@@ -200,7 +204,7 @@ export function startServer(port = PORT, host = HOST) {
 
           const upgraded = server.upgrade(req, {
             data: {
-              channel: 'app',
+              channel: 'rpc',
               connectedAt: Date.now(),
               serverPort: port,
               serverHost: localConnectHost,
@@ -211,9 +215,9 @@ export function startServer(port = PORT, host = HOST) {
           return new Response('WebSocket upgrade failed', { status: 400 })
         }
 
-        // Session WebSocket upgrade. /ws/:id is the session realtime path.
-        const sessionWebSocketId = sessionWebSocketIdFromPath(url.pathname)
-        if (sessionWebSocketId !== null) {
+        // Session live WebSocket upgrade. /sessions/:id/live is the realtime path.
+        const sessionLiveId = sessionLiveIdFromPath(url.pathname)
+        if (sessionLiveId !== null) {
           if (cors.rejected) {
             return corsRejectedResponse(cors)
           }
@@ -232,22 +236,16 @@ export function startServer(port = PORT, host = HOST) {
           }
 
           // Validate session ID format
-          const sessionId = sessionWebSocketId
+          const sessionId = sessionLiveId
           if (!sessionId || !/^[0-9a-zA-Z_-]{1,64}$/.test(sessionId)) {
             return new Response('Invalid session ID', { status: 400 })
           }
-          const requestedPurpose = url.searchParams.get('purpose')
           const upgraded = server.upgrade(req, {
             data: {
               sessionId,
               connectedAt: Date.now(),
               channel: 'client',
-              purpose: requestedPurpose === 'interaction_response'
-                ? 'interaction_response'
-                : requestedPurpose === 'sdk_chat'
-                  ? 'sdk_chat'
-                  : 'chat',
-              sdkToken: null,
+              runtimeToken: null,
               serverPort: port,
               serverHost: localConnectHost,
             },
@@ -256,9 +254,10 @@ export function startServer(port = PORT, host = HOST) {
           return new Response('WebSocket upgrade failed', { status: 400 })
         }
 
-        // Internal SDK WebSocket used by the spawned agent runtime process.
-        if (url.pathname.startsWith('/sdk/')) {
-          if (classifyH5Request(req, url, h5RequestContext) !== 'internal-sdk') {
+        // Internal runtime WebSocket used by the spawned agent runtime process.
+        const sessionRuntimeId = sessionRuntimeIdFromPath(url.pathname)
+        if (sessionRuntimeId !== null) {
+          if (classifyH5Request(req, url, h5RequestContext) !== 'internal-runtime') {
             return h5AccessControlRejectedResponse()
           }
 
@@ -273,7 +272,7 @@ export function startServer(port = PORT, host = HOST) {
             }
           }
 
-          const sessionId = url.pathname.split('/').pop() || ''
+          const sessionId = sessionRuntimeId
           if (!sessionId || !/^[0-9a-zA-Z_-]{1,64}$/.test(sessionId)) {
             return new Response('Invalid session ID', { status: 400 })
           }
@@ -281,8 +280,8 @@ export function startServer(port = PORT, host = HOST) {
             data: {
               sessionId,
               connectedAt: Date.now(),
-              channel: 'sdk',
-              sdkToken: url.searchParams.get('token'),
+              channel: 'runtime',
+              runtimeToken: url.searchParams.get('token'),
               serverPort: port,
               serverHost: localConnectHost,
             },
@@ -291,14 +290,11 @@ export function startServer(port = PORT, host = HOST) {
           return new Response('WebSocket upgrade failed', { status: 400 })
         }
 
-        if (
-          url.pathname === OPENAI_CODEX_REDIRECT_PATH ||
-          url.pathname === '/callback/openai'
-        ) {
+        if (url.pathname === BEYA_OPENAI_OAUTH_CALLBACK_PATH) {
           return handleBeyaOpenAIOAuthCallback(url)
         }
 
-        if (url.pathname === '/health' || url.pathname === '/readiness') {
+        if (url.pathname === '/health' || url.pathname === '/ready') {
           return withCors(Response.json({
             status: url.pathname === '/health' ? 'ok' : 'ready',
             service: 'beya-server',
@@ -307,7 +303,7 @@ export function startServer(port = PORT, host = HOST) {
         }
 
         // Preview filesystem — serve sandboxed workspace files for a session.
-        if (url.pathname.startsWith('/preview-fs/')) {
+        if (url.pathname.startsWith('/files/preview/')) {
           if (cors.rejected) {
             return corsRejectedResponse(cors)
           }
@@ -337,8 +333,8 @@ export function startServer(port = PORT, host = HOST) {
 
         // Local filesystem — serve an ABSOLUTE local file ($HOME/tmp/registered
         // roots sandbox) so `file://` links / AI-emitted absolute paths open in
-        // the in-app browser. Gated identically to /preview-fs above.
-        if (url.pathname.startsWith('/local-file/')) {
+        // the in-app browser. Gated identically to /files/preview above.
+        if (url.pathname.startsWith('/files/local/')) {
           if (cors.rejected) {
             return corsRejectedResponse(cors)
           }
@@ -359,7 +355,7 @@ export function startServer(port = PORT, host = HOST) {
           return withCors(response, cors)
         }
 
-        // Browser-native icon assets. Resource queries go through /ws/app;
+        // Browser-native icon assets. Resource queries go through /rpc;
         // image tags still need a direct HTTP URL, but not an /api route.
         if (url.pathname.startsWith('/open-target-icons/')) {
           if (cors.rejected) {
@@ -445,7 +441,7 @@ export function startServer(port = PORT, host = HOST) {
 
         if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
           return withCors(Response.json(
-            { error: 'Not Found', message: 'HTTP /api resources have been retired. Use /ws/app resource RPC.' },
+            { error: 'Not Found', message: 'HTTP /api resources have been retired. Use /rpc resource RPC.' },
             { status: 404 },
           ), cors)
         }

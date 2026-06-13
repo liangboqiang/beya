@@ -7,30 +7,30 @@ type RunsResponse = { runs: TaskRun[] }
 
 export const tasksApi = {
   list() {
-    return api.get<TasksResponse>('/api/scheduled-tasks')
+    return api.get<TasksResponse>('/scheduled-tasks')
   },
 
   create(input: CreateTaskInput) {
-    return api.post<TaskResponse>('/api/scheduled-tasks', input)
+    return api.post<TaskResponse>('/scheduled-tasks', input)
   },
 
   update(id: string, updates: Partial<CronTask>) {
-    return api.put<TaskResponse>(`/api/scheduled-tasks/${id}`, updates)
+    return api.put<TaskResponse>(`/scheduled-tasks/${id}`, updates)
   },
 
   delete(id: string) {
-    return api.delete<{ ok: true }>(`/api/scheduled-tasks/${id}`)
+    return api.delete<{ ok: true }>(`/scheduled-tasks/${id}`)
   },
 
   runTask(id: string) {
-    return api.post<{ ok: true }>(`/api/scheduled-tasks/${id}/run`, {})
+    return api.post<{ ok: true }>(`/scheduled-tasks/${id}/run`, {})
   },
 
   getRecentRuns(limit = 50) {
-    return api.get<RunsResponse>(`/api/scheduled-tasks/runs?limit=${limit}`)
+    return api.get<RunsResponse>(`/scheduled-tasks/runs?limit=${limit}`)
   },
 
   getTaskRuns(taskId: string) {
-    return api.get<RunsResponse>(`/api/scheduled-tasks/${taskId}/runs`)
+    return api.get<RunsResponse>(`/scheduled-tasks/${taskId}/runs`)
   },
 }
